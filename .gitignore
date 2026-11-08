@@ -38,3 +38,6 @@ eso/ui/preview/
 
 # Angular CLI cache
 .angular/
+
+# TypeScript incremental build cache (machine-local, rebuilt on demand)
+*.tsbuildinfo
