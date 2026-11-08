@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Jira (MCP local, nhiều repo)",
+    "description": "Một plugin Jira MCP dùng cho mọi repo: mỗi workspace tự xác định Atlassian site và credential riêng, rồi khởi động Jira MCP server local không phụ thuộc npm. Không cần cài package ngoài."
+  }
+}

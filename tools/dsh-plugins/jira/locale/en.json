@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Jira (local MCP, multi-repo)",
+    "description": "One Jira MCP plugin for every repo: each workspace resolves its own Atlassian site and credential, and a dependency-free local Jira MCP server is started for it. No npm package to install."
+  }
+}

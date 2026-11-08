@@ -1,0 +1,43 @@
+{
+  "name": "@local/jira-mcp-plugin",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "One Jira MCP plugin for many repos: resolves the Atlassian tenant per workspace and runs a local, dependency-free Jira MCP server for it.",
+  "exports": {
+    ".": "./src/plugin.mjs",
+    "./tenant": "./src/tenant.mjs",
+    "./client": "./src/mcp-stdio-client.mjs",
+    "./server": "./src/server.mjs",
+    "./api": "./src/jira-api.mjs",
+    "./probe": "./src/probe.mjs",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "bin": {
+    "jira-mcp-server": "./src/server.mjs"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "selfcheck": "node src/selfcheck.mjs",
+    "server": "node src/server.mjs"
+  },
+  "files": [
+    "src/plugin.mjs",
+    "src/server.mjs",
+    "src/jira-api.mjs",
+    "src/mcp-stdio-client.mjs",
+    "src/tenant.mjs",
+    "src/probe.mjs",
+    "src/selfcheck.mjs",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

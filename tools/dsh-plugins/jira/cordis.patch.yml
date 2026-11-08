@@ -1,0 +1,53 @@
+# Jira MCP, per workspace — a Host plugin bundle.
+#
+# Mounts one plugin row. That row reads the working directory of each new agent,
+# resolves which Atlassian site that repo belongs to, and starts the local Jira
+# MCP server (`src/server.mjs`, spawned through the host's own Node) for it. A
+# repo with no Jira config gets no tools and no process.
+#
+# Why per repo matters here: one DSH profile serves many repos, and each may
+# point at a different Atlassian site with its own token. A static row cannot
+# express that — the Loader composes rows once at boot, before any session or
+# working directory exists, and `!!js` evaluates against the loader context,
+# which has no session cwd. So the tenant is decided in code, per `agent/created`.
+#
+# Credentials are never stored here. The plugin resolves the token through
+# `ctx.credentials` ($DSH_HOME/.credentials.yaml, owner-only), then the repo's
+# own `.cursor/mcp.json` entry, then the environment.
+#
+# TLS: Node's bundled roots reject this host's Atlassian chain
+# (`UNABLE_TO_GET_ISSUER_CERT_LOCALLY`, measured 2026-11-08 on Node 26.7.0), while
+# the OS CA bundle validates it. The server therefore adds the OS bundle through
+# the `ca` option (`/etc/ssl/cert.pem` first). Override with `caFile`, or set
+# `insecureTls: true` only if you accept disabling verification.
+- insert:
+    - id: jira-mcp-plugin
+      name: '@local/jira-mcp-plugin'
+      config:
+        # Raise startup failures from logger.info to logger.error. Never throws:
+        # a throwing agent/created listener rejects agent registration, which
+        # would kill every session in that repo.
+        failOnStartupError: false
+
+        # Per-call ceiling. Jira Cloud throttles bulk JQL; the local server also
+        # caps maxResults itself.
+        timeoutMs: 120000
+
+        # Probe `GET /rest/api/2/myself` before spawning the server, so a dead
+        # site or a revoked token produces one readable log line instead of a
+        # server that starts and 401s on the first call.
+        probeTimeoutMs: 5000
+
+        # No `serverCommand`: the default is this bundle's own `src/server.mjs`,
+        # run with the host's Node. Set `serverCommand`/`serverArgs` to point the
+        # row at another stdio MCP server that speaks tools/list instead.
+        caFile: null
+        insecureTls: false
+
+        # A repo config chooses the *site*, never which profile credential is
+        # sent to it: only the site-bound `JIRA_TOKEN_<HOST>` is resolved, and a
+        # bare ambient `JIRA_API_TOKEN` is ignored. These three keys are the only
+        # opt-outs and default false — set one only for a workspace you trust.
+        # trustRepoCredentialRef: false
+        # trustAmbientToken: false
+        # allowInsecureSite: false
