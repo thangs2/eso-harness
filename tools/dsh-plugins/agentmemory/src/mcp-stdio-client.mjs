@@ -7,7 +7,7 @@
  * to mount per-session. This file therefore stays dependency-free on purpose:
  * a host plugin that imports `@deepseek-ai/*` can hoist a second copy of a
  * Harness singleton into the profile, which the sibling Jira plugin records as
- * ATF-OPS-001 (the same reason `@mu/harness-eso-dsh` ships a zero-dependency
+ * ATF-OPS-001 (the same reason `@mu/eso-harness-dsh` ships a zero-dependency
  * bundle). Note: that failure mode was not re-measured against 0.2.2-rc.1 —
  * the `TOOL_RUNTIME_SCHEDULER` symbol the sibling READMEs cite does not exist
  * in this build — so the constraint is kept as a rule, not as a claim.

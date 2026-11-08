@@ -50,7 +50,7 @@
   "allowed_files": [
     "eso/memory/**",
     "eso/adapters/**",
-    "packages/harness-eso-core/adapters/**",
+    "packages/eso-harness-core/adapters/**",
     "packages/harness-host-dsh/**",
     "qc/acceptance/US-MEM-03/**"
   ],

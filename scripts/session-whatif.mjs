@@ -456,7 +456,7 @@ function perTurn(perStep) {
 
 /**
  * Two levers with different owners, so they must be judged separately:
- *   A is the only lever harness-eso could own (dedupe + state ledger);
+ *   A is the only lever eso-harness could own (dedupe + state ledger);
  *   B is compaction, which the host already ships (/compact) and which is lossy —
  *     a 6K summary cannot really replace 150K of history without re-exploration,
  *     so B is not a saving the product can claim.
@@ -469,10 +469,10 @@ function verdict(rows) {
     const level = esoOwned < 15 ? 'unsupported' : esoOwned < 30 ? 'partial' : 'worth-building';
     const note =
         level === 'unsupported'
-            ? `harness-eso's own lever saves ${esoOwned}% — below the 15% bar; the ${combined}% headline belongs to host compaction`
+            ? `eso-harness's own lever saves ${esoOwned}% — below the 15% bar; the ${combined}% headline belongs to host compaction`
             : level === 'partial'
-              ? `harness-eso's own lever saves ${esoOwned}% — only defensible as a context-lifecycle feature`
-              : `harness-eso's own lever saves ${esoOwned}% — worth building, verify with a live run`;
+              ? `eso-harness's own lever saves ${esoOwned}% — only defensible as a context-lifecycle feature`
+              : `eso-harness's own lever saves ${esoOwned}% — worth building, verify with a live run`;
     return { level, savingPct: combined, esoOwnedPct: esoOwned, hostOwnedPct: hostOwned, note };
 }
 

@@ -1,6 +1,6 @@
 # @local/agentmemory-mcp-plugin
 
-Local DSH Host plugin, source nằm trong repo **harness-eso**
+Local DSH Host plugin, source nằm trong repo **eso-harness**
 (`tools/dsh-plugins/agentmemory`). Một plugin AgentMemory MCP cho **nhiều** repo. Mỗi workspace tự xác định
 agentmemory server và credential của nó — cùng một profile DSH phục vụ được nhiều
 memory store mà không cần plugin riêng cho từng repo.
@@ -24,7 +24,7 @@ port khác nhau:
 | x79 | `:3111` | `:3113` | `agentmemory-agentmemory-1` |
 | baplatform | `:3211` | `:3213` | `baplatform-agentmemory` |
 | FinESO / fineso | `:3311` | `:3313` | `fineso-agentmemory` |
-| harness-eso | `:3111` (dùng chung x79) | `:3113` | — |
+| eso-harness | `:3111` (dùng chung x79) | `:3113` | — |
 
 Một row tĩnh trong `cordis.patch.yml` không thể phục vụ mô hình đó: **Loader
 compose row một lần lúc boot**, trước khi có bất kỳ session hay working directory
@@ -180,7 +180,7 @@ Không secret nào được copy vào thư mục plugin, nên thư mục này co
 Mở **Settings → Plugins** trong DSH → **install a bundle** → trỏ tới thư mục:
 
 ```
-/Users/thangs2net/Workspaces/harness-eso/tools/dsh-plugins/agentmemory
+/Users/thangs2net/Workspaces/eso-harness/tools/dsh-plugins/agentmemory
 ```
 
 Đây là **nguồn duy nhất** của plugin — repo `baplatform` không còn bản copy nào.
@@ -192,7 +192,7 @@ không có nó — xem README của plugin Jira), sửa tay profile:
 
 ```json
 "dependencies": {
-  "@local/agentmemory-mcp-plugin": "link:/Users/thangs2net/Workspaces/harness-eso/tools/dsh-plugins/agentmemory"
+  "@local/agentmemory-mcp-plugin": "link:/Users/thangs2net/Workspaces/eso-harness/tools/dsh-plugins/agentmemory"
 },
 "dsh": { "profile": { "bundles": [
   "...",
@@ -212,7 +212,7 @@ không có nó — xem README của plugin Jira), sửa tay profile:
 **Không cần cài gì** — chạy đúng code mà plugin chạy lúc `agent/created`:
 
 ```bash
-node tools/dsh-plugins/agentmemory/src/selfcheck.mjs /Users/thangs2net/Workspaces/harness-eso
+node tools/dsh-plugins/agentmemory/src/selfcheck.mjs /Users/thangs2net/Workspaces/eso-harness
 # hoặc: node tools/dsh-plugins/agentmemory/src/selfcheck.mjs ../baplatform
 ```
 

@@ -17,7 +17,7 @@
       "expected_failure": "<nguyên văn ô `phải thấy` của dòng `R2` trong packet>"
     }
   ],
-  "allowed_files": ["eso/graph/**", "packages/harness-eso-core/**"],
+  "allowed_files": ["eso/graph/**", "packages/eso-harness-core/**"],
   "forbidden": [
     "qc/acceptance/**",
     "sdlc/10.test/**",

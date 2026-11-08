@@ -1,184 +1,112 @@
-# Agent harness — harness-eso (dev repo)
+# Agent harness — eso-harness
 
-Repo này **ship** sản phẩm Harness ESO (`@mu/harness-*`). Agent làm việc **trong monorepo** theo file này — **không** chạy full pipeline ESO (preflight sidecar, `init profile`) trên chính `harness-eso`.
+Repo này chứa **cấu hình agent dùng chung cho nhiều host** (`agents/`), **luật + artifact** (`sdlc/`), script vận hành
+(`scripts/`) và plugin DSH (`tools/`). Nó **không** chứa `packages/`, `docs/`, `profiles/` — xem `D-108` điều 8 trong
+[`03.artifact-va-folder`](sdlc/03.inception/02-decision-log/03.artifact-va-folder.md).
 
-**Consumer đầy đủ:** repo **x79** (sibling `../x79`) — observe, hooks, `decision-policy.json`. Thiết kế ban đầu: `x79/document/harness/02.harness-eso/` — **đã out of date, không dùng làm law**; nguồn hiện hành là code repo này + gói `docs/`.
+## Luật gốc — một nguồn, nhiều cửa
 
-**Cursor Windows:** mở **folder gốc = harness-eso**; xem `docs/01.overview/02.cursor-windows.md`. Docker: `./deploy.sh <consumer>` · `./console.sh up`.
+| | |
+|---|---|
+| **Nguồn duy nhất** | `agents/` — rules · subagents · skills · hooks · instructions (+ README) |
+| **Artifact sinh ra** | `.cursor/**` · `.agents/**` · `AGENTS.local.md` |
+| **Sinh lại** | `node scripts/build-host-trees.mjs` |
+| **Gate** | `node scripts/build-host-trees.mjs --check` · `node scripts/check-dual-harness.mjs` |
+| **Quyết định** | `D-108` — [`03.artifact-va-folder.md`](sdlc/03.inception/02-decision-log/03.artifact-va-folder.md) |
 
-**Operator entrypoints (forced):** hành động trên consumer **chỉ** qua `./deploy.sh`, `./provision.sh`, `./verify-consumer.sh`, `./console.sh` (Windows: `harness.ps1 <command>`). Không gọi `node`/`bun`/`docker` trực tiếp để thay một bước của script — chi tiết `.cursor/rules/core.entrypoints.mdc`.
+**NEVER** sửa tay `.cursor/**`, `.agents/**`, `AGENTS.local.md`: đó là drift và `--check` sẽ đỏ. **NEVER** symlink trong tree
+provider (`D-108` điều 3). Sửa `agents/`, chạy generator, chạy hai gate.
 
-**Cursor agent (forced):** IDE loads `.cursor/rules/` → **`core.law-gate.mdc`** bắt buộc **Read file này (`AGENTS.md`)** mỗi phiên trước khi làm việc; rule khác chỉ bổ sung, không thay law. Catalog: `.cursor/instructions.md` · MCP `.cursor/mcp.json` (`docs/01.overview/03.cursor-mcp.md`).
+## Law gate (forced, mọi host)
 
-**Luật làm việc trong `sdlc/` (bắt buộc trước khi đề xuất cấu trúc/tách folder):** [`sdlc/02.governance/04.agent-rules.md`](sdlc/02.governance/04.agent-rules.md) — 10 luật, mỗi luật kèm lỗi đã sinh ra nó. Điểm chết người: **A = `sdlc/` (toàn bộ artifact + luật), B = sản phẩm**; `sdlc/` **không** copy/ship/provision; consumer nhận **study sample**. Không nói "P7 đòi X" khi không trích được câu trong `P7`.
+```text
+host nạp law → agents/rules/core.law-gate.mdc → Read AGENTS.md (file này) → rule khác chỉ bổ sung
+```
 
-**Documentation pack (đọc trước khi sửa luồng dữ liệu):** `docs/00.README.md` — mô tả sản phẩm là gì, chạy thế nào, và **`docs/05.development/02.invariants.md`** liệt kê các bất biến kèm defect đã sinh ra chúng. Đây là gói bàn giao độc lập: không cần đọc repo consumer để hiểu sản phẩm.
+1. **Đọc `AGENTS.md`** (toàn file) trước khi plan/Write.
+2. `AGENTS.md` là **luật cao nhất**: `AGENTS.md` > rule > skill > trí nhớ phiên.
+3. Rule/kỹ năng không được trái `AGENTS.md`.
 
----
+Catalog đường dẫn: [`agents/instructions.md`](agents/instructions.md) — **không phải luật**.
 
-## Mục tiêu
+## Host matrix (đo 2026-11-08 — `M` đo, `R` repo tự khẳng định, `U` chưa đo)
 
-- Sửa bug, thêm feature, test trong `packages/*` và `qc/*`.
-- Giữ diff nhỏ, khớp style hiện có.
-- Khi đụng hành vi runtime trên consumer → verify trên **x79** (hoặc repo có `harness.config.json`), không giả định harness-eso đã provision ESO.
+| Host | Cửa nhận rule | Skills | Subagents | Hooks | MCP | Law | Trạng thái |
+|---|---|---|---|---|---|---|---|
+| Cursor | `.cursor/rules/*.mdc` **R** | `.cursor/skills` **R** | `.cursor/agents/*.md` **R** | `.cursor/hooks.json` **R** | `.cursor/mcp.json` **R** | `AGENTS.md` + rules | bật |
+| Antigravity | `.agents/rules/*.md` **R** | `.agents/skills` **R** | `.agents/agents/*.md` **R** | path chưa xác định **U** | `.agents/mcp_config.json` **R** | `AGENTS.md` (`user_rules`) | bật |
+| DSH | **không đọc rule dir** → `AGENTS.local.md` **M** | `.agents/skills` **M** | không discovery (vai = profile row) **M** | `.claude/hooks.json` qua plugin `dsh-hooks-claude-code` **M** | profile rows **M** | `AGENTS.md` + `AGENTS.local.md` **M** | bật |
+| Claude | **U** — `CLAUDE.md` + `@import`; `CLAUDE.md` = `@AGENTS.md` (1 dòng) | **U** `.claude/skills` | **U** `.claude/agents` | **U**: `.claude/settings.json` (native) vs `.claude/hooks.json` (dialect plugin DSH) | **U** | `CLAUDE.md` → `@AGENTS.md` | `mode: off` |
+| Codex | — | — | — | — | — | `AGENTS.md` | **defer** (`D-90` §5) |
 
----
+**Luật suy ra:** *"DSH có X"* là câu vô nghĩa nếu không nói **profile** — capability là **profile-scoped** (`core.paseo-provider`).
+Host chưa có trong bảng ⇒ **đo rồi bổ sung**, không giả định. Bật Claude = đổi 1 entry `HOSTS` trong
+[`scripts/build-host-trees.mjs`](scripts/build-host-trees.mjs), sau khi đo 4 điểm `U`.
 
-## Năng lực host — đọc trước khi làm bước recon
+## Thứ tự làm việc & kỷ luật token
 
-Repo này được dùng bởi **nhiều host**, và chúng **không cùng năng lực**. Bảng dưới đây là **đo thật** (2026-10-25 / 2026-11-03),
-không phải mô tả thiết kế. Chi tiết + hệ quả: `sdlc/04.landscape/03.working-environment.md`.
+1. **AgentMemory first** — `memory_smart_search` đầu turn để lấy context cũ, ticket id, symbol, path (nếu profile mount
+   `memory_*`; không có thì **nói rõ**, đừng khai đã tra).
+2. **Tra cứu thay vì đoán** — `docgraph --q "<terms>" --repo "$PWD"` cho luật/quyết định; Read thẳng `sdlc/` khi docgraph thiếu.
+3. **Codegraph** — `codegraph_explore` (`projectPath` = root repo) hoặc CLI `--path "$PWD"`; chỉ Grep+Read khi thiếu.
+4. **Range-read & shell limit** — file > 100 dòng thì đọc theo `sed -n 'X,Yp'`; output thô ≤ 40 dòng, pipe `tail`/`head`.
+5. **Implement** — sửa `agents/` (nguồn) → `node scripts/build-host-trees.mjs` → hai gate xanh.
+6. **Memory save** — cuối turn quan trọng: `memory_save` cô đọng quyết định/trạng thái/bài học.
 
-| Năng lực | Cursor | Antigravity (AGY) | DSH `desktop` | DSH `paseo` (Paseo spawn) |
-|---|---|---|---|---|
-| `AGENTS.md` bơm vào context | ✅ | ✅ (user_rules) | ✅ (workspace instructions) | ✅ |
-| `.cursor/rules/*.mdc` (17) tự nạp | ✅ | ⚠ nạp `.agents/rules/*.md` | ❌ **không nạp** — nhận qua `AGENTS.local.md` | ❌ — như desktop |
-| `.cursor/agents/*-runtime.md` — 7 worker SLP | ✅ đọc + spawn | ✅ `.agents/agents/` + `invoke_subagent` | ⚠ đọc được, **không** có role registry ⇒ dùng skill `harness-engineering-team` | ⚠ như desktop |
-| `.agents/skills/*/SKILL.md` | ✅ | ✅ (qua skill catalog) | ✅ (qua skill catalog) | ✅ (qua skill catalog) |
-| MCP `codegraph` | ✅ | ✅ | ❌ **không có trong toolset** | ❌ |
-| `codegraph` CLI (`--path`) | ✅ | ✅ | ✅ | ✅ **đo 2026-11-08** — `status`/`explore`/`query`/`context`/`node`/`files` |
-| `docgraph` CLI | ✅ | ✅ | ✅ | ✅ **đo 2026-11-08** — `--q`, `--repo`, `--print-harness` |
-| `agentmemory-mcp` | ✅ | ✅ (`call_mcp_tool` / eager tools) | ✅ **đo lại 2026-11-07**: `memory_smart_search` · `memory_save` · `memory_diagnose`, store **966** bản ghi | ❌ **profile `paseo` không mount** — bật bằng `node scripts/setup-paseo-profile.mjs` |
-| `deepseek-direct` | ✅ | ✅ | ❌ **không có trong toolset** | ❌ |
-| `.docgraph/` · `.codegraph/` trên đĩa | ✅ truy vấn được | ✅ truy vấn được | ✅ (qua CLI) | ✅ (qua CLI) |
-| file tools · shell · `bun test` · subagent | ✅ | ✅ (`invoke_subagent`, `define_subagent`) | ✅ | ✅ |
+## Công cụ
 
-**Luật suy ra:** quy trình recon dưới đây là **quy trình của Cursor**. Trên host không có MCP, bước recon **thay bằng**
-`codegraph`/`docgraph` CLI (nếu có binary) rồi mới tới `grep`/`glob` + `read` có kiểm soát, và phải **nói rõ** khi một
-kết luận dựa trên suy đoán thay vì tra cứu — vì thiếu tra cứu làm tăng khẳng định sai (đã xảy ra 3 lần trong một phiên).
+| Nguồn | Khi dùng | Ghi chú |
+|---|---|---|
+| **Codegraph** | symbol, call path, blast radius trong repo | MCP `codegraph` (`.cursor/mcp.json`) hoặc CLI `codegraph explore "<sym>" --path "$PWD"` |
+| **Docgraph** | luật, quyết định, invariant, WBS | CLI `docgraph --q "<terms>" --repo "$PWD"` |
+| **AgentMemory** | context phiên, preference operator | `memory_smart_search` / `memory_save` (nếu profile mount) |
+| **DeepSeek** | phân tích sâu, debug khó | `ask_deepseek_flash` mặc định, `pro` khi cần |
 
-**Đo lại 2026-11-07 (DSH):** dòng cũ gộp bốn MCP vào một ô và ghi ❌ cho **cả bốn** — sai với `agentmemory-mcp`. Host DSH có memory tools (đã gọi thật, store 966 bản ghi) nhưng **không** có codegraph/docgraph CLI. Tách dòng vì một ô gộp làm cả hai chiều cùng sai: agent bỏ qua memory (đúng ra phải dùng), và tưởng có codegraph (đúng ra không).
+MCP **không** thuộc generator: `.cursor/mcp.json` (Cursor) và `.agents/mcp_config.json` (Antigravity) là file **máy-local**, gitignored,
+mang path tuyệt đối và key. Danh sách server repo này cần nằm ở bảng MCP trong `agents/rules/core.harness-tooling.mdc` — đó là bản ghi
+duy nhất trong git.
 
-**Đo lại 2026-11-08 (DSH có nhiều profile — Paseo):** phép đo 2026-11-07 chạy trong profile **`desktop`**, nhưng được ghi
-thành "DSH ✅" **không kèm tên profile**. Paseo spawn `dsh --profile paseo`, profile đó chỉ có `dsh-base` + `dsh-paseo-bridge`
-⇒ **không một tool `memory_*` nào**. Cùng lúc, `codegraph`/`docgraph` **CLI chạy được** trong session Paseo (đã gọi thật) nên
-ô "không có công cụ truy vấn" cũng sai. Luật: **mọi ô năng lực của DSH phải nêu profile**, và recon trong session Paseo dùng
-CLI `--path "$PWD"` — xem `core.paseo-provider.mdc` + skill `paseo-recon`.
-
-**Luật này áp cho mọi agent, không chỉ người viết nó:** gặp host chưa có trong bảng ⇒ **đo rồi bổ sung bảng**, không giả
-định năng lực.
-
-## Công cụ được dùng (bắt buộc khi cần)
-
-Agent **được phép và nên** dùng các MCP / tool sau khi tra cứu code, doc, memory, hoặc cần reasoning nặng:
-
-| Nguồn | Khi dùng | Gợi ý |
-|--------|-----------|--------|
-| **Codegraph** | Luồng gọi, symbol, blast radius trong **product** | MCP `codegraph` trong **`.cursor/mcp.json`** (index harness-eso). `codegraph_explore` · `projectPath` = root harness-eso; consumer-only → `../x79`. Không `.codegraph/` → `codegraph init -i` hoặc Read/Grep. |
-| **Reply output** | Mọi câu trả lời | Rule `core.reply-format.mdc`: plain markdown, **không** bọc `{text,type}`. Detector `.cursor/hooks/lib/agent-response.mjs`; guard `stop` (`wrapped-output-guard.mjs`, `followup_message`) — `afterAgentResponse` **không có output field** nên chỉ để quan sát. Đo tỉ lệ thật: `node .cursor/hooks/audit-wrapped-replies.mjs --days 30`. Test `qc/output-wrapper.test.mjs`. |
-| **Docgraph** | Kiến thức, tài liệu, invariants trong **product** (hoặc law x79) | Index cục bộ tại `.docgraph/` (scope: `docs/`, rules). Dùng CLI **`docgraph --q "<terms>"`**. Tra cứu consumer x79: truyền CLI `docgraph --q ... --repo ../x79`. |
-| **AgentMemory** | Context phiên, preference operator | MCP **`agentmemory-mcp`** trong `.cursor/mcp.json` (`memory_smart_search` / `memory_save`). |
-| **DeepSeek** | Phân tích sâu, thiết kế, debug khó | MCP **`deepseek-direct`** trong `.cursor/mcp.json`: **`ask_deepseek_flash`** (default), **`ask_deepseek_pro`** khi cần. |
-
-**Brain tier:** quyết định ở đây (AGENTS.md). ESO preflight trên x79 chỉ gợi ý `brainTierHint`.
-
-**Không thay thế:** sửa file vẫn dùng editor tools; shell khi cần `bun test`, docker, v.v.
-
----
-
-## Thứ tự làm việc & Kỷ luật Token
-
-1. **AgentMemory first (Tra cứu sớm):** Luôn gọi `memory_smart_search` ngay đầu turn để thu thập context phiên trước, ticket ID, symbol, file path và từ khóa then chốt. Dùng từ khóa này làm đầu vào chính xác cho Docgraph và Codegraph, tránh query mò mẫm làm tăng token.
-2. **Khảo sát tài liệu (Docgraph first):** Tra cứu concept, invariant, contract bằng CLI `docgraph --q "<terms>"` để lấy đúng đoạn cần đọc (30–50 dòng). **Chỉ dùng `view_file` / `Read` khi Docgraph không trả về kết quả hoặc bắt buộc phải xem toàn văn file**.
-3. **Khảo sát code (Codegraph first):** Dùng `codegraph_explore` (với `projectPath` = harness-eso) để lấy AST, call hierarchy và symbols mục tiêu trong 1 round-trip. **Chỉ dùng `Grep` + `Read` khi Codegraph thiếu thông tin hoặc cần quét regex cụ thể**.
-4. **Kỷ luật Range-Read (Slice Reading):** Khi bắt buộc dùng `view_file` / `Read` cho file lớn (> 100 dòng), tuyệt đối không mở toàn bộ file vào context. Phải chỉ định rõ `StartLine` và `EndLine` (hoặc lệnh shell `sed -n 'X,Yp'`) để chỉ nạp đúng phân đoạn cần xử lý.
-5. **Kỷ luật Shell Output (Bắt buộc giới hạn):**
-   - Không chạy lệnh in ra output thô > 40 dòng vào context.
-   - Luôn pipe giới hạn khi kiểm tra: `git status -s`, `bun test 2>&1 | tail -n 25`, `head -n 30`, `grep -m 10`.
-   - Khi test pass chỉ cần tóm tắt kết quả (ví dụ `213 pass`).
-6. **Implement & Test:** Sửa file gọn gàng, test cục bộ với output có kiểm soát.
-7. **DeepSeek:** Chỉ gọi `ask_deepseek_flash` / `pro` khi cần suy luận kiến trúc phức tạp hoặc debug lỗi hóc búa — không gọi cho thay đổi 1–2 dòng rõ ràng.
-8. **Distillation & Memory Save (Đóng gói tri thức):** Cuối mỗi turn xử lý logic quan trọng, gọi `memory_save` cô đọng quyết định, trạng thái và bài học. Giúp các turn kế tiếp kế thừa trực tiếp từ memory mà không cần đọc lại hàng loạt file cũ.
-
-
----
-
-## SLP — chia việc khi task chạm >1 tầng
-
-**Build enforcement law:** [`sdlc/02.governance/01.standard/09.build-enforcement.md`](sdlc/02.governance/01.standard/09.build-enforcement.md) — pack đủ 4 phần · test-first · gate máy · verify/audit độc lập · chỉ người ký `Done`. Không có ngoại lệ cho agent.
-
-Request cần sửa nhiều package hoặc nhiều tầng ⇒ chạy **SLP**, không tự làm tuần tự.
+## SLP — chia việc khi chạm >1 tầng
 
 | Thành phần | Ở đâu |
 |---|---|
-| Luật | `.cursor/rules/core.slp.mdc` (mirror `.agents/rules/core.slp.md`) |
-| Thứ tự gate | skill **`harness-engineering-team`** — 9 gate đánh số |
-| 7 worker | `.cursor/agents/{scout,plan,build,verify,audit,fixbug,qc}-runtime.md` (Cursor) · `.agents/agents/` (Antigravity) |
-| Bằng chứng | scratch: `comments/artifacts/slp/{recon,plan,verify,audit}/` — **không cite**; proof thật là board receipts + gate + commit (`core.artifacts`) |
+| Luật | [`agents/rules/core.slp.mdc`](agents/rules/core.slp.mdc) |
+| Procedure | skill `harness-engineering-team` |
+| 7 worker | [`agents/subagents/`](agents/subagents/) — `scout · plan · build · verify · audit · fixbug · qc` |
+| Evidence | `comments/artifacts/slp/` — **scratch**, không cite |
 
-**Jira parent-child rollup:** sau mỗi child transition, chạy `node scripts/jira-rollup.mjs <STORY-KEY>` — child `In Progress` ⇒ Story `In Progress`; tất cả child `Human In Review`/`Done` ⇒ Story `Human In Review`; **không auto `Done`**. Rule: [`delivery.jira-agent-execution`](.agents/rules/delivery.jira-agent-execution.md).
+**Thứ tự cứng:** build → verify PASS → audit (rubric ≥85, 0 CRITICAL) → `Human In Review`; QC chỉ khi operator yêu cầu. Cùng
+lỗi gốc **3 lần** ⇒ dừng, escalate **lên người**. **Không** agent nào tự ký `Done`; **không** commit/push/PR trừ khi user yêu cầu.
 
-**Bốn lớp:** **S** = người (duyệt plan · xử escalation · **ký `Done`** — không bao giờ là agent) · **L** = agent chat chính ·
-**P** = `scout` · `plan` · `build` (mỗi slice) · `fixbug` · **A** = `verify` · `audit` · `qc` (độc lập, không sửa code sản phẩm).
-`allowed_files` của 7 worker **rời nhau từng cặp** — kiểm bằng `qc/slp-conformance.test.mjs`.
-
-**Thứ tự cứng:** build → verify PASS → audit **≥85 & 0 CRITICAL** → `Human In Review`; QC chỉ khi operator yêu cầu (`D-41`).
-Cùng lỗi gốc **3** lần ⇒ dừng, liệt kê `OPEN`, escalate **lên người**. Không `Done`, không commit/push/PR trừ khi user yêu cầu.
-
-Ticket nhỏ (1 file) ⇒ được làm inline, **vẫn** phải verify **và** audit. Luật đầy đủ: `core.slp.mdc` §2–§7.
-
----
-
-## Layout monorepo
+## Layout
 
 ```text
-packages/
-  harness-foundation/      paths, policy load, init-profile, workspace
-  harness-eso-core/        COLLECT, gate, adapters (docgraph, codegraph, agentmemory)
-  harness-decision/        L0 + Jev facade
-  harness-host-generic/    Cursor/Antigravity hooks → sidecar
-  harness-observe-server/  ingest worker, REST, Observatory static
-  harness-console/         wizard UI (:8791)
-  harness-observatory/     monitor UI (:8792 host, :8790 in-container)
-  harness-cli/             observe, init profile
-profiles/                  generic-eso.json, plugin-catalog, host superset
-qc/                        node:test integration
-console.sh                 deploy / lifecycle Console :8791 (root, cạnh deploy.sh)
-*.Dockerfile               observe + console images (root)
-docs/                      handover pack + operator guides — the only human-docs root; X28 keeps every reference honest
+agents/            nguồn duy nhất: rules · subagents · skills · hooks · instructions.md (+ README)
+scripts/           build-host-trees.mjs · check-dual-harness.mjs · jira-*.mjs · dsh/ · …
+sdlc/              luật + artifact (không ship, không provision)
+tools/dsh-plugins/ plugin DSH (agentmemory, jira)
+.cursor/           generated — Cursor tree
+.agents/           generated — Antigravity tree + skills mà DSH đọc
+AGENTS.md          luật này
+AGENTS.local.md    generated — mirror always-on cho DSH
 ```
 
-Adapter id trong policy (tham chiếu khi sửa core): `docgraph-cli`, `codegraph-cli`, `agentmemory-mcp`, brain `deepseek-mcp`.
+## Quy ước
 
----
-
-## Lệnh dev (host có Bun)
-
-```bash
-bun install
-bun test                              # qc/ only — bunfig sets [test] root="./qc"
-bun run test                          # everything: qc + every packages/*/src suite
-bun run test:observatory              # Vitest observatory
-bun run build:observatory             # trước khi bundle UI trong observe-server
-node packages/harness-observe-server/src/server.mjs --root ../x79   # integration
-```
-
-Operator (x79), không bắt buộc khi chỉ sửa code harness-eso:
-
-```bash
-./install.sh && ./harness up          # Docker observe :8792
-./harness console                     # :8791
-./harness init profile ../x79 --id x79
-```
-
----
-
-## Quy ước code
-
-- ESM (`.mjs`), workspaces `@mu/harness-*`.
-- **Không ghi tài liệu bền vào `comments/`** — đó là scratch: `gitignore` cả thư mục, người vận hành sẽ xoá bất cứ lúc nào. Thiết kế/reference → `docs/<NN.topic>/` · luật/quyết định → `sdlc/` · tạm trong phiên → `/tmp` (ngoài repo). Luật đầy đủ: `.cursor/rules/core.artifacts.mdc` · `.agents/rules/core.artifacts.md`.
-- Test: `node:test` trong `qc/` và `packages/*/src/*.test.mjs`.
-- Không commit `.harness/` (local state). Không sửa tay `harness.config.json` trên x79 nếu flow chuẩn là `init profile` — trừ khi task yêu cầu.
+- ESM `.mjs`; repo này **không có** `package.json` hay test runner — verify bằng hai gate script.
+- **Không** ghi tài liệu bền vào `comments/` (scratch, gitignored). Bền → `sdlc/<NN.topic>/`.
+- **Không** commit `.harness/`, `comments/`, `.cursor/session/`, `.agents/session/`.
 - Chỉ commit khi user yêu cầu.
 
----
-
-## Phạm vi repo vs x79
+## Phạm vi
 
 | Việc | Repo |
-|------|------|
-| Sửa observe API, hooks, adapters, Console | **harness-eso** |
-| Chạy agent app với docgraph/codegraph MCP x79 | **x79** (mở workspace x79 hoặc MCP `projectPath` → x79) |
-| Kiểm tra preflight / gap / brain guard | **x79** sau provision + `./harness up` |
+|---|---|
+| Sửa rule/skill/subagent/hook | **eso-harness** (`agents/`) |
+| Cấu hình MCP | **máy này** — `.cursor/mcp.json` · `.agents/mcp_config.json` (gitignored, không sinh); danh sách server ở bảng trong `core.harness-tooling` |
+| Luật, quyết định, artifact SDLC | **eso-harness** (`sdlc/`) |
+| Code sản phẩm (`@mu/harness-*`), UI, Docker, `docs/` | **không** ở repo này (`D-108` điều 8) |
+| Consumer x79 | window khác — `agents/rules/core.workspace-isolation.mdc` |
 
-Khi task mơ hồ “fix harness”, mặc định code trong **harness-eso**; mô tả verify trên **x79** nếu là hành vi end-to-end.
+Khi task mơ hồ "fix harness": mặc định sửa `agents/` trong repo này; nếu nó chạm code sản phẩm thì **nói rõ là ngoài phạm vi**
+thay vì tạo folder mới.

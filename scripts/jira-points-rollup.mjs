@@ -3,7 +3,7 @@
 //   node scripts/jira-points-rollup.mjs [--apply]
 import { readFileSync } from 'node:fs';
 const apply = process.argv.includes('--apply');
-for (const l of readFileSync('/Users/thangs2net/Workspaces/harness-eso/.env', 'utf8').split('\n')) { const m = /^([A-Z_]+)=(.*)$/.exec(l.trim()); if (m && !process.env[m[1]]) process.env[m[1]] = m[2]; }
+for (const l of readFileSync('/Users/thangs2net/Workspaces/eso-harness/.env', 'utf8').split('\n')) { const m = /^([A-Z_]+)=(.*)$/.exec(l.trim()); if (m && !process.env[m[1]]) process.env[m[1]] = m[2]; }
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 const base = process.env.JIRA_BASE_URL, auth = 'Basic ' + Buffer.from(process.env.JIRA_USER_EMAIL + ':' + process.env.JIRA_API_TOKEN).toString('base64');
 const g = async (p) => (await fetch(base + p, { headers: { Authorization: auth, Accept: 'application/json' } })).json();

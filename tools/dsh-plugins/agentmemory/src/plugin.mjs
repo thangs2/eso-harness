@@ -11,7 +11,7 @@
  * Constraints this file obeys, each learned from the installed Harness:
  *  - No `@deepseek-ai/*` import: a host plugin that imports the Harness runtime
  *    can hoist a second copy of a singleton into the profile (the sibling Jira
- *    plugin records this as ATF-OPS-001 and `@mu/harness-eso-dsh` ships a
+ *    plugin records this as ATF-OPS-001 and `@mu/eso-harness-dsh` ships a
  *    zero-dependency bundle for the same reason). The `TOOL_RUNTIME_SCHEDULER`
  *    symbol those notes cite no longer exists in 0.2.2-rc.1, so this is kept as
  *    a dependency-freedom rule rather than as a measured claim.

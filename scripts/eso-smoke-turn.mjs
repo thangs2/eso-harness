@@ -54,7 +54,7 @@ const isForbiddenTarget = !isInsideTmp ||
     targetDir === '/' ||
     targetDir === rootDir ||
     targetDir.includes('x79') ||
-    targetDir.includes('harness-eso');
+    targetDir.includes('eso-harness');
 
 if (isForbiddenTarget) {
     console.error(`❌ ACCESS_DENIED: Target directory "${targetDir}" must be strictly inside a temporary directory (/tmp)`);

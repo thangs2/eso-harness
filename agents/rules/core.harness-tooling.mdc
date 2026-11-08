@@ -1,0 +1,45 @@
+---
+description: eso-harness tooling — codegraph · docgraph · agentmemory · deepseek (MCP + CLI)
+layer: core
+alwaysApply: false
+version: "2.0.0"
+canonical: AGENTS.md
+globs: .cursor/mcp.json,scripts/**
+---
+
+# Harness tooling (eso-harness)
+
+**MCP là máy-local, không sinh:** `.cursor/mcp.json` (Cursor) · `.agents/mcp_config.json` (Antigravity) đều gitignored, mang
+path tuyệt đối và key. Không có file mẫu trong git để lệch — bảng ngay dưới đây **là** bản ghi danh sách server repo này cần; thêm
+server thì sửa file máy **và** một dòng ở bảng này.
+
+| Server | Tool | Ghi chú |
+|--------|------|---------|
+
+## MCP
+
+| `codegraph` | `codegraph_explore` | `--path` = **root repo này** |
+| `agentmemory-mcp` | `memory_smart_search`, `memory_save` | `:3111` |
+| `deepseek-direct` | `ask_deepseek_flash`, `ask_deepseek_pro` | cần `DEEPSEEK_ENV_FILE` |
+| `jira` | tool Jira | ticket/rollup |
+
+## CLI — khi không có MCP
+
+| Việc | Lệnh |
+|---|---|
+| Symbol / flow / blast radius | `codegraph explore "<symbol>" --path "$PWD"` (thêm `query` · `context` · `node` · `files`) |
+| Concept, invariant, decision | `docgraph --q "<terms>" --top 10 --repo "$PWD"` |
+| Docgraph thấy tree nào | `docgraph --print-harness` |
+
+## Khi nào gọi gì
+
+| Cần | Tool |
+|-----|------|
+| Symbol / flow trong repo này | `codegraph_explore` + `projectPath` = root repo |
+| Luật, quyết định, invariant | `docgraph --q` hoặc Read thẳng `sdlc/` |
+| Context phiên trước | `memory_smart_search` |
+| Thiết kế/debug sâu | DeepSeek (nếu đã cấu hình) — **không** dùng để chọn rule/route |
+
+## Không thay thế
+
+Sửa file vẫn dùng editor tools; verify vẫn dùng hai script gate (`build-host-trees.mjs --check`, `check-dual-harness.mjs`).

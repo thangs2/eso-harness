@@ -1,0 +1,22 @@
+{
+    "cursor": {
+        "mode": "on",
+        "file": "hooks.json",
+        "hooks": {
+            "version": 1,
+            "hooks": {
+                "afterAgentResponse": [
+                    { "command": "node {tree}/hooks/detect-json-wrapper.mjs --hook" }
+                ],
+                "stop": [
+                    { "command": "node {tree}/hooks/wrapped-output-guard.mjs --stop", "loop_limit": 2 }
+                ]
+            }
+        }
+    },
+    "claude": {
+        "mode": "off",
+        "file": "hooks.json",
+        "hooks": {}
+    }
+}

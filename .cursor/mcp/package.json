@@ -1,8 +1,0 @@
-{
-  "name": "@mu/harness-eso-cursor-mcp",
-  "private": true,
-  "type": "module",
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.25.0"
-  }
-}

@@ -65,8 +65,8 @@ function resetEso(dir, output) {
         throw new Error(`${dir}: .agents/hooks.json is not valid JSON: ${err.message}`);
     }
     const blocks = Object.keys(hooks);
-    if (!blocks.some((k) => k.startsWith('harness-eso'))) {
-        throw new Error(`${dir}: no harness-eso blocks in .agents/hooks.json — re-provision before running`);
+    if (!blocks.some((k) => k.startsWith('eso-harness'))) {
+        throw new Error(`${dir}: no eso-harness blocks in .agents/hooks.json — re-provision before running`);
     }
     if (!fs.existsSync(path.join(dir, '.harness/host-pack/harness-hook.mjs'))) {
         throw new Error(`${dir}: missing .harness/host-pack/harness-hook.mjs — re-provision before running`);

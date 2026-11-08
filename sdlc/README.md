@@ -1,4 +1,4 @@
-# SDLC — harness-eso
+# SDLC — eso-harness
 
 **`sdlc/` là working tree của sản phẩm.** Người và agent đọc và ghi ở đây. Nó **không** thay
 `docs/`.
@@ -13,7 +13,7 @@ Hai trục. `docs/` mô tả **hiện tại**; `sdlc/` nói **kế tiếp**. M�
 
 ## Đối tượng độc giả
 
-**Sản phẩm:** `harness-eso` — monorepo ship package `@mu/harness-*`.
+**Sản phẩm:** `eso-harness` — monorepo ship package `@mu/harness-*`.
 
 `sdlc/` nói về **sản phẩm**. Consumer (`x79`, `atrievefin`, `fineso`, `baplatform`) là **nơi thụ hưởng**;
 chúng xuất hiện ở đây chỉ khi cần làm ví dụ để kiểm chứng một phát biểu về sản phẩm, **không** phải đối

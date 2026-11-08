@@ -1,4 +1,4 @@
-# docgraph.scope — SINGLE SOURCE OF TRUTH for what docgraph covers in harness-eso.
+# docgraph.scope — SINGLE SOURCE OF TRUTH for what docgraph covers in eso-harness.
 #
 # Lives at REPO ROOT and is TRACKED in git.
 # Discovered by: walking up from cwd for docgraph.scope, or $DOCGRAPH_REPO.
@@ -8,25 +8,17 @@ ext:.md
 ext:.mdc
 ext:.json
 
-# --- Documentation pack & operator runbooks ---------------------------------
-# tên cũ documents/ — đổi 2026-11-02
-path:docs
-path:README.md
+# --- Documentation pack -----------------------------------------------------
+# Repo này không có docs/ (D-108 điều 8): tài liệu bền sống trong sdlc/.
 
 # --- Agent law & skills -----------------------------------------------------
+# Nguồn duy nhất là agents/; .cursor/ và .agents/ là bản sinh ra nên KHÔNG index lại
+# (nếu index cả hai, mỗi rule hiện hai lần trong kết quả tìm kiếm).
 path:AGENTS.md
-path:README.md
-path:.cursor/rules
-path:.cursor/agents
-path:.cursor/skills
-path:.cursor/instructions.md
-path:.agents/rules
-path:.agents/skills
-path:.agents/instructions.md
+path:agents
 
-# --- Policy & profiles ------------------------------------------------------
-path:profiles
-path:package.json
+# --- SDLC artifacts ---------------------------------------------------------
+path:sdlc
 
 # --- Exclusions -------------------------------------------------------------
 exclude:**/tsconfig*.json

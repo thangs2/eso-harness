@@ -28,7 +28,7 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 /** Every directory holding Bun-native tests. The Observatory uses Vitest and has its own script. */
 const SUITES = [
     'packages/harness-foundation/src',
-    'packages/harness-eso-core/src',
+    'packages/eso-harness-core/src',
     'packages/harness-decision/src',
     'packages/harness-system-one/src',
     'packages/harness-host-generic/src',
