@@ -12,8 +12,6 @@ allowed_files:
   - "qc/eso-cp-*.test.mjs"
 forbidden:
   - "sdlc/**"
-  - "packages/harness-*"
-  - "docs/**"
 verify:
   - "bun test qc/eso-cp-*"
 design_refs:
@@ -37,4 +35,4 @@ design_refs:
 | **INV-CP-03** | **Không endpoint nào trên đường turn** | `D-46` |
 ## 3. Specific prohibitions
 
-- Ghi ngoài `allowed_files`, kể cả "chỉ một file" · sửa `sdlc/**` hoặc `packages/harness-*` (v1 **đóng băng**, `D-74`).
+- Ghi ngoài `allowed_files`, kể cả "chỉ một file" · sửa `sdlc/**` hoặc file ngoài `allowed_files` (v1 **đóng băng**, `D-74`).

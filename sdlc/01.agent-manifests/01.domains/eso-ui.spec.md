@@ -12,8 +12,6 @@ allowed_files:
   - "qc/eso-ui-*.test.mjs"
 forbidden:
   - "sdlc/**"
-  - "packages/harness-*"
-  - "docs/**"
 verify:
   - "bun test qc/eso-ui-*"
 design_refs:
@@ -37,4 +35,4 @@ design_refs:
 | **INV-UI-03** | **Không import code UI của v1** — hai cây không sửa nhau | `D-74` |
 ## 3. Specific prohibitions
 
-- Ghi ngoài `allowed_files`, kể cả "chỉ một file" · sửa `sdlc/**` hoặc `packages/harness-*` (v1 **đóng băng**, `D-74`).
+- Ghi ngoài `allowed_files`, kể cả "chỉ một file" · sửa `sdlc/**` hoặc file ngoài `allowed_files` (v1 **đóng băng**, `D-74`).

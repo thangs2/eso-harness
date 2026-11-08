@@ -50,8 +50,8 @@
   "allowed_files": [
     "eso/memory/**",
     "eso/adapters/**",
-    "packages/eso-harness-core/adapters/**",
-    "packages/harness-host-dsh/**",
+    "prior-art/eso-harness-core/adapters/**",
+    "prior-art/harness-host-dsh/**",
     "qc/acceptance/US-MEM-03/**"
   ],
   "forbidden": [

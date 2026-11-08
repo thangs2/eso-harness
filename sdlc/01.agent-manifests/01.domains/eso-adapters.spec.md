@@ -12,8 +12,6 @@ allowed_files:
   - "qc/eso-adapter-*.test.mjs"
 forbidden:
   - "sdlc/**"
-  - "packages/harness-*"
-  - "docs/**"
 verify:
   - "bun test qc/eso-adapter-*"
 design_refs:
@@ -37,4 +35,4 @@ design_refs:
 | **INV-AD-03** | **Sản phẩm không gọi model** — quyết định là của người | `D-13` · mission |
 ## 3. Specific prohibitions
 
-- Ghi ngoài `allowed_files`, kể cả "chỉ một file" · sửa `sdlc/**` hoặc `packages/harness-*` (v1 **đóng băng**, `D-74`).
+- Ghi ngoài `allowed_files`, kể cả "chỉ một file" · sửa `sdlc/**` hoặc file ngoài `allowed_files` (v1 **đóng băng**, `D-74`).

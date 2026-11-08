@@ -12,8 +12,6 @@ allowed_files:
   - "qc/eso-graph-*.test.mjs"
 forbidden:
   - "sdlc/**"
-  - "packages/harness-*"
-  - "docs/**"
 verify:
   - "bun test qc/eso-graph-*"
 design_refs:
@@ -37,4 +35,4 @@ design_refs:
 | **INV-GR-03** | Dưới `floor` ⇒ **cấm** claim `absent` | `06` §8.1 |
 ## 3. Specific prohibitions
 
-- Ghi ngoài `allowed_files`, kể cả "chỉ một file" · sửa `sdlc/**` hoặc `packages/harness-*` (v1 **đóng băng**, `D-74`).
+- Ghi ngoài `allowed_files`, kể cả "chỉ một file" · sửa `sdlc/**` hoặc file ngoài `allowed_files` (v1 **đóng băng**, `D-74`).

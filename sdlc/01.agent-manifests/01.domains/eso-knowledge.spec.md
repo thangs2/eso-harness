@@ -12,8 +12,6 @@ allowed_files:
   - "qc/eso-kb-*.test.mjs"
 forbidden:
   - "sdlc/**"
-  - "packages/harness-*"
-  - "docs/**"
 verify:
   - "bun test qc/eso-kb-*"
 design_refs:
@@ -38,4 +36,4 @@ design_refs:
 | **INV-KB-04** | **Conformance công bố mọi phép kiểm**: `pass` · `fail` · `OUT` + lý do — không phép kiểm nào **vắng mặt** hay bị **bỏ qua im lặng** | `BR-20` · `ESO-458` |
 ## 3. Specific prohibitions
 
-- Ghi ngoài `allowed_files`, kể cả "chỉ một file" · sửa `sdlc/**` hoặc `packages/harness-*` (v1 **đóng băng**, `D-74`).
+- Ghi ngoài `allowed_files`, kể cả "chỉ một file" · sửa `sdlc/**` hoặc file ngoài `allowed_files` (v1 **đóng băng**, `D-74`).

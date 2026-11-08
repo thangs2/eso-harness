@@ -12,8 +12,6 @@ allowed_files:
   - "qc/eso-ev-*.test.mjs"
 forbidden:
   - "sdlc/**"
-  - "packages/harness-*"
-  - "docs/**"
 verify:
   - "bun test qc/eso-ev-*"
 design_refs:
@@ -37,4 +35,4 @@ design_refs:
 | **INV-EV-03** | Mỗi turn ghi **nội dung đã dùng** (`hash` + `commit` + dirty) | `BR-11` |
 ## 3. Specific prohibitions
 
-- Ghi ngoài `allowed_files`, kể cả "chỉ một file" · sửa `sdlc/**` hoặc `packages/harness-*` (v1 **đóng băng**, `D-74`).
+- Ghi ngoài `allowed_files`, kể cả "chỉ một file" · sửa `sdlc/**` hoặc file ngoài `allowed_files` (v1 **đóng băng**, `D-74`).
