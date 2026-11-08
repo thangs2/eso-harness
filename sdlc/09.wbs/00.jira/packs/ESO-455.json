@@ -1,0 +1,70 @@
+{
+  "ticket": "ESO-455",
+  "epic": "ESO-19",
+  "bip": {
+    "id": "BIP-10_2",
+    "file": "sdlc/09.wbs/01.packets/01.bip/56.know-sufficiency.md"
+  },
+  "technical": false,
+  "inv": [
+    "INV-KB-01"
+  ],
+  "ac": [
+    "AC-KNOW-02-01",
+    "AC-KNOW-02-02",
+    "AC-KNOW-02-03",
+    "AC-KNOW-02-04",
+    "AC-KNOW-02-05"
+  ],
+  "scn": [
+    "SCN-KNOW-06",
+    "SCN-KNOW-07",
+    "SCN-KNOW-08",
+    "SCN-KNOW-09",
+    "SCN-KNOW-10"
+  ],
+  "red_packets": [
+    {
+      "packet": "sdlc/10.test/46.know-sufficiency.tdd-unit.md",
+      "test_file": "qc/acceptance/US-KNOW-02/AC-KNOW-02-01.test.mjs",
+      "test_name": "SCN-KNOW-06 · AC-KNOW-02-01 — thiếu hẳn loại decision ⇒ nêu kind + hậu quả",
+      "expected_failure": "`AssertionError` ở `SCN-KNOW-06`: **actual** `typeof sufficiencyReport === \"undefined\"` (index chưa export) · **expected** `function` trả `status: \"measured\"`, `findings` đúng 1 mục `{ code: \"MISSING_KIND\", kind: \"decision\", reason: <khác rỗng>, consequence: \"tranh chấp không có điểm dừng\", owner: \"A-04\" }` (owner suy từ `kindOwners`), `message` nêu tên `decision` + hậu quả và **không** chứa *\"còn thiếu tài liệu\"*"
+    },
+    {
+      "packet": "sdlc/10.test/47.know-sufficiency.tdd-impl.md",
+      "test_file": "qc/acceptance/US-KNOW-02/AC-KNOW-02-02.test.mjs",
+      "test_name": "SCN-KNOW-07 · AC-KNOW-02-02 — chưa khai template ⇒ nói \"chưa có template để đo\", không đoán",
+      "expected_failure": "`AssertionError` ở `SCN-KNOW-07`: **actual** `typeof sufficiencyReport === \"undefined\"` (index chưa export) · **expected** `function` trả `status: \"blocked\"`, `code: \"NOT_MEASURED\"`, `findings: []`, `message` chứa *\"chưa có template để đo\"* và **không** lấy template của project khác"
+    },
+    {
+      "packet": "sdlc/10.test/48.know-sufficiency.tdd-coverage.md",
+      "test_file": "qc/acceptance/US-KNOW-02/AC-KNOW-02-04.test.mjs",
+      "test_name": "SCN-KNOW-09 · AC-KNOW-02-04 — 12 loại đều thiếu ⇒ liệt kê từng loại + hậu quả",
+      "expected_failure": "`AssertionError` ở `SCN-KNOW-09`: **actual** `typeof sufficiencyReport === \"undefined\"` (index chưa export) · **expected** `function` trả `findings` đủ **12** mục, mỗi mục `code: \"MISSING_KIND\"` + `kind` + `reason` + `consequence` khác rỗng, `message` không gộp thành *\"thiếu nhiều loại\"*"
+    },
+    {
+      "packet": "sdlc/10.test/49.know-sufficiency.tdd-qc.md",
+      "test_file": "qc/acceptance/US-KNOW-02/AC-KNOW-02-05.test.mjs",
+      "test_name": "SCN-KNOW-10 · AC-KNOW-02-05 — loại có nhưng nội dung sai ⇒ tách sai khỏi thiếu",
+      "expected_failure": "`AssertionError` ở `SCN-KNOW-10`: **actual** `typeof sufficiencyReport === \"undefined\"` (index chưa export) · **expected** `function` trả `findings` đúng 1 mục `{ code: \"CONTENT_CONTRADICTS\", kind: \"policy\", reason: <chuỗi khác rỗng nêu mâu thuẫn nguồn>, consequence: <từ template> }`, không có `MISSING_KIND`, không có `DERIVED_WITHOUT_SOURCE`, `message` nêu `policy` + *\"mâu thuẫn\"*"
+    }
+  ],
+  "allowed_files": [
+    "eso/knowledge/**"
+  ],
+  "forbidden": [
+    "scripts/ticket-gate.mjs",
+    "scripts/check-test-integrity.mjs",
+    "sdlc/**",
+    "sdlc/10.test/**",
+    "qc/acceptance/**"
+  ],
+  "verify": [
+    "bun test qc/acceptance/US-KNOW-02"
+  ],
+  "base_commit": "5c4d385",
+  "base_ref": "5c4d385",
+  "owner": "knowledge",
+  "allow_dependency": false,
+  "notes": "WP 10.2 · BIP READY. Stage 7 (RED packet) chưa có: do verifier viết (E2) — gate sẽ báo MISSING_RED_PACKETS cho tới lúc đó. · Stage 7 4 packet (verifier) · 4 lane / 5 AC: AC không có packet riêng được test nhưng không pin ở red_packets (gate đọc R2 đầu tiên của packet)."
+}

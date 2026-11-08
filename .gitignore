@@ -1,0 +1,40 @@
+node_modules/
+# comments/artifacts is scratch: drafts only, never tracked
+comments/artifacts/
+.DS_Store
+*.log
+.harness/
+.cursor/mcp/node_modules/
+dist/
+# Machine-local MCP config: it carries the API keys for this operator's servers, so it stays out
+# and `.cursor/mcp.example.json` is the committed template. Same reasoning as `.codegraph/`.
+.cursor/mcp.json
+.codegraph/
+.docgraph/
+.agents/session/
+.cursor/session/
+# The session rules above are anchored to the repo root. Tests create the same directories inside a
+# fixture tree (`qc/.cursor/session/…` when a test runs from `qc/`), and those are neither intended
+# nor safe to commit — they are the output of a run, not a fixture.
+**/.cursor/session/
+**/.agents/session/
+__pycache__/
+*.pyc
+
+# Docker CLI state (DOCKER_CONFIG) the deploy scripts point here: registry seed, buildx cache.
+.docker-config/
+
+# Local secrets — Jira API token and anything else machine-bound. `.env.example` is the committed
+# template; every other variant is a real credential file and never enters git.
+.env*
+!.env.example
+
+# Machine-local MCP config (absolute paths, possibly credentials) — same rule as `.cursor/mcp.json`.
+.agents/mcp_config.json
+.claude/worktrees/
+
+# Generated FE preview bundle (local inspection only; not shipped)
+eso/ui/preview/
+
+# Angular CLI cache
+.angular/

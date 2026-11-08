@@ -1,0 +1,70 @@
+{
+  "ticket": "ESO-456",
+  "epic": "ESO-20",
+  "bip": {
+    "id": "BIP-10_3",
+    "file": "sdlc/09.wbs/01.packets/01.bip/57.know-guidance.md"
+  },
+  "technical": false,
+  "inv": [
+    "INV-KB-01"
+  ],
+  "ac": [
+    "AC-KNOW-03-01",
+    "AC-KNOW-03-02",
+    "AC-KNOW-03-03",
+    "AC-KNOW-03-04",
+    "AC-KNOW-03-05"
+  ],
+  "scn": [
+    "SCN-KNOW-11",
+    "SCN-KNOW-12",
+    "SCN-KNOW-13",
+    "SCN-KNOW-14",
+    "SCN-KNOW-15"
+  ],
+  "red_packets": [
+    {
+      "packet": "sdlc/10.test/50.know-guidance.tdd-unit.md",
+      "test_file": "qc/acceptance/US-KNOW-03/AC-KNOW-03-01.test.mjs",
+      "test_name": "SCN-KNOW-11 · AC-KNOW-03-01 — phát hiện \"thiếu loại decision\" ⇒ việc đủ bốn phần",
+      "expected_failure": "`AssertionError` ở `SCN-KNOW-11`: **actual** `typeof nextActions === \"undefined\"` (index chưa export) · **expected** `function` trả `next` 1 dòng cho phát hiện thiếu loại `decision`, đủ `kind` · `action` · `owner` = `A-04` · `whyNow` · `blocker` · `playbook` khác rỗng, `total` = 1"
+    },
+    {
+      "packet": "sdlc/10.test/51.know-guidance.tdd-impl.md",
+      "test_file": "qc/acceptance/US-KNOW-03/AC-KNOW-03-02.test.mjs",
+      "test_name": "SCN-KNOW-12 · AC-KNOW-03-02 — không quy được người ⇒ nêu \"chưa xác định người\"",
+      "expected_failure": "`AssertionError` ở `SCN-KNOW-12`: **actual** `typeof nextActions === \"undefined\"` (index chưa export) · **expected** `next: []` (không thành bước), `rejected` đúng 1 dòng `{ code: \"OWNER_UNASSIGNED\", reason: <chứa *\"chưa xác định người\"*> }`, không có bước nào mang `owner: \"\"`"
+    },
+    {
+      "packet": "sdlc/10.test/52.know-guidance.tdd-coverage.md",
+      "test_file": "qc/acceptance/US-KNOW-03/AC-KNOW-03-03.test.mjs",
+      "test_name": "SCN-KNOW-13 · AC-KNOW-03-03 — 20 phát hiện ⇒ next ≤ 5 bước, kèm TRUNCATED nói còn lại",
+      "expected_failure": "`AssertionError` ở `SCN-KNOW-13`: **actual** `typeof nextActions === \"undefined\"` (index chưa export) · **expected** `ED3` — 20 phát hiện ⇒ `next` **≤ 5** bước (khác rỗng), mỗi bước đủ `kind` · `action` · `owner` · `whyNow` · `blocker` · `playbook` và `finding` 1:1, các `action` không trùng; `truncated.code: \"TRUNCATED\"` với `truncated.omitted` = `20 - next.length` (vd `15`); **không** trả 20 việc"
+    },
+    {
+      "packet": "sdlc/10.test/53.know-guidance.tdd-qc.md",
+      "test_file": "qc/acceptance/US-KNOW-03/AC-KNOW-03-05.test.mjs",
+      "test_name": "SCN-KNOW-15 · AC-KNOW-03-05 — \"cần cải thiện\" ⇒ từ chối, nêu \"thiếu nội dung hành động\"",
+      "expected_failure": "`AssertionError` ở `SCN-KNOW-15`: **actual** `typeof nextActions === \"undefined\"` (index chưa export) · **expected** `next` rỗng, `total` = 0, `rejected` 1 dòng cho phát hiện chỉ nói *\"cần cải thiện\"* với `reason` chứa *\"thiếu nội dung hành động\"*"
+    }
+  ],
+  "allowed_files": [
+    "eso/knowledge/**"
+  ],
+  "forbidden": [
+    "scripts/ticket-gate.mjs",
+    "scripts/check-test-integrity.mjs",
+    "sdlc/**",
+    "sdlc/10.test/**",
+    "qc/acceptance/**"
+  ],
+  "verify": [
+    "bun test qc/acceptance/US-KNOW-03"
+  ],
+  "base_commit": "5c4d385",
+  "base_ref": "5c4d385",
+  "owner": "knowledge",
+  "allow_dependency": false,
+  "notes": "WP 10.3 · BIP READY. Stage 7 (RED packet) chưa có: do verifier viết (E2) — gate sẽ báo MISSING_RED_PACKETS cho tới lúc đó. · Stage 7 4 packet (verifier) · 4 lane / 5 AC: AC không có packet riêng được test nhưng không pin ở red_packets (gate đọc R2 đầu tiên của packet)."
+}
