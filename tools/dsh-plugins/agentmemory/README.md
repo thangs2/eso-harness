@@ -1,4 +1,4 @@
-# @local/agentmemory-mcp-plugin
+# @local/agentmemory-mcp
 
 Local DSH Host plugin, source nằm trong repo **eso-harness**
 (`tools/dsh-plugins/agentmemory`). Một plugin AgentMemory MCP cho **nhiều** repo. Mỗi workspace tự xác định
@@ -7,12 +7,47 @@ memory store mà không cần plugin riêng cho từng repo.
 
 | Mục | Giá trị |
 |---|---|
-| Loader row | `agentmemory-mcp-plugin` |
+| Loader row | `agentmemory-mcp` |
 | Loại | Host plugin (có code), không dependency npm |
 | Transport | stdio → `npx -y --offline @agentmemory/mcp`, mỗi agent một process |
 | Tên tool | Giữ nguyên (`memory_smart_search`, `memory_save`, `memory_recall`, …) |
 | Credential | `ctx.credentials` → secret trong `.cursor/mcp.json` của repo → biến môi trường → `~/.agentmemory/secret` (loopback) |
 | Đo lường live | `agentmemory 0.9.32`, protocol `2025-06-18`, 8 tool (2026-11-07) |
+
+## Force: "AgentMemory first" là cơ chế, **mỗi prompt**
+
+Mount tool thôi thì model vẫn có thể bỏ qua memory. Plugin đăng ký thêm hai điểm native của DSH, chỉ
+khi handshake đã thành công:
+
+| Điểm | Tính chất | Làm gì |
+|---|---|---|
+| `ctx.tools.guard()` | **sync**, deny "regardless of order" | deny mọi tool **không** phải `memory_*` cho tới khi **prompt hiện tại** đã gọi `memory_smart_search`/`memory_recall` |
+| `tools/pre-execute` | waterfall, await được | quan sát tool thật sự chạy: search/recall → mở khoá **cho prompt này** |
+| `session/event` `turn/start` | durable event | **mỗi prompt mới** đặt lại trạng thái "chưa kiểm tra" |
+
+Check chỉ áp cho công việc **chạm `eso/` · `sdlc/` · `scripts/` · `qc/`**, và chỉ đọc các argument **path/command**
+của tool (path file, `cd`/path trong lệnh shell, `pattern` của glob/grep, path của `working_directory`). Các field
+**prose** — `description`, `prompt`, `content`, `query`, `old_string`… — bị bỏ qua, nên câu mô tả "work on eso
+scope" không kích hoạt nhầm. Việc ngoài 4 folder đó **không** bị chặn và không cần memory. Tên folder là literal
+— `/Users/x/eso-harness` **không** tính là `eso/`.
+
+Một hệ quả của việc quét `command`: lệnh chỉ **in** tên folder, ví dụ `echo "eso là gì"`, vẫn bị tính là chạm
+scope và tốn một lần memory search. Đây là false-positive chấp nhận được — phân biệt "in chữ" với "cd vào
+folder" trong một chuỗi shell là đoán ý, còn bỏ sót `cd sdlc` thì phá đúng mục đích của check.
+
+Unlock **không** kéo dài sang prompt sau: mỗi lần operator gửi prompt, tool đầu tiên vẫn phải là
+memory search. `memory_save` không bị ép — nó là tool memory nên luôn được phép; gọi khi có kiến thức
+mới.
+
+Tool `memory_*` **luôn** được phép ⇒ không thể deadlock. Server chết ⇒ plugin **không mount tool và
+không đăng ký guard** (chỉ cảnh báo), nên session vẫn làm việc được. State nằm trong RAM theo agent,
+không ghi file (không marker `/tmp`, không file ngoài repo).
+
+Câu model nhìn thấy khi bị chặn:
+
+```text
+AgentMemory first: call memory_smart_search before any other tool in this prompt.
+```
 
 ## Vì sao cần bản này
 
@@ -192,17 +227,17 @@ không có nó — xem README của plugin Jira), sửa tay profile:
 
 ```json
 "dependencies": {
-  "@local/agentmemory-mcp-plugin": "link:/Users/thangs2net/Workspaces/eso-harness/tools/dsh-plugins/agentmemory"
+  "@local/agentmemory-mcp": "link:/Users/thangs2net/Workspaces/eso-harness/tools/dsh-plugins/agentmemory"
 },
 "dsh": { "profile": { "bundles": [
   "...",
-  "@local/agentmemory-mcp-plugin"
+  "@local/agentmemory-mcp"
 ] } }
 ```
 
 2. `"/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" plugin --profile desktop install`
    (hoặc `pnpm install` trong `~/.dsh/profiles/desktop`).
-3. Bundle tự chèn row `agentmemory-mcp-plugin` từ `cordis.patch.yml` của plugin.
+3. Bundle tự chèn row `agentmemory-mcp` từ `cordis.patch.yml` của plugin.
    Muốn override config thì thêm row cùng id vào
    `~/.dsh/profiles/desktop/cordis.patch.yml` (như plugin Jira/Penpot đang làm).
 4. Khởi động lại Harness sau khi sửa profile — Host plugin không HMR.
@@ -260,9 +295,9 @@ terminal. Đặt `AGENTMEMORY_PLUGIN_DEBUG=1` để plugin ghi chẩn đoán ra 
 
 ```bash
 AGENTMEMORY_PLUGIN_DEBUG=1 AGENTMEMORY_PLUGIN_DEBUG_FILE=/tmp/am.log dsh ...
-# [agentmemory-mcp-plugin] install agent/created session=session-…
-# [agentmemory-mcp-plugin] start session=session-… cwd=/private/tmp/repo
-# [agentmemory-mcp-plugin] target=http://localhost:3211 (/private/tmp/repo)
+# [agentmemory-mcp] install agent/created session=session-…
+# [agentmemory-mcp] start session=session-… cwd=/private/tmp/repo
+# [agentmemory-mcp] target=http://localhost:3211 (/private/tmp/repo)
 ```
 
 Dòng `target=none` nghĩa là repo **không** có config; dòng `cwd=null` nghĩa là
@@ -274,7 +309,7 @@ Kiểm tra patch mà không cần cài (profile `desktop` từ chối `--dump-co
 "/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh" \
   --profile headless \
   --patch tools/dsh-plugins/agentmemory/cordis.patch.yml \
-  --dump-config | grep -A 12 agentmemory-mcp-plugin
+  --dump-config | grep -A 12 agentmemory-mcp
 ```
 
 ### Một lỗi inject của Cordis — lý do plugin khai báo `inject`
@@ -301,6 +336,8 @@ secret). Test `plugin.test.mjs` khoá invariant này.
 | `insecureTls` | `false` | Truyền `NODE_TLS_REJECT_UNAUTHORIZED=0` cho **process con** (không hạ cấp cả Harness). Chỉ dùng khi có proxy nội bộ. |
 | `toolPrefix` | `''` | Tiền tố tên tool. Mặc định rỗng để `memory_smart_search` khớp cách `AGENTS.md` gọi. |
 | `default` | — | Target dự phòng toàn profile khi repo không có config. |
+| `enforce` | `true` | Force search **mỗi prompt**: deny tool chạm `eso`/`sdlc`/`scripts`/`qc` cho tới khi prompt hiện tại đã gọi `memory_smart_search`/`memory_recall`. `false` = chỉ mount tool như trước. |
+| `scope` | `[eso, sdlc, scripts, qc]` | Danh sách folder kích hoạt check. Array hoặc chuỗi phẩy. Tên literal: `eso-harness` không khớp `eso`. |
 
 ## Vòng đời agent — chỗ dễ sai nhất
 

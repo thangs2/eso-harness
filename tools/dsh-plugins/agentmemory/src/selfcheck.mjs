@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Live smoke check for `@local/agentmemory-mcp-plugin`, outside the Harness.
+ * Live smoke check for `@local/agentmemory-mcp`, outside the Harness.
  *
  * It exercises the same code the plugin runs at `agent/created` — resolve the
  * server from the workspace, resolve the secret, probe `/agentmemory/livez`,

@@ -29,7 +29,7 @@
 import { spawn } from 'node:child_process';
 
 const PROTOCOL_VERSION = '2025-06-18';
-const CLIENT_INFO = { name: 'agentmemory-mcp-plugin', version: '1.0.0' };
+const CLIENT_INFO = { name: 'agentmemory-mcp', version: '1.0.0' };
 
 export class McpError extends Error {
     constructor(message, { code = 'MCP_ERROR', detail = null } = {}) {

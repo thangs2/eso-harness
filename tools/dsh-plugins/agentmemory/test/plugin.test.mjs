@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { realpathSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { buildServerEnv, createAgentMemoryPlugin, inject } from '../src/plugin.mjs';
+import { buildServerEnv, createAgentMemoryPlugin, inject, touchesScope } from '../src/plugin.mjs';
 import {
     FIXTURE,
 
@@ -79,7 +79,7 @@ test('registers the server tools for a configured repo only', async () => {
         assert.equal(start.url, 'http://localhost:3211');
         assert.equal(start.forceProxy, '1');
         assert.equal(start.cwd, realpathSync(workspace));
-        assert.ok(ctx.logs.info.some((line) => /registered 3 tools for localhost:3211/.test(line)));
+        assert.ok(ctx.logs.info.some((line) => /registered 3 tool\(s\) and enforcement for localhost:3211/.test(line)));
     } finally {
         await ctx.emit('agent/disposed', { agent });
         ctx.cleanup();
@@ -235,7 +235,7 @@ test('agents alive before activation are seeded (plugin-manager enable / HMR)', 
     try {
         createAgentMemoryPlugin().apply(ctx, makeConfig(workspace));
         await waitFor(() => tools.size === 3, { label: 'bootstrap tools' });
-        assert.ok(ctx.logs.info.some((line) => /registered 3 tools for localhost:3211/.test(line)));
+        assert.ok(ctx.logs.info.some((line) => /registered 3 tool\(s\) and enforcement for localhost:3211/.test(line)));
     } finally {
         await ctx.emit('agent/disposed', { agent });
         ctx.cleanup();
@@ -420,6 +420,140 @@ test('a cancelled tool call returns promptly instead of waiting out the timeout'
         assert.ok(Date.now() - started < 2_000, 'cancellation must not wait for the 30 s timeout');
     } finally {
         await ctx.emit('agent/disposed', { agent });
+        ctx.cleanup();
+        removeWorkspace(workspace);
+    }
+});
+
+test('force (D2): a non-memory tool is denied until memory_smart_search runs', async () => {
+    const workspace = makeRepo();
+    const ctx = createFakeContext({ services: inject, dirs: { s1: workspace } });
+    const fake = createFakeAgent('s1');
+    try {
+        createAgentMemoryPlugin().apply(ctx, makeConfig(workspace));
+        await ctx.emit('agent/created', { agent: fake.agent });
+        await waitFor(() => fake.tools.size === 3, { label: 'three registered tools' });
+
+        assert.match(fake.decide('bash', { command: 'ls sdlc/09.wbs' }), /memory_smart_search/, 'the first non-memory tool must be denied');
+        assert.equal(fake.decide('memory_smart_search'), undefined, 'memory tools are always the way out');
+
+        await fake.emit('tools/pre-execute', { name: 'memory_smart_search', agent: fake.agent }, () => undefined);
+        assert.equal(fake.decide('bash', { command: 'ls sdlc/09.wbs' }), undefined, 'after one search the session may work');
+    } finally {
+        await ctx.emit('agent/disposed', { agent: fake.agent });
+        ctx.cleanup();
+        removeWorkspace(workspace);
+    }
+});
+
+test('force (per prompt): every turn/start resets the memory check', async () => {
+    const workspace = makeRepo();
+    const ctx = createFakeContext({ services: inject, dirs: { s1: workspace } });
+    const fake = createFakeAgent('s1');
+    try {
+        createAgentMemoryPlugin().apply(ctx, makeConfig(workspace));
+        await ctx.emit('agent/created', { agent: fake.agent });
+        await waitFor(() => fake.tools.size === 3, { label: 'three registered tools' });
+
+        // Prompt 1: blocked, satisfied by a search inside this prompt.
+        await fake.emit('session/event', { id: 's1' }, { type: 'turn/start' });
+        assert.match(fake.decide('bash', { command: 'ls sdlc/09.wbs' }), /memory_smart_search/);
+        await fake.emit('tools/pre-execute', { name: 'memory_smart_search', agent: fake.agent }, () => undefined);
+        assert.equal(fake.decide('bash', { command: 'ls sdlc/09.wbs' }), undefined, 'searched in this prompt');
+
+        // Prompt 2: the unlock must NOT carry over.
+        await fake.emit('session/event', { id: 's1' }, { type: 'turn/start' });
+        assert.match(fake.decide('bash', { command: 'ls sdlc/09.wbs' }), /memory_smart_search/, 'a new prompt must search again');
+        await fake.emit('tools/pre-execute', { name: 'memory_recall', agent: fake.agent }, () => undefined);
+        assert.equal(fake.decide('bash', { command: 'ls sdlc/09.wbs' }), undefined, 'recall also satisfies the check');
+    } finally {
+        await ctx.emit('agent/disposed', { agent: fake.agent });
+        ctx.cleanup();
+        removeWorkspace(workspace);
+    }
+});
+
+test('touchesScope: literal folder names, not substrings', () => {
+    const scope = ['eso', 'sdlc', 'scripts', 'qc'];
+    assert.equal(touchesScope({ arguments: { path: 'sdlc/03.inception' } }, scope), true);
+    assert.equal(touchesScope({ arguments: { command: 'ls /Users/x/eso/core' } }, scope), true);
+    assert.equal(touchesScope({ arguments: { path: 'qc' } }, scope), true);
+    assert.equal(touchesScope({ arguments: { command: 'ls /Users/x/eso-harness' } }, scope), false);
+    assert.equal(touchesScope({ arguments: { path: 'scripts-old/x.md' } }, scope), false);
+    assert.equal(touchesScope({ arguments: { path: 'AGENTS.md' } }, scope), false);
+    assert.equal(touchesScope({}, scope), false);
+    // Prose is not a path: a shell description mentioning a folder must not trigger the check.
+    assert.equal(
+        touchesScope({ arguments: { description: 'work on eso scope', command: 'ls /tmp' } }, scope),
+        false,
+        'description is prose',
+    );
+    assert.equal(
+        touchesScope({ arguments: { prompt: 'đọc sdlc rồi tóm tắt', path: '/tmp/x' } }, scope),
+        false,
+        'prompt is prose',
+    );
+    assert.equal(touchesScope({ arguments: { paths: ['/tmp/a', 'qc/b'] } }, scope), true);
+});
+
+test('force: work outside eso/sdlc/scripts/qc is not held to a memory check', async () => {
+    const workspace = makeRepo();
+    const ctx = createFakeContext({ services: inject, dirs: { s1: workspace } });
+    const fake = createFakeAgent('s1');
+    try {
+        createAgentMemoryPlugin().apply(ctx, makeConfig(workspace));
+        await ctx.emit('agent/created', { agent: fake.agent });
+        await waitFor(() => fake.tools.size === 3, { label: 'three registered tools' });
+
+        assert.equal(fake.decide('bash', { command: 'ls /tmp' }), undefined, 'outside scope: no check');
+        assert.equal(fake.decide('read', { path: 'AGENTS.md' }), undefined, 'repo root is outside scope');
+        assert.equal(fake.decide('read', { path: 'docs/x.md' }), undefined, 'docs is outside scope');
+        assert.match(fake.decide('read', { path: 'sdlc/03.inception' }), /memory_smart_search/);
+        assert.match(fake.decide('bash', { command: 'cd eso && ls' }), /memory_smart_search/);
+        assert.equal(
+            fake.decide('bash', { command: 'ls /Users/thangs2net/Workspaces/eso-harness' }),
+            undefined,
+            'eso-harness is not the eso folder',
+        );
+    } finally {
+        await ctx.emit('agent/disposed', { agent: fake.agent });
+        ctx.cleanup();
+        removeWorkspace(workspace);
+    }
+});
+
+test('enforce: false keeps the historical behaviour (mount only)', async () => {
+    const workspace = makeRepo();
+    const ctx = createFakeContext({ services: inject, dirs: { s1: workspace } });
+    const fake = createFakeAgent('s1');
+    try {
+        createAgentMemoryPlugin().apply(ctx, makeConfig(workspace, { enforce: false }));
+        await ctx.emit('agent/created', { agent: fake.agent });
+        await waitFor(() => fake.tools.size === 3, { label: 'three registered tools' });
+        assert.equal(fake.decide('bash', { command: 'ls sdlc/09.wbs' }), undefined);
+    } finally {
+        await ctx.emit('agent/disposed', { agent: fake.agent });
+        ctx.cleanup();
+        removeWorkspace(workspace);
+    }
+});
+
+test('force (D2): the plugin-context guard denies too (context the Harness actually honours)', async () => {
+    const workspace = makeRepo();
+    const ctx = createFakeContext({ services: inject, dirs: { s1: workspace } });
+    const fake = createFakeAgent('s1');
+    try {
+        createAgentMemoryPlugin().apply(ctx, makeConfig(workspace));
+        await ctx.emit('agent/created', { agent: fake.agent });
+        await waitFor(() => fake.tools.size === 3, { label: 'three registered tools' });
+
+        const exec = { name: 'bash', arguments: { command: 'ls scripts/' }, agent: fake.agent };
+        assert.match(ctx.decideTool(exec), /memory_smart_search/, 'root guard must deny the first tool');
+        assert.equal(ctx.decideTool({ ...exec, name: 'memory_smart_search' }), undefined);
+        await fake.emit('tools/pre-execute', { name: 'memory_smart_search', agent: fake.agent }, () => undefined);
+        assert.equal(ctx.decideTool(exec), undefined, 'root guard releases after the search');
+    } finally {
+        await ctx.emit('agent/disposed', { agent: fake.agent });
         ctx.cleanup();
         removeWorkspace(workspace);
     }

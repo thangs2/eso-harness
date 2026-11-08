@@ -41,7 +41,7 @@ import { StdioMcpClient, resultText } from './mcp-stdio-client.mjs';
 import { probeLivez } from './livez.mjs';
 import { resolveSecret, resolveTarget } from './tenant.mjs';
 
-export const name = 'agentmemory-mcp-plugin';
+export const name = 'agentmemory-mcp';
 
 /**
  * Services this plugin reads. `workingDirectory` is required to resolve the repo;
@@ -57,6 +57,92 @@ const DEFAULT_TOOL_PREFIX = '';
 /** DeepSeek function-name contract: only `[A-Za-z0-9_-]`, at most 64 characters. */
 const MAX_TOOL_NAME_LENGTH = 64;
 
+/*
+ * AgentMemory-first enforcement: the tool names it trusts, the reasons it denies with, and the
+ * default for the `enforce` knob. Kept at module scope so a test can
+ * assert the exact wording a blocked model sees.
+ */
+const TOOL_NAME_OF = (exec) => String(exec?.name ?? exec?.tool ?? '');
+const IS_MEMORY_TOOL = (tool) => tool.startsWith('memory_');
+const IS_MEMORY_SEARCH = (tool) => tool === 'memory_smart_search' || tool === 'memory_recall';
+const BLOCKED_REASON =
+    'AgentMemory first: this prompt touches eso/sdlc/scripts/qc — call memory_smart_search before any other tool.';
+const DEFAULT_ENFORCE = true;
+/** Work outside these folders does not need a memory check; see `touchesScope`. */
+const DEFAULT_SCOPE = ['eso', 'sdlc', 'scripts', 'qc'];
+
+/** A scope name is a literal folder name, not a substring: `eso-harness` is not the `eso` folder. */
+const escapeForRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Whether a tool call works inside the enforced folders.
+ *
+ * The guard is synchronous, so this is a pure string test over the tool arguments: the file a tool reads
+ * or writes, the `cd`/path inside a shell command, a path handed to `working_directory`. The boundaries
+ * exclude `-` as well as word characters, so `eso-harness` never counts as the `eso` folder.
+ *
+ * @param {{ name?: string, arguments?: unknown }} exec tool call under judgement.
+ * @param {string[]} scope folder names.
+ * @returns {boolean} true when the call touches at least one scope folder.
+ */
+export function touchesScope(exec, scope) {
+    const values = collectPathValues(exec?.arguments ?? {}, [], '');
+    if (values.length === 0) return false;
+    return scope.some((name) => {
+        const pattern = new RegExp(`(?<![\\w-])${escapeForRegExp(name)}(?![\\w-])`, 'i');
+        return values.some((text) => pattern.test(text));
+    });
+}
+
+/**
+ * Argument keys that hold prose, not a path or command. A shell tool's `description` is written for a
+ * human — "work on eso scope" must not read as a call into the `eso/` folder, which is exactly the false
+ * positive this list prevents.
+ */
+const PROSE_KEYS = new Set([
+    'description',
+    'prompt',
+    'content',
+    'body',
+    'text',
+    'message',
+    'query',
+    'reason',
+    'notes',
+    'note',
+    'title',
+    'summary',
+    'old_string',
+    'new_string',
+    'explanation',
+]);
+
+/** @returns {string[]} every non-prose string in the argument tree (arrays included). */
+function collectPathValues(value, values, key) {
+    if (typeof value === 'string') {
+        if (!PROSE_KEYS.has(key.toLowerCase())) values.push(value);
+        return values;
+    }
+    if (Array.isArray(value)) {
+        for (const item of value) collectPathValues(item, values, key);
+        return values;
+    }
+    if (value !== null && typeof value === 'object') {
+        for (const [childKey, child] of Object.entries(value)) collectPathValues(child, values, childKey);
+    }
+    return values;
+}
+
+/** Accepts an array or a comma-separated string from YAML: lower-cased, no trailing slashes. */
+function normalizeScope(value) {
+    const list = Array.isArray(value) ? value : String(value ?? '').split(',');
+    const clean = list.map((item) => String(item).trim().replace(/[/\\]+$/, '')).filter((item) => item !== '');
+    return clean.length > 0 ? clean : DEFAULT_SCOPE;
+}
+
+/** Session identity is an object in the Harness and a bare id in the fake test context. */
+const sessionIdOf = (agent) => (typeof agent?.session === 'string' ? agent.session : agent?.session?.id);
+
 /** Absolute POSIX path or nothing. Shared by every directory source below. */
 const isAbsoluteDir = (value) => typeof value === 'string' && value.startsWith('/');
 
@@ -68,7 +154,7 @@ const isAbsoluteDir = (value) => typeof value === 'string' && value.startsWith('
  */
 function debug(message) {
     if (process.env.AGENTMEMORY_PLUGIN_DEBUG !== '1') return;
-    const line = `[agentmemory-mcp-plugin] ${message}\n`;
+    const line = `[agentmemory-mcp] ${message}\n`;
     try {
         process.stderr.write(line);
     } catch {
@@ -225,7 +311,7 @@ export function createAgentMemoryPlugin(defaults = {}) {
         apply(ctx, config = {}) {
             const log = (message) => {
                 try {
-                    ctx.logger?.info?.(`agentmemory-mcp-plugin: ${message}`);
+                    ctx.logger?.info?.(`agentmemory-mcp: ${message}`);
                 } catch {
                     /* logging must never decide anything */
                 }
@@ -237,7 +323,7 @@ export function createAgentMemoryPlugin(defaults = {}) {
                 debug(message);
                 if (!failOnStartupError) return;
                 try {
-                    ctx.logger?.error?.(`agentmemory-mcp-plugin: ${message}`);
+                    ctx.logger?.error?.(`agentmemory-mcp: ${message}`);
                 } catch {
                     /* logging must never decide anything */
                 }
@@ -264,6 +350,33 @@ export function createAgentMemoryPlugin(defaults = {}) {
             const toolPrefix = normalizePrefix(config.toolPrefix ?? defaults.toolPrefix ?? DEFAULT_TOOL_PREFIX);
             // Test seam only: a YAML row can neither express nor need a probe function.
             const probeImpl = config.probeImpl ?? defaults.probeImpl ?? probeLivez;
+            /*
+             * Enforcement knob. `enforce: false` keeps this plugin in its historical mode: mount
+             * tools, block nothing.
+             */
+            const enforce = (config.enforce ?? defaults.enforce ?? DEFAULT_ENFORCE) === true;
+            const scope = normalizeScope(config.scope ?? defaults.scope ?? DEFAULT_SCOPE);
+
+            /*
+             * Per-agent enforcement state, keyed by the agent object.
+             *
+             * It lives outside `installEnforcement` because the guard itself may have to be registered on
+             * the **plugin** context: the bundled plugin manager does exactly that
+             * (`ctx.tools.guard((exec) => …)` and filters on `exec.agent`), so a per-agent-only
+             * registration can be a silent no-op. A guard that quietly never registers is the exact
+             * failure this feature exists to prevent.
+             */
+            const enforcements = new WeakMap();
+            const decideFor = (exec) => {
+                if (!enforce) return undefined;
+                const state = enforcements.get(exec?.agent);
+                if (state === undefined) return undefined;
+                const tool = TOOL_NAME_OF(exec);
+                if (IS_MEMORY_TOOL(tool)) return undefined; // the way out is always open
+                // Work that never touches the enforced folders is not held to a memory check.
+                if (!touchesScope(exec, scope)) return undefined;
+                return state.searched ? undefined : BLOCKED_REASON;
+            };
 
             /** agent → { client, disposers } so disposal can tear down the process. */
             const sessions = new Map();
@@ -295,6 +408,89 @@ export function createAgentMemoryPlugin(defaults = {}) {
                     return null;
                 }
             };
+
+            /**
+             * Make "AgentMemory first" a mechanism instead of a wish, **once per prompt**: every
+             * `turn/start` starts blocked, so the first non-memory tool of each prompt re-checks the
+             * store. A conversation-long unlock would let a long session run on stale context.
+             *
+             * Registered only after the handshake succeeded: a repo whose server is down gets no
+             * tools **and no guard**, so the session still works (D3 — warn, never deadlock). State
+             * is per agent and lives in memory: no marker files, nothing written outside the repo
+             * (D5).
+             *
+             * `ctx.tools.guard` is synchronous because a denial must hold regardless of listener
+             * order; `tools/pre-execute` is the waterfall that observes which tool actually runs.
+             * Registering the guard here — not after some later timer — is what closes the window
+             * between "tools mounted" and "first tool call".
+             */
+            const installEnforcement = (agent) => {
+                const offs = [];
+                /** `searched` resets on every `turn/start` — i.e. on every prompt. */
+                const state = { searched: false };
+                enforcements.set(agent, state);
+
+                try {
+                    const off = agent.ctx?.tools?.guard?.((exec) =>
+                        decideFor({
+                            ...(exec !== null && typeof exec === 'object' ? exec : {}),
+                            agent: exec?.agent ?? agent,
+                        }),
+                    );
+                    if (typeof off === 'function') offs.push(off);
+                } catch (error) {
+                    debug(`tools.guard unavailable: ${error.message}`);
+                }
+
+                const onExecute = async (exec, next) => {
+                    if (IS_MEMORY_SEARCH(TOOL_NAME_OF(exec))) state.searched = true;
+                    return typeof next === 'function' ? next() : undefined;
+                };
+                try {
+                    const off = agent.ctx?.on?.('tools/pre-execute', onExecute);
+                    if (typeof off === 'function') offs.push(off);
+                } catch (error) {
+                    debug(`tools/pre-execute unavailable: ${error.message}`);
+                }
+
+                /*
+                 * Turn boundaries come from the session log. The listener reads its arguments
+                 * defensively: Cordis passes `(session, event)` today and the event is the only
+                 * argument this needs.
+                 */
+                const onSessionEvent = (...args) => {
+                    const event = args.find(
+                        (value) => value !== null && typeof value === 'object' && typeof value.type === 'string',
+                    );
+                    if (event === undefined) return;
+                    const session = args.find(
+                        (value) => value !== null && typeof value === 'object' && value !== event && typeof value.id === 'string',
+                    );
+                    const own = sessionIdOf(agent);
+                    if (session !== undefined && own !== undefined && session.id !== own) return;
+                    // Every prompt invalidates the previous prompt's memory check.
+                    if (event.type === 'turn/start') state.searched = false;
+                };
+                try {
+                    const off = agent.ctx?.on?.('session/event', onSessionEvent);
+                    if (typeof off === 'function') offs.push(off);
+                } catch (error) {
+                    debug(`session/event unavailable: ${error.message}`);
+                }
+                return offs;
+            };
+
+            /*
+             * Root-context guard: see the note on `enforcements`. Registering on both contexts costs
+             * nothing — a duplicate denial returns the same reason — and it removes the guess about
+             * which context the Harness honours.
+             */
+            try {
+                const offRootGuard = ctx.tools?.guard?.(decideFor);
+                if (typeof offRootGuard === 'function') ctx.effect(() => offRootGuard);
+            } catch (error) {
+                debug(`root tools.guard unavailable: ${error.message}`);
+            }
 
             const startFor = async (agent) => {
                 const workspaceRoot = await currentDirOf(agent);
@@ -372,8 +568,13 @@ export function createAgentMemoryPlugin(defaults = {}) {
                     }
                 }
 
+                // Counted before enforcement registers its own disposers: the log names how many
+                // *tools* the agent got, which is the number an operator compares against.
+                const toolCount = disposers.length;
+                disposers.push(...installEnforcement(agent));
+
                 log(
-                    `registered ${disposers.length} tools for ${target.label} ` +
+                    `registered ${toolCount} tool(s) and enforcement for ${target.label} ` +
                         `(${target.url}, secret ${secret ? `from ${from}` : (reason ?? 'from shim store or none')}, ` +
                         `cwd ${workspaceRoot})`,
                 );

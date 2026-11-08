@@ -14,8 +14,8 @@
 # that the plugin resolves through `ctx.credentials` ($DSH_HOME/.credentials.yaml,
 # owner-only), then the repo's own `.cursor/mcp.json` secret, then the environment.
 - insert:
-    - id: agentmemory-mcp-plugin
-      name: '@local/agentmemory-mcp-plugin'
+    - id: agentmemory-mcp
+      name: '@local/agentmemory-mcp'
       config:
         # A configured repo whose server does not answer `/agentmemory/livez`
         # registers no tools and logs why. There is deliberately no "mount
@@ -27,6 +27,20 @@
         # a throwing agent/created listener rejects agent registration, which
         # would kill every session in that repo.
         failOnStartupError: false
+
+        # Force, once per prompt: every turn/start starts blocked, and a non-memory
+        # tool is denied until THIS prompt has run memory_smart_search (or
+        # memory_recall) — the unlock does not carry over to the next prompt.
+        # Memory tools always pass, so the rule cannot deadlock; `enforce: false`
+        # returns to mount-only behaviour. Registered only after the handshake
+        # succeeded, so a repo whose server is down gets no tools and no guard —
+        # a warning, never a blocked session. State is per agent, in memory.
+        enforce: true
+
+        # Only work inside these folders triggers the memory check; elsewhere the
+        # guard stays out of the way. Names are literal folders, so `eso-harness`
+        # does not count as `eso`. Comma-separated string also accepted.
+        scope: [ eso, sdlc, scripts, qc ]
 
         # Per-call ceiling. A first semantic search after a cold index is the
         # slow case; consolidate/reflect can also take seconds.

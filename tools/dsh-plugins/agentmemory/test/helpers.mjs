@@ -77,6 +77,17 @@ export function createFakeContext({ dirs = {}, existingAgents = [], credentials 
     const agentsService = {
         list: () => existingAgents,
     };
+    /** Root-context guard registry: the Harness also accepts `ctx.tools.guard(fn)` there. */
+    const toolGuards = [];
+    const toolsService = {
+        guard(fn) {
+            toolGuards.push(fn);
+            return () => {
+                const index = toolGuards.indexOf(fn);
+                if (index !== -1) toolGuards.splice(index, 1);
+            };
+        },
+    };
 
     const allowed = services ? new Set(services) : null;
     /** Mimic the Cordis service proxy: throw unless declared in `inject`. */
@@ -93,6 +104,7 @@ export function createFakeContext({ dirs = {}, existingAgents = [], credentials 
         /** Optional-service lookup, the seam a real Cordis context provides. */
         get(name) {
             if (name === 'agents') return agentsService;
+            if (name === 'tools') return toolsService;
             if (name === 'credentials') return credentialsService;
             if (name === 'workingDirectory') return workingDirectory;
             return undefined;
@@ -129,11 +141,20 @@ export function createFakeContext({ dirs = {}, existingAgents = [], credentials 
         },
         logs,
         workingDirs,
+        toolGuards,
+        /** The decision the Harness would reach from the plugin-context guard: reason or undefined. */
+        decideTool(exec) {
+            return toolGuards.reduce((reason, guard) => {
+                if (reason !== undefined) return reason;
+                return guard(exec);
+            }, undefined);
+        },
     };
     for (const [name, service] of Object.entries({
         workingDirectory,
         credentials: credentialsService,
         agents: agentsService,
+        tools: toolsService,
     })) {
         Object.defineProperty(ctx, name, {
             enumerable: true,
@@ -143,9 +164,22 @@ export function createFakeContext({ dirs = {}, existingAgents = [], credentials 
     return ctx;
 }
 
-/** A fake Agent with the one method the plugin registers tools on. */
+/**
+ * A fake Agent with the tool registry, the guard registry, and its own event bus.
+ *
+ * `decide(name, args)` runs every registered guard the way `ctx.tools.guard` does: the first reason
+ * wins, `undefined` means allowed. `emit(event, ...args)` delivers on the agent's own context —
+ * that is where per-agent behaviour is registered, so tests exercise the same surface the Harness
+ * gives the plugin.
+ */
 export function createFakeAgent(session) {
     const tools = new Map();
+    const guards = [];
+    const listeners = new Map();
+    const remove = (list, item) => {
+        const index = list.indexOf(item);
+        if (index !== -1) list.splice(index, 1);
+    };
     const agent = {
         session,
         ctx: {
@@ -154,10 +188,29 @@ export function createFakeAgent(session) {
                     tools.set(definition.name, definition);
                     return () => tools.delete(definition.name);
                 },
+                guard(fn) {
+                    guards.push(fn);
+                    return () => remove(guards, fn);
+                },
+            },
+            on(event, listener) {
+                const list = listeners.get(event) ?? [];
+                list.push(listener);
+                listeners.set(event, list);
+                return () => remove(list, listener);
             },
         },
     };
-    return { agent, tools };
+    /** The decision the Harness would reach for this tool call: a reason, or undefined. */
+    const decide = (name, args = {}) =>
+        guards.reduce((reason, guard) => {
+            if (reason !== undefined) return reason;
+            return guard({ name, arguments: args, agent });
+        }, undefined);
+    const emit = async (event, ...payload) => {
+        for (const listener of [...(listeners.get(event) ?? [])]) await listener(...payload);
+    };
+    return { agent, tools, guards, decide, emit };
 }
 
 /** Register a session → workspace mapping on the fake context. */

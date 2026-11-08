@@ -1,5 +1,5 @@
 {
-  "name": "@local/agentmemory-mcp-plugin",
+  "name": "@local/agentmemory-mcp",
   "version": "1.0.0",
   "private": true,
   "type": "module",
