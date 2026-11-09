@@ -211,26 +211,29 @@ test('SCN-15-1 · AC-15-1 — Use the control plane via the UI (US-15) · tdd-im
     assert.equal(await waitFor(cdp, 'document.body.innerText.includes("Consumers")'), true);
 });
 
-test('SCN-15-1 · AC-15-1 — Use the control plane via the UI (US-15) · tdd-coverage', async ({ cdp, apiBase }) => {
-    const created = await api('/api/v1/consumers', {
-        method: 'POST',
-        body: JSON.stringify({
-            id: ID,
-            name: 'UI Smoke Consumer',
-            root: ROOT_DIR,
-            sdlcRoot: join(ROOT_DIR, 'sdlc'),
-            profile: { recipe: 'pro', hostProfile: 'cursor' },
-            zones: [{ name: 'human', path: 'src' }, { name: 'agent', path: 'src' }],
-        }),
-    });
-    assert.equal(created.status, 201);
-
-    await cdp.send('Page.reload', { ignoreCache: true });
-    assert.equal(await waitFor(cdp, `document.body.innerText.includes(${JSON.stringify(ID)})`), true);
-
-    // The wizard page is reachable and renders its stepper.
+test('SCN-15-1 · AC-15-1 — Use the control plane via the UI (US-15) · tdd-coverage', async ({ cdp }) => {
     await cdp.send('Page.navigate', { url: 'http://127.0.0.1:4200/onboarding' });
     assert.equal(await waitFor(cdp, 'document.querySelector(".stepper") !== null'), true);
+
+    // Step 1 → 2
+    await evaluate(cdp, 'document.querySelector(".actions-row .btn-primary").click()');
+    assert.equal(await waitFor(cdp, 'document.querySelector("input[placeholder=baplatform]") !== null'), true);
+    assert.equal(await evaluate(cdp, setValue('input[placeholder="baplatform"]', ID)), true);
+    assert.equal(await evaluate(cdp, setValue('input[placeholder="Ba Platform"]', 'UI Wizard Consumer')), true);
+    assert.equal(await evaluate(cdp, setValue('input[placeholder="/Users/.../baplatform"]', ROOT_DIR)), true);
+
+    // Step 2 → 3 → 4 (plan is fetched on entry)
+    await evaluate(cdp, 'document.querySelector(".actions-row .btn-primary").click()');
+    assert.equal(await waitFor(cdp, 'document.body.innerText.includes("3 · Integration")'), true);
+    await evaluate(cdp, 'document.querySelector(".actions-row .btn-primary").click()');
+    assert.equal(await waitFor(cdp, 'document.querySelector(".confirm-line input") !== null'), true);
+
+    await evaluate(cdp, 'document.querySelector(".confirm-line input").click()');
+    await evaluate(cdp, 'document.querySelector(".actions-row .btn-primary").click()');
+    assert.equal(await waitFor(cdp, 'location.pathname.startsWith("/consumers/")', 12000), true);
+
+    await cdp.send('Page.navigate', { url: 'http://127.0.0.1:4200/consumers' });
+    assert.equal(await waitFor(cdp, `document.body.innerText.includes(${JSON.stringify(ID)})`), true);
 });
 
 test('SCN-15-1 · AC-15-1 — Use the control plane via the UI (US-15) · tdd-qc', async ({ cdp }) => {
