@@ -1,0 +1,46 @@
+{
+  "ticket": "ESO-588",
+  "epic": "ESO-491",
+  "bip": {
+    "id": "BIP-L62",
+    "file": "sdlc/09.wbs/02.bootstrap-packets/01.bip/l6-2.bip.md"
+  },
+  "technical": false,
+  "inv": [
+    "BR-01",
+    "BR-02",
+    "BR-15"
+  ],
+  "ac": [
+    "AC-13-1",
+    "AC-13-2",
+    "AC-13-3"
+  ],
+  "scn": [
+    "SCN-13-1",
+    "SCN-13-2",
+    "SCN-13-3"
+  ],
+  "red_packets": [
+    {
+      "packet": "sdlc/10.test/124.l6-2.tdd-coverage.md",
+      "test_file": "eso/e2e/bootstrap.e2e.mjs",
+      "test_name": "SCN-13-1 · AC-13-1 — Unified 404 + E2E + smoke · tdd-coverage",
+      "expected_failure": "`COVERAGE_BELOW_THRESHOLD` ở `SCN-13-1`: **actual** nhánh lỗi/biên của `L6.2` chưa được test · **expected** mọi nhánh của `L6.2` có test, coverage đạt ngưỡng"
+    }
+  ],
+  "allowed_files": [
+    "eso/e2e/**",
+    "eso/control-plane/**",
+    "scripts/**"
+  ],
+  "forbidden": [
+    "sdlc/**",
+    ".cursor/**",
+    ".agents/**"
+  ],
+  "verify": [
+    "node eso/e2e/bootstrap.e2e.mjs"
+  ],
+  "base_commit": "10e1646"
+}

@@ -1,0 +1,45 @@
+{
+  "ticket": "ESO-581",
+  "epic": "ESO-294",
+  "bip": {
+    "id": "FIP-L51",
+    "file": "sdlc/09.wbs/02.bootstrap-packets/02.fip/l5-1.fip.md"
+  },
+  "technical": false,
+  "inv": [
+    "BR-01",
+    "BR-02",
+    "BR-15"
+  ],
+  "ac": [
+    "AC-15-1",
+    "AC-15-2",
+    "AC-15-3"
+  ],
+  "scn": [
+    "SCN-15-1",
+    "SCN-15-2",
+    "SCN-15-3"
+  ],
+  "red_packets": [
+    {
+      "packet": "sdlc/10.test/121.s1.tdd-qc.md",
+      "test_file": "eso/e2e/ui-smoke.mjs",
+      "test_name": "SCN-15-1 · AC-15-1 — Use the control plane via the UI (US-15) · tdd-qc",
+      "expected_failure": "`SCN_MISMATCH` ở `SCN-15-1`: **actual** chạy SCN-15-1, SCN-15-2, SCN-15-3 chưa xanh hoặc status còn `planned` · **expected** toàn bộ SCN của `S1` xanh và status được cập nhật kèm evidence"
+    }
+  ],
+  "allowed_files": [
+    "eso/ui/**",
+    "eso/e2e/**"
+  ],
+  "forbidden": [
+    "sdlc/**",
+    ".cursor/**",
+    ".agents/**"
+  ],
+  "verify": [
+    "node eso/e2e/ui-smoke.mjs"
+  ],
+  "base_commit": "10e1646"
+}
