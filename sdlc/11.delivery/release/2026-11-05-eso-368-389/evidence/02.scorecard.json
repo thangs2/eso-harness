@@ -609,7 +609,7 @@
     "only_write_to_x79": ".harness/diagnostics/latest.md from ./verify-consumer.sh x79 (v1 tool, by design)",
     "what_was_run_at_x79": "copied .codegraph/codegraph.db and ~/.harness/observe/x79/harness.db to /tmp; imported graph and fed turns into v2 functions offline",
     "what_it_proves": "v2 query/projection logic on real data shapes; NOT provisionability, NOT E2E",
-    "ui_caveat": "S2 numbers come from v1 turn rows lacking basis/rule_version; they prove fail-open + v1->v2 migration risk, not v2-native behaviour"
+    "ui_caveat": "S2 numbers come from v1 turn rows lacking basis/rule_version; they prove fail-open + v1->v2 transfer risk, not v2-native behaviour"
   },
   "recommendation": {
     "T-0": "walking skeleton v2: eso init profile -> config store -> control-plane HTTP -> 1 config page -> provision a sandbox consumer -> 1 turn recorded",

@@ -19,16 +19,14 @@
   ],
   "red_packets": [
     {
-      "packet": "sdlc/10.test/70.l1-1-platform-schema.tdd-unit.md",
-      "test_file": "eso/control-plane/test/migrate.test.ts",
-      "test_name": "SCN-14-1 · AC-14-1 — Dựng `platform` schema, bảng `consumer`/`consumer_event`/`schema_version`, `eso migrate` idempotent · tdd-unit",
-      "expected_failure": "`AssertionError` ở `SCN-14-1`: **actual** hành vi đơn vị của `L1.1` chưa đúng — AC-14-1 fail trên assert chính của test · **expected** hành vi đơn vị đạt đủ 1 AC, kết quả lặp lại được và khớp SCN"
+      "packet": "sdlc/10.test/70.l1-1-platform-registry.tdd-unit.md",
+      "test_file": "eso/control-plane/test/platform-registry.test.ts",
+      "test_name": "SCN-14-1 · AC-14-1 — Platform registry + create consumer schema · tdd-unit",
+      "expected_failure": "`AssertionError` ở `SCN-14-1`: **actual** CP start không bảo đảm `platform.consumer`/`consumer_event` tồn tại, hoặc tạo consumer không nhận `CREATE SCHEMA c_<id>` trong cùng transaction · **expected** bảng registry tồn tại (IF NOT EXISTS) và transaction tạo consumer + schema rollback cùng nhau"
     }
   ],
   "allowed_files": [
-    "eso/migrations/**",
-    "eso/control-plane/src/platform/**",
-    "eso/cli/**"
+    "eso/control-plane/**"
   ],
   "forbidden": [
     "sdlc/**",
@@ -36,7 +34,7 @@
     ".agents/**"
   ],
   "verify": [
-    "cd eso/control-plane && bun test test/migrate.test.ts"
+    "cd eso/control-plane && bun test test/platform-registry.test.ts"
   ],
-  "base_commit": "10e1646"
+  "base_commit": "2798d94"
 }

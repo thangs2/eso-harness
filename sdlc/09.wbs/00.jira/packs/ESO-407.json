@@ -3,7 +3,7 @@
   "epic": "ESO-400",
   "bip": {
     "id": "BIP-9_3",
-    "file": "sdlc/09.wbs/01.packets/01.bip/52.memory-migrate.md"
+    "file": "sdlc/09.wbs/01.packets/01.bip/52.memory-transfer.md"
   },
   "technical": false,
   "inv": [],
@@ -23,25 +23,25 @@
   ],
   "red_packets": [
     {
-      "packet": "sdlc/10.test/25.memory-migrate.tdd-unit.md",
+      "packet": "sdlc/10.test/25.memory-transfer.tdd-unit.md",
       "test_file": "qc/acceptance/US-MEM-03/AC-MEM-03-01.test.mjs",
-      "test_name": "SCN-MEM-11 · AC-MEM-03-01 — migrate đủ 12 trường",
-      "expected_failure": "`AssertionError` ở assert của `SCN-MEM-11`: **actual** map thiếu `concepts`/`sessionIds` ⇒ chiều recall và trace mất âm thầm · **expected** đủ 12 trường + `migrated-from`/`migrated-at`, đọc lại như record native"
+      "test_name": "SCN-MEM-11 · AC-MEM-03-01 — transfer đủ 12 trường",
+      "expected_failure": "`AssertionError` ở assert của `SCN-MEM-11`: **actual** map thiếu `concepts`/`sessionIds` ⇒ chiều recall và trace mất âm thầm · **expected** đủ 12 trường + `transferred-from`/`transferred-at`, đọc lại như record native"
     },
     {
-      "packet": "sdlc/10.test/26.memory-migrate.tdd-impl.md",
+      "packet": "sdlc/10.test/26.memory-transfer.tdd-impl.md",
       "test_file": "qc/acceptance/US-MEM-03/AC-MEM-03-02.test.mjs",
       "test_name": "SCN-MEM-12 · AC-MEM-03-02 — save host A, đọc host B",
       "expected_failure": "`AssertionError` ở assert của `SCN-MEM-12`: **actual** mỗi host một file store ⇒ test xanh trên **hai** store khác nhau · **expected** **cùng một** record qua hai host"
     },
     {
-      "packet": "sdlc/10.test/27.memory-migrate.tdd-coverage.md",
+      "packet": "sdlc/10.test/27.memory-transfer.tdd-coverage.md",
       "test_file": "qc/acceptance/US-MEM-03/AC-MEM-03-03.test.mjs",
       "test_name": "SCN-MEM-13 · AC-MEM-03-03 — adapter copy per-host ⇒ PER_HOST_COPY",
       "expected_failure": "`AssertionError` ở assert của `SCN-MEM-13`: **actual** chấp nhận `source.kind='cursor'` ⇒ *\"portable\"* chỉ đúng trên giấy · **expected** `PER_HOST_COPY`, không ghi"
     },
     {
-      "packet": "sdlc/10.test/28.memory-migrate.tdd-qc.md",
+      "packet": "sdlc/10.test/28.memory-transfer.tdd-qc.md",
       "test_file": "qc/acceptance/US-MEM-03/AC-MEM-03-04.test.mjs",
       "test_name": "SCN-MEM-14 · AC-MEM-03-04 — merge hai nguồn xung đột",
       "expected_failure": "`AssertionError` ở assert của `SCN-MEM-14`: **actual** last-write-wins ⇒ mất một nguồn, không trace được · **expected** giữ **provenance** và **conflict**"
@@ -67,5 +67,5 @@
   "base_ref": "main",
   "owner": "memory",
   "allow_dependency": false,
-  "notes": "Migrate agentmemory + host adapters; one SoT."
+  "notes": "Transfer agentmemory + host adapters; one SoT."
 }

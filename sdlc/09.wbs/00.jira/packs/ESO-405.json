@@ -38,7 +38,7 @@
       "packet": "sdlc/10.test/19.memory-contract.tdd-coverage.md",
       "test_file": "qc/acceptance/US-MEM-01/AC-MEM-01-03.test.mjs",
       "test_name": "SCN-MEM-03 · AC-MEM-01-03 — memory project B không lộ",
-      "expected_failure": "`AssertionError` ở assert của `SCN-MEM-03`: **actual** RLS bật nhưng thiếu `FORCE` ⇒ test dưới role migration xanh giả · **expected** **0** dòng của B khi đọc từ A"
+      "expected_failure": "`AssertionError` ở assert của `SCN-MEM-03`: **actual** RLS bật nhưng thiếu `FORCE` ⇒ test dưới role transfer xanh giả · **expected** **0** dòng của B khi đọc từ A"
     },
     {
       "packet": "sdlc/10.test/20.memory-contract.tdd-qc.md",

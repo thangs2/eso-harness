@@ -69,5 +69,5 @@
   "base_ref": "5bd6f64",
   "owner": "graph",
   "allow_dependency": false,
-  "notes": "D-92/D-93: Postgres graph only; no SQLite. ESO-447 migrated code/test/demo; HIR. BIP READY."
+  "notes": "D-92/D-93: Postgres graph only; no SQLite. ESO-447 transferred code/test/demo; HIR. BIP READY."
 }
