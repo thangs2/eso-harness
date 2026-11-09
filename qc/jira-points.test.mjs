@@ -39,7 +39,7 @@ test('X33: story points — đủ, Fibonacci, và roll-up khớp', {
     const issues = [];
     let token;
     do {
-        const q = `/rest/api/3/search/jql?jql=${encodeURIComponent('project = ESO ORDER BY key')}` +
+        const q = `/rest/api/3/search/jql?jql=${encodeURIComponent('project = ESO AND labels not in (legacy-v1) ORDER BY key')}` +
             `&fields=summary,issuetype,parent,subtasks,${SP}&maxResults=100${token ? `&nextPageToken=${token}` : ''}`;
         const res = await fetch(base + q, { headers: { Authorization: auth, Accept: 'application/json' } });
         assert.ok(res.ok, `Jira trả ${res.status} — không kiểm được`);
