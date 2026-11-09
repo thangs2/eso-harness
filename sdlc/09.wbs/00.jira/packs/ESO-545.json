@@ -1,0 +1,41 @@
+{
+  "ticket": "ESO-545",
+  "epic": "ESO-292",
+  "bip": {
+    "id": "BIP-L13",
+    "file": "sdlc/09.wbs/02.bootstrap-packets/01.bip/l1-3.bip.md"
+  },
+  "technical": false,
+  "inv": [
+    "BR-01",
+    "BR-02",
+    "BR-15"
+  ],
+  "ac": [
+    "AC-14-3"
+  ],
+  "scn": [
+    "SCN-14-3"
+  ],
+  "red_packets": [
+    {
+      "packet": "sdlc/10.test/81.l1-3.tdd-qc.md",
+      "test_file": "eso/control-plane/test/audit.test.ts",
+      "test_name": "SCN-14-3 · AC-14-3 — Đọc event theo consumer; không endpoint sửa/xoá · tdd-qc",
+      "expected_failure": "`SCN_MISMATCH` ở `SCN-14-3`: **actual** chạy SCN-14-3 chưa xanh hoặc status còn `planned` · **expected** toàn bộ SCN của `L1.3` xanh và status được cập nhật kèm evidence"
+    }
+  ],
+  "allowed_files": [
+    "eso/control-plane/src/platform/events/**",
+    "eso/control-plane/test/**"
+  ],
+  "forbidden": [
+    "sdlc/**",
+    ".cursor/**",
+    ".agents/**"
+  ],
+  "verify": [
+    "cd eso/control-plane && bun test test/audit.test.ts"
+  ],
+  "base_commit": "10e1646"
+}

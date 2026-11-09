@@ -12,26 +12,22 @@
     "BR-15"
   ],
   "ac": [
-    "AC-14-1",
-    "AC-14-2",
-    "AC-14-3"
+    "AC-14-1"
   ],
   "scn": [
-    "SCN-14-1",
-    "SCN-14-2",
-    "SCN-14-3"
+    "SCN-14-1"
   ],
   "red_packets": [
     {
       "packet": "sdlc/10.test/72.l1-1-platform-schema.tdd-coverage.md",
       "test_file": "eso/control-plane/test/migrate.test.ts",
-      "test_name": "SCN-14-3 · AC-14-3 — migrate runner coverage gate",
-      "expected_failure": "`COVERAGE_BELOW_THRESHOLD` ở `SCN-14-3`: **actual** nhánh lỗi của migration runner (SQL sai, transaction rollback) chưa có test, coverage dưới ngưỡng · **expected** mọi nhánh của `platform/migrate` được test, coverage đạt ngưỡng pack"
+      "test_name": "SCN-14-1 · AC-14-1 — Dựng `platform` schema, bảng `consumer`/`consumer_event`/`schema_version`, `eso migrate` idempotent · tdd-coverage",
+      "expected_failure": "`COVERAGE_BELOW_THRESHOLD` ở `SCN-14-1`: **actual** nhánh lỗi/biên của `L1.1` chưa được test, coverage dưới ngưỡng pack · **expected** mọi nhánh của `L1.1` có test, coverage đạt ngưỡng"
     }
   ],
   "allowed_files": [
-    "eso/control-plane/**",
     "eso/migrations/**",
+    "eso/control-plane/src/platform/**",
     "eso/cli/**"
   ],
   "forbidden": [
@@ -42,5 +38,5 @@
   "verify": [
     "cd eso/control-plane && bun test test/migrate.test.ts"
   ],
-  "base_commit": "8a61f02"
+  "base_commit": "10e1646"
 }

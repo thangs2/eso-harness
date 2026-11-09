@@ -1,0 +1,41 @@
+{
+  "ticket": "ESO-544",
+  "epic": "ESO-292",
+  "bip": {
+    "id": "BIP-L13",
+    "file": "sdlc/09.wbs/02.bootstrap-packets/01.bip/l1-3.bip.md"
+  },
+  "technical": false,
+  "inv": [
+    "BR-01",
+    "BR-02",
+    "BR-15"
+  ],
+  "ac": [
+    "AC-14-3"
+  ],
+  "scn": [
+    "SCN-14-3"
+  ],
+  "red_packets": [
+    {
+      "packet": "sdlc/10.test/80.l1-3.tdd-coverage.md",
+      "test_file": "eso/control-plane/test/audit.test.ts",
+      "test_name": "SCN-14-3 · AC-14-3 — Đọc event theo consumer; không endpoint sửa/xoá · tdd-coverage",
+      "expected_failure": "`COVERAGE_BELOW_THRESHOLD` ở `SCN-14-3`: **actual** nhánh lỗi/biên của `L1.3` chưa được test, coverage dưới ngưỡng pack · **expected** mọi nhánh của `L1.3` có test, coverage đạt ngưỡng"
+    }
+  ],
+  "allowed_files": [
+    "eso/control-plane/src/platform/events/**",
+    "eso/control-plane/test/**"
+  ],
+  "forbidden": [
+    "sdlc/**",
+    ".cursor/**",
+    ".agents/**"
+  ],
+  "verify": [
+    "cd eso/control-plane && bun test test/audit.test.ts"
+  ],
+  "base_commit": "10e1646"
+}

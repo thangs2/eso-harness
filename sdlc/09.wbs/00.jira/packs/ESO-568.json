@@ -1,0 +1,40 @@
+{
+  "ticket": "ESO-568",
+  "epic": "ESO-490",
+  "bip": {
+    "id": "BIP-L42",
+    "file": "sdlc/09.wbs/02.bootstrap-packets/01.bip/l4-2.bip.md"
+  },
+  "technical": false,
+  "inv": [
+    "BR-01",
+    "BR-02",
+    "BR-15"
+  ],
+  "ac": [
+    "AC-07-1"
+  ],
+  "scn": [
+    "SCN-07-1"
+  ],
+  "red_packets": [
+    {
+      "packet": "sdlc/10.test/104.l4-2.tdd-coverage.md",
+      "test_file": "eso/control-plane/test/lifecycle.test.ts",
+      "test_name": "SCN-07-1 · AC-07-1 — State machine `ready ⇄ retired` · `deleted` · restore; giữ dữ liệu · tdd-coverage",
+      "expected_failure": "`COVERAGE_BELOW_THRESHOLD` ở `SCN-07-1`: **actual** nhánh lỗi/biên của `L4.2` chưa được test, coverage dưới ngưỡng pack · **expected** mọi nhánh của `L4.2` có test, coverage đạt ngưỡng"
+    }
+  ],
+  "allowed_files": [
+    "eso/control-plane/src/modules/consumers/lifecycle/**"
+  ],
+  "forbidden": [
+    "sdlc/**",
+    ".cursor/**",
+    ".agents/**"
+  ],
+  "verify": [
+    "cd eso/control-plane && bun test test/lifecycle.test.ts"
+  ],
+  "base_commit": "10e1646"
+}

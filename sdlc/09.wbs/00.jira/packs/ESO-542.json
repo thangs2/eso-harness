@@ -1,0 +1,41 @@
+{
+  "ticket": "ESO-542",
+  "epic": "ESO-292",
+  "bip": {
+    "id": "BIP-L13",
+    "file": "sdlc/09.wbs/02.bootstrap-packets/01.bip/l1-3.bip.md"
+  },
+  "technical": false,
+  "inv": [
+    "BR-01",
+    "BR-02",
+    "BR-15"
+  ],
+  "ac": [
+    "AC-14-3"
+  ],
+  "scn": [
+    "SCN-14-3"
+  ],
+  "red_packets": [
+    {
+      "packet": "sdlc/10.test/78.l1-3.tdd-unit.md",
+      "test_file": "eso/control-plane/test/audit.test.ts",
+      "test_name": "SCN-14-3 · AC-14-3 — Đọc event theo consumer; không endpoint sửa/xoá · tdd-unit",
+      "expected_failure": "`AssertionError` ở `SCN-14-3`: **actual** hành vi đơn vị của `L1.3` chưa đúng — AC-14-3 fail trên assert chính của test · **expected** hành vi đơn vị đạt đủ 1 AC, kết quả lặp lại được và khớp SCN"
+    }
+  ],
+  "allowed_files": [
+    "eso/control-plane/src/platform/events/**",
+    "eso/control-plane/test/**"
+  ],
+  "forbidden": [
+    "sdlc/**",
+    ".cursor/**",
+    ".agents/**"
+  ],
+  "verify": [
+    "cd eso/control-plane && bun test test/audit.test.ts"
+  ],
+  "base_commit": "10e1646"
+}

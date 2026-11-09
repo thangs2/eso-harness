@@ -1,0 +1,41 @@
+{
+  "ticket": "ESO-551",
+  "epic": "ESO-367",
+  "bip": {
+    "id": "BIP-L22",
+    "file": "sdlc/09.wbs/02.bootstrap-packets/01.bip/l2-2.bip.md"
+  },
+  "technical": false,
+  "inv": [
+    "BR-01",
+    "BR-02",
+    "BR-15"
+  ],
+  "ac": [
+    "AC-16-1"
+  ],
+  "scn": [
+    "SCN-16-1"
+  ],
+  "red_packets": [
+    {
+      "packet": "sdlc/10.test/87.l2-2.tdd-impl.md",
+      "test_file": "eso/control-plane/test/errors.test.ts",
+      "test_name": "SCN-16-1 · AC-16-1 — `{code,message,detail?}`; mã lỗi ⊆ BRD/06; CORS allowlist UI · tdd-impl",
+      "expected_failure": "`AssertionError` ở `SCN-16-1`: **actual** hành vi tích hợp của `L2.2` chưa đúng — AC-16-1 fail trên assert chính của test · **expected** hành vi tích hợp đạt đủ 1 AC, kết quả lặp lại được và khớp SCN"
+    }
+  ],
+  "allowed_files": [
+    "eso/control-plane/src/common/errors/**",
+    "eso/control-plane/src/main.ts"
+  ],
+  "forbidden": [
+    "sdlc/**",
+    ".cursor/**",
+    ".agents/**"
+  ],
+  "verify": [
+    "cd eso/control-plane && bun test test/errors.test.ts"
+  ],
+  "base_commit": "10e1646"
+}

@@ -1,0 +1,41 @@
+{
+  "ticket": "ESO-546",
+  "epic": "ESO-367",
+  "bip": {
+    "id": "BIP-L21",
+    "file": "sdlc/09.wbs/02.bootstrap-packets/01.bip/l2-1.bip.md"
+  },
+  "technical": false,
+  "inv": [
+    "BR-01",
+    "BR-02",
+    "BR-15"
+  ],
+  "ac": [
+    "AC-01-1"
+  ],
+  "scn": [
+    "SCN-01-1"
+  ],
+  "red_packets": [
+    {
+      "packet": "sdlc/10.test/82.l2-1.tdd-unit.md",
+      "test_file": "eso/control-plane/test/auth.test.ts",
+      "test_name": "SCN-01-1 · AC-01-1 — Đọc `.env`, so khớp constant-time, 401 `AUTH_*`, `/auth/me` · tdd-unit",
+      "expected_failure": "`AssertionError` ở `SCN-01-1`: **actual** hành vi đơn vị của `L2.1` chưa đúng — AC-01-1 fail trên assert chính của test · **expected** hành vi đơn vị đạt đủ 1 AC, kết quả lặp lại được và khớp SCN"
+    }
+  ],
+  "allowed_files": [
+    "eso/control-plane/src/common/auth/**",
+    "eso/control-plane/test/auth*"
+  ],
+  "forbidden": [
+    "sdlc/**",
+    ".cursor/**",
+    ".agents/**"
+  ],
+  "verify": [
+    "cd eso/control-plane && bun test test/auth.test.ts"
+  ],
+  "base_commit": "10e1646"
+}

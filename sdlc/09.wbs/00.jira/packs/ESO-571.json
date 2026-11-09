@@ -1,0 +1,40 @@
+{
+  "ticket": "ESO-571",
+  "epic": "ESO-490",
+  "bip": {
+    "id": "BIP-L43",
+    "file": "sdlc/09.wbs/02.bootstrap-packets/01.bip/l4-3.bip.md"
+  },
+  "technical": false,
+  "inv": [
+    "BR-01",
+    "BR-02",
+    "BR-15"
+  ],
+  "ac": [
+    "AC-09-1"
+  ],
+  "scn": [
+    "SCN-09-1"
+  ],
+  "red_packets": [
+    {
+      "packet": "sdlc/10.test/107.l4-3.tdd-impl.md",
+      "test_file": "eso/control-plane/test/lifecycle.test.ts",
+      "test_name": "SCN-09-1 · AC-09-1 — `confirm_id`; drop schema + xoá file generated; giữ audit · tdd-impl",
+      "expected_failure": "`AssertionError` ở `SCN-09-1`: **actual** hành vi tích hợp của `L4.3` chưa đúng — AC-09-1 fail trên assert chính của test · **expected** hành vi tích hợp đạt đủ 1 AC, kết quả lặp lại được và khớp SCN"
+    }
+  ],
+  "allowed_files": [
+    "eso/control-plane/src/modules/consumers/lifecycle/**"
+  ],
+  "forbidden": [
+    "sdlc/**",
+    ".cursor/**",
+    ".agents/**"
+  ],
+  "verify": [
+    "cd eso/control-plane && bun test test/lifecycle.test.ts"
+  ],
+  "base_commit": "10e1646"
+}

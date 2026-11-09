@@ -1,0 +1,41 @@
+{
+  "ticket": "ESO-583",
+  "epic": "ESO-491",
+  "bip": {
+    "id": "BIP-L61",
+    "file": "sdlc/09.wbs/02.bootstrap-packets/01.bip/l6-1.bip.md"
+  },
+  "technical": false,
+  "inv": [
+    "BR-01",
+    "BR-02",
+    "BR-15"
+  ],
+  "ac": [
+    "AC-12-1"
+  ],
+  "scn": [
+    "SCN-12-1"
+  ],
+  "red_packets": [
+    {
+      "packet": "sdlc/10.test/115.l6-1.tdd-impl.md",
+      "test_file": "eso/control-plane/test/isolation.test.ts",
+      "test_name": "SCN-12-1 · AC-12-1 — `search_path` theo route; fail-closed; 6 test đối kháng · tdd-impl",
+      "expected_failure": "`AssertionError` ở `SCN-12-1`: **actual** hành vi tích hợp của `L6.1` chưa đúng — AC-12-1 fail trên assert chính của test · **expected** hành vi tích hợp đạt đủ 1 AC, kết quả lặp lại được và khớp SCN"
+    }
+  ],
+  "allowed_files": [
+    "eso/control-plane/src/common/db/**",
+    "eso/control-plane/test/isolation*"
+  ],
+  "forbidden": [
+    "sdlc/**",
+    ".cursor/**",
+    ".agents/**"
+  ],
+  "verify": [
+    "cd eso/control-plane && bun test test/isolation.test.ts"
+  ],
+  "base_commit": "10e1646"
+}

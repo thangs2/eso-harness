@@ -1,0 +1,40 @@
+{
+  "ticket": "ESO-558",
+  "epic": "ESO-489",
+  "bip": {
+    "id": "BIP-L32",
+    "file": "sdlc/09.wbs/02.bootstrap-packets/01.bip/l3-2.bip.md"
+  },
+  "technical": false,
+  "inv": [
+    "BR-01",
+    "BR-02",
+    "BR-15"
+  ],
+  "ac": [
+    "AC-04-1"
+  ],
+  "scn": [
+    "SCN-04-1"
+  ],
+  "red_packets": [
+    {
+      "packet": "sdlc/10.test/94.l3-2.tdd-unit.md",
+      "test_file": "eso/control-plane/test/registry.test.ts",
+      "test_name": "SCN-04-1 · AC-04-1 — List ẩn deleted/purged; detail có profile + version + hash · tdd-unit",
+      "expected_failure": "`AssertionError` ở `SCN-04-1`: **actual** hành vi đơn vị của `L3.2` chưa đúng — AC-04-1 fail trên assert chính của test · **expected** hành vi đơn vị đạt đủ 1 AC, kết quả lặp lại được và khớp SCN"
+    }
+  ],
+  "allowed_files": [
+    "eso/control-plane/src/modules/consumers/**"
+  ],
+  "forbidden": [
+    "sdlc/**",
+    ".cursor/**",
+    ".agents/**"
+  ],
+  "verify": [
+    "cd eso/control-plane && bun test test/registry.test.ts"
+  ],
+  "base_commit": "10e1646"
+}
