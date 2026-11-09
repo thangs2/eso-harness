@@ -5,7 +5,7 @@
  * The gate answers one question: may this slice be built at all? A pack passes only when
  *   - it carries the contract fields (`E1`),
  *   - every `ac` resolves to exactly one `SCN` in the native RTM, and every `scn` names a test path
- *     (`E1`, Stage 7 — `sdlc/06.analysis/04.quality-control/15.native-rtm.md` is the source of truth
+ *     (`E1`, Stage 7 — `sdlc/06.analysis/03.scn/` is the source of truth
  *     for AC → SCN → test, so the pack references it instead of copying it),
  *   - every `red_packets[]` entry is a real Stage 7 packet under `sdlc/10.test/` that names the
  *     exact test file, the exact test name and a concrete expected failure, and holds no
@@ -28,14 +28,18 @@
  * Exit: 0 pass · 1 gate failure · 2 bad input / environment.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { readPack, readPackFile, resolveRedPacket, verifyRedPacketIntegrity } from './check-test-integrity.mjs';
 
-export const RTM_FILE = 'sdlc/06.analysis/04.quality-control/15.native-rtm.md';
+export const RTM_FILE = 'sdlc/06.analysis/03.scn/00.rtm.md';
+/** v2 trace source: `06.analysis/03.scn/` (analysis v1 deleted 2026-11-09, D-108). */
+export const SCN_DIR = 'sdlc/06.analysis/03.scn';
 
 /** Stage 5 packets. A pack names one BIP, and only a `READY` BIP may be built. */
 export const BIP_DIR = 'sdlc/09.wbs/01.packets/01.bip';
+/** Bootstrap packets (v2) live here; packs may name either set. */
+export const BIP_DIRS = [BIP_DIR, 'sdlc/09.wbs/02.bootstrap-packets/01.bip'];
 
 /** The one status a BIP may have and still be built. Everything else is a decision not yet made. */
 export const BUILDABLE_BIP_STATUS = 'READY';
@@ -140,6 +144,24 @@ export function parseRtm(text) {
     return rows;
 }
 
+/** Build trace rows from v2 SCN matrices (analysis v1 RTM was deleted, D-108). */
+export function loadTraceability(root) {
+    const rtmPath = resolve(root, RTM_FILE);
+    if (existsSync(rtmPath) && statSync(rtmPath).isFile()) return parseRtm(readFileSync(rtmPath, 'utf8'));
+    const rows = new Map();
+    const dir = resolve(root, SCN_DIR);
+    let entries = [];
+    try { entries = readdirSync(dir).filter((f) => /^SCN-[A-Z0-9-]+\.md$/.test(f)); } catch { return rows; }
+    for (const file of entries) {
+        for (const line of readFileSync(resolve(dir, file), 'utf8').split('\n')) {
+            const m = /^\|\s*`(SCN-[A-Z0-9-]+)`\s*\|\s*`(AC-[A-Z0-9-]+)`\s*\|([^|]*)\|/.exec(line);
+            if (!m) continue;
+            rows.set(m[2], { ac: m[2], scn: m[1], scnType: m[3].trim(), test: null, planned: true });
+        }
+    }
+    return rows;
+}
+
 /** AC ↔ SCN coverage. Missing rows fail closed: an AC the RTM never mentions is not covered. */
 export function traceabilityFailures(pack, rtmRows) {
     const failures = [];
@@ -171,7 +193,7 @@ export function traceabilityFailures(pack, rtmRows) {
             failures.push(`SCN_NOT_IN_RTM:${scn}`);
             continue;
         }
-        if (!row.test) failures.push(`SCN_WITHOUT_TEST_PATH:${scn}`);
+        if (!row.test && !row.planned) failures.push(`SCN_WITHOUT_TEST_PATH:${scn}`);
         if (!usedScn.has(scn)) failures.push(`SCN_ORPHAN:${scn}`);
     }
     return failures;
@@ -289,11 +311,11 @@ export function parseOpenRegister(text) {
 
 /** Resolve `pack.bip` to a file: an explicit `{ id, file }`, a path, or a bare BIP id to look up. */
 export function resolveBipFile(spec, root = process.cwd()) {
-    const BIP_ID = /^BIP-[0-9]+_[0-9]+$/;
+    const BIP_ID = /^BIP-[A-Z0-9_-]+$/;
     if (spec && typeof spec === 'object') {
         if (!spec.file) return { ok: false, reason: 'BIP_NO_FILE' };
         const file = String(spec.file).replace(/\\/g, '/');
-        if (file.includes('..') || !file.startsWith(`${BIP_DIR}/`)) {
+        if (file.includes('..') || !BIP_DIRS.some((d) => file.startsWith(`${d}/`))) {
             return { ok: false, reason: `BIP_OUTSIDE_BIP_DIR:${file}` };
         }
         return { ok: true, file, id: spec.id || null };
@@ -301,18 +323,20 @@ export function resolveBipFile(spec, root = process.cwd()) {
     const value = String(spec || '').trim();
     if (!value) return { ok: false, reason: 'BIP_NO_FILE' };
     if (BIP_ID.test(value)) {
-        const dir = resolve(root, BIP_DIR);
-        if (!existsSync(dir)) return { ok: false, reason: `BIP_NOT_FOUND:${value}` };
-        for (const name of readdirSync(dir).sort()) {
-            if (!name.endsWith('.md')) continue;
-            const candidate = `${BIP_DIR}/${name}`;
-            const front = parseFrontmatter(readFileSync(resolve(root, candidate), 'utf8'));
-            if (front.id === value) return { ok: true, file: candidate, id: value };
+        for (const bipDir of BIP_DIRS) {
+            const dir = resolve(root, bipDir);
+            if (!existsSync(dir)) continue;
+            for (const name of readdirSync(dir).sort()) {
+                if (!name.endsWith('.md')) continue;
+                const candidate = `${bipDir}/${name}`;
+                const front = parseFrontmatter(readFileSync(resolve(root, candidate), 'utf8'));
+                if (front.id === value) return { ok: true, file: candidate, id: value };
+            }
         }
         return { ok: false, reason: `BIP_NOT_FOUND:${value}` };
     }
     const file = value.replace(/\\/g, '/');
-    if (file.includes('..') || !file.startsWith(`${BIP_DIR}/`)) {
+    if (file.includes('..') || !BIP_DIRS.some((d) => file.startsWith(`${d}/`))) {
         return { ok: false, reason: `BIP_OUTSIDE_BIP_DIR:${file}` };
     }
     return { ok: true, file, id: null };
@@ -470,16 +494,10 @@ function main() {
     const bipVerdict = bipFailures(pack, root);
     failures.push(...bipVerdict.failures);
 
-    // 2. Stage 7 trace: every AC has its SCN, every SCN has a test path (native RTM is the SoT).
-    const rtmPath = resolve(root, RTM_FILE);
-    let rtmRows = new Map();
-    if (!existsSync(rtmPath)) {
-        failures.push(`MISSING_RTM:${RTM_FILE}`);
-    } else {
-        rtmRows = parseRtm(readFileSync(rtmPath, 'utf8'));
-        if (rtmRows.size === 0) failures.push(`RTM_EMPTY:${RTM_FILE}`);
-        else failures.push(...traceabilityFailures(pack, rtmRows));
-    }
+    // 2. Stage 7 trace: v2 SCN matrices are the source of truth (analysis v1 deleted, D-108).
+    const rtmRows = loadTraceability(root);
+    if (rtmRows.size === 0) failures.push(`MISSING_TRACE:${SCN_DIR} (và ${RTM_FILE} không tồn tại)`);
+    else failures.push(...traceabilityFailures(pack, rtmRows));
 
     // 3. Stage 7 RED packets are real, exact, and carry no implementation.
     failures.push(...redPacketFailures(pack, root));
@@ -496,15 +514,20 @@ function main() {
         // 5. Clean HEAD only. No --no-verify, no dirty worktree.
         const dirty = git(['status', '--porcelain'], root);
         if (dirty) failures.push('DIRTY_WORKTREE: commit the slice before running the gate');
-        try {
-            git(['diff', '--check', `${pack.base_commit || 'HEAD~1'}..HEAD`], root);
-        } catch {
-            failures.push('DIFF_CHECK_WHITESPACE');
+        const baseRef = pack.base_commit || pack.base_ref || 'HEAD~1';
+        let baseValid = true;
+        try { git(['rev-parse', '--verify', `${baseRef}^{commit}`], root); } catch { baseValid = false; failures.push(`MISSING_BASE_COMMIT:${baseRef}`); }
+        if (baseValid) {
+            try {
+                git(['diff', '--check', `${baseRef}..HEAD`], root);
+            } catch {
+                failures.push('DIFF_CHECK_WHITESPACE');
+            }
         }
 
         // 6. Scope.
-        files = changedFiles(pack.base_commit || pack.base_ref, root);
-        if (files.length === 0) failures.push('NO_DIFF');
+        files = baseValid ? changedFiles(baseRef, root) : [];
+        if (baseValid && files.length === 0) failures.push('NO_DIFF');
         for (const file of files) {
             // Pack là **hợp đồng của ticket**, không phải việc của slice: `base_commit` chỉ có thể được
             // ghi sau khi mọi artifact trước-build đã commit, nên chính commit đó luôn nằm sau `base_commit`.
@@ -525,7 +548,7 @@ function main() {
         // 8. Secret scan on the actual diff.
         let diffText = '';
         try {
-            diffText = execFileSync('git', ['diff', `${pack.base_commit || 'HEAD~1'}..HEAD`], { encoding: 'utf8', cwd: root });
+            diffText = baseValid ? execFileSync('git', ['diff', `${baseRef}..HEAD`], { encoding: 'utf8', cwd: root }) : '';
         } catch {
             diffText = '';
         }

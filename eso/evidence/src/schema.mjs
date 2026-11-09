@@ -26,6 +26,7 @@ export const CLOSED_MODES = Object.freeze([
 ]);
 
 export const CLOSED_BASES = Object.freeze([
+    'declared',
     'retrieved',
     'verified',
     'inferred',

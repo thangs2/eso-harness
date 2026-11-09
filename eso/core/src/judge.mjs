@@ -44,7 +44,7 @@ function minBasis(bases) {
     let minW = Infinity;
     let minB = 'verified';
     for (const b of bases) {
-        const w = BASIS_WEIGHT[b] || 1;
+        const w = BASIS_WEIGHT[b] ?? 1;
         if (w < minW) {
             minW = w;
             minB = b;
@@ -181,8 +181,8 @@ export function judgeSufficiency({
 
         const actualBasis = ans.basis || 'inferred';
         const actualExists = ans.exists || (ans.claim != null ? 'present' : 'absent');
-        const minW = BASIS_WEIGHT[req.min_basis] || 1;
-        const actW = BASIS_WEIGHT[actualBasis] || 1;
+        const minW = BASIS_WEIGHT[req.min_basis] ?? 1;
+        const actW = BASIS_WEIGHT[actualBasis] ?? 1;
 
         // AC-SUF-01-06 (ED4): basis >= min_basis and present -> satisfied
         const isSat = actualExists === 'present' && actW >= minW;

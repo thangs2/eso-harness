@@ -30,12 +30,14 @@ export const MODES = Object.freeze([
 ]);
 
 export const BASES = Object.freeze([
+    'declared',
     'inferred',
     'retrieved',
     'verified',
 ]);
 
 export const BASIS_WEIGHT = Object.freeze({
+    declared: 0,
     inferred: 1,
     retrieved: 2,
     verified: 3,

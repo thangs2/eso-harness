@@ -105,7 +105,7 @@ AGENTS.local.md    generated — mirror always-on cho DSH
 | Sửa rule/skill/subagent/hook | **eso-harness** (`agents/`) |
 | Cấu hình MCP | **máy này** — `.cursor/mcp.json` · `.agents/mcp_config.json` (gitignored, không sinh); danh sách server ở bảng trong `core.harness-tooling` |
 | Luật, quyết định, artifact SDLC | **eso-harness** (`sdlc/`) |
-| Code sản phẩm (`@mu/harness-*`), UI, Docker, `docs/` | **không** ở repo này (`D-108` điều 8) |
+| Code sản phẩm v2 (`eso/**`: control-plane · UI · graph · evidence · knowledge · learn · iam · adapters · extractors · cli) | **có** ở repo này; `packages/` v1 · `docs/` · `profiles/` **không** (`D-108` điều 8) |
 | Consumer x79 | window khác — `agents/rules/core.workspace-isolation.mdc` |
 
 Khi task mơ hồ "fix harness": mặc định sửa `agents/` trong repo này; nếu nó chạm code sản phẩm thì **nói rõ là ngoài phạm vi**
