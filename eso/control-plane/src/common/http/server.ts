@@ -6,6 +6,7 @@ import { corsHeaders } from '../errors/cors.js';
 import { toErrorResponse } from '../errors/envelope.js';
 import {
     BunSqlPlatformStore,
+    PlatformError,
     RegistryService,
     type PlatformStore,
 } from '../../platform/registry/index.js';
@@ -82,6 +83,27 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
             includeDeleted: q.include_deleted === 'true' || q.include_deleted === true,
             status: typeof q.status === 'string' && q.status ? q.status : null,
         });
+    });
+
+    app.post('/api/v1/consumers/plan', { preHandler: requireAuth }, async (request) => {
+        const body = request.body as any;
+        if (!body?.id || !body?.root) {
+            throw new PlatformError('INVALID_CONSUMER_ID', 'id and root are required for a plan');
+        }
+        return {
+            root: body.root,
+            consumer: body.id,
+            profile: body.profile ?? {},
+            files: [
+                {
+                    relative: '.harness/config.json',
+                    action: 'create-if-missing',
+                    preview: { id: body.id, name: body.name, root: body.root, profile: body.profile },
+                },
+            ],
+            warnings: [],
+            generatedAt: new Date().toISOString(),
+        };
     });
 
     app.post('/api/v1/consumers', { preHandler: requireAuth }, async (request, reply) => {
