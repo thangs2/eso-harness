@@ -1,25 +1,26 @@
 #!/usr/bin/env bash
-# Stop the compose stack. Volumes are kept unless --volumes is passed.
+# Restart the compose stack, optionally rebuilding images first.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 # shellcheck disable=SC1091
-source "$SCRIPT_DIR/lib.sh"
+source "$SCRIPT_DIR/../lib.sh"
 
 usage() {
     cat <<'EOF'
-Usage: stop.sh [--env dev|staging|prod] [--volumes] [-h|--help]
+Usage: restart.sh [--env dev|staging|prod] [--build] [-h|--help]
 
-Stops the compose stack. Volumes are preserved by default.
+Restarts the compose stack and waits for health. With --build, images are
+rebuilt first and the stack is stopped before being started again.
 
 Options:
   --env NAME   Target environment (default: dev).
-  --volumes    Also remove named volumes (docker compose down -v).
+  --build      Build images, then stop and start the stack.
   -h, --help   Show this help and exit.
 EOF
 }
 
-VOLUMES=0
+BUILD=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -h | --help)
@@ -39,8 +40,8 @@ while [[ $# -gt 0 ]]; do
             ESO_ENV="${1#*=}"
             shift
             ;;
-        --volumes)
-            VOLUMES=1
+        --build)
+            BUILD=1
             shift
             ;;
         -*)
@@ -58,12 +59,18 @@ done
 
 set_env "$ESO_ENV"
 load_env
-require_cmd docker
+require_cmd docker curl
 
-if [[ "$VOLUMES" -eq 1 ]]; then
-    compose down -v
+if [[ "$BUILD" -eq 1 ]]; then
+    if [[ "$ESO_ENV" != "dev" ]]; then
+        [[ -n "${ESO_REGISTRY:-}" ]] || die "ESO_REGISTRY is required for --build in $ESO_ENV"
+        [[ -n "${ESO_IMAGE_TAG:-}" ]] || die "ESO_IMAGE_TAG is required for --build in $ESO_ENV"
+    fi
+    "$SCRIPT_DIR/../shared/build.sh" --env "$ESO_ENV"
+    "$SCRIPT_DIR/stop.sh" --env "$ESO_ENV"
+    "$SCRIPT_DIR/start.sh" --env "$ESO_ENV"
 else
-    compose down
+    compose restart
+    wait_healthy
+    info "restarted environment $ESO_ENV"
 fi
-
-info "stopped environment $ESO_ENV"

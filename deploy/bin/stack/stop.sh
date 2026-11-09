@@ -1,24 +1,25 @@
 #!/usr/bin/env bash
-# Start the compose stack and wait for the API and UI to become healthy.
+# Stop the compose stack. Volumes are kept unless --volumes is passed.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 # shellcheck disable=SC1091
-source "$SCRIPT_DIR/lib.sh"
+source "$SCRIPT_DIR/../lib.sh"
 
 usage() {
     cat <<'EOF'
-Usage: start.sh [--env dev|staging|prod] [-h|--help]
+Usage: stop.sh [--env dev|staging|prod] [--volumes] [-h|--help]
 
-Starts the compose stack (docker compose up -d --remove-orphans) and waits for
-the control-plane /health and UI /healthz endpoints.
+Stops the compose stack. Volumes are preserved by default.
 
 Options:
   --env NAME   Target environment (default: dev).
+  --volumes    Also remove named volumes (docker compose down -v).
   -h, --help   Show this help and exit.
 EOF
 }
 
+VOLUMES=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -h | --help)
@@ -38,6 +39,10 @@ while [[ $# -gt 0 ]]; do
             ESO_ENV="${1#*=}"
             shift
             ;;
+        --volumes)
+            VOLUMES=1
+            shift
+            ;;
         -*)
             warn "unknown option: $1"
             usage >&2
@@ -53,10 +58,12 @@ done
 
 set_env "$ESO_ENV"
 load_env
-require_cmd docker curl
+require_cmd docker
 
-compose up -d --remove-orphans
-wait_healthy
+if [[ "$VOLUMES" -eq 1 ]]; then
+    compose down -v
+else
+    compose down
+fi
 
-info "API: $(api_url)"
-info "UI:  $(ui_url)"
+info "stopped environment $ESO_ENV"

@@ -24,7 +24,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Run e2e suite
-        run: bash deploy/bin/e2e.sh
+        run: bash deploy/bin/stack/e2e.sh
       - name: Upload deploy logs
         if: failure()
         uses: actions/upload-artifact@v4

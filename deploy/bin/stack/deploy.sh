@@ -4,7 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 # shellcheck disable=SC1091
-source "$SCRIPT_DIR/lib.sh"
+source "$SCRIPT_DIR/../lib.sh"
 
 usage() {
     cat <<'EOF'
@@ -90,7 +90,7 @@ if [[ "$PULL" -eq 1 ]]; then
     compose pull control-plane ui
 else
     info "building images for $ESO_ENV (tag $ESO_IMAGE_TAG)"
-    "$SCRIPT_DIR/build.sh" --env "$ESO_ENV"
+    "$SCRIPT_DIR/../shared/build.sh" --env "$ESO_ENV"
 fi
 
 compose up -d --remove-orphans

@@ -38,16 +38,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Bash syntax
-        run: bash -n deploy/bin/*.sh
+        run: find deploy/bin -name "*.sh" -exec bash -n {} +
       - name: Deploy scripts are executable
         run: |
-          for script in deploy/bin/*.sh; do
+          for script in $(find deploy/bin -name '*.sh'); do
             test -x "$script" || { echo "not executable: $script"; exit 1; }
           done
       - name: Install shellcheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
       - name: Shellcheck
-        run: shellcheck -x deploy/bin/*.sh
+        run: find deploy/bin -name "*.sh" -exec shellcheck -x {} +
 
   compose:
     name: compose config

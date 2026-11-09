@@ -45,22 +45,22 @@ status: ## Show container status
 logs: ## Follow logs (LOG_TAIL=200)
 	$(COMPOSE_CMD) logs --tail=$(LOG_TAIL) -f
 
-e2e: ## Run the e2e suite via deploy/bin/e2e.sh (no host ports)
-	bash deploy/bin/e2e.sh
+e2e: ## Run the e2e suite via deploy/bin/stack/e2e.sh (no host ports)
+	bash deploy/bin/stack/e2e.sh
 
 deploy: ## Deploy ENV through the runtime script (state + health gates)
-	bash deploy/bin/deploy.sh $(ENV)
+	bash deploy/bin/stack/deploy.sh $(ENV)
 
 rollback: ## Roll ENV back to the previous release
-	bash deploy/bin/rollback.sh $(ENV)
+	bash deploy/bin/stack/rollback.sh $(ENV)
 
 backup: ## Back up the ENV database
-	bash deploy/bin/backup.sh $(ENV)
+	bash deploy/bin/db/backup.sh $(ENV)
 
 restore: ## Restore the ENV database from BACKUP=<file>
-	bash deploy/bin/restore.sh $(ENV) $(BACKUP)
+	bash deploy/bin/db/restore.sh $(ENV) $(BACKUP)
 
 check: ## Static checks only: shell syntax, compose config, build dry-run
-	bash -n deploy/bin/*.sh
+	find deploy/bin -name "*.sh" -exec bash -n {} +
 	$(COMPOSE) --env-file $(CHECK_ENV_FILE) -f $(COMPOSE_FILE) config -q
 	@$(MAKE) --no-print-directory -n build

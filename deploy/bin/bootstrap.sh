@@ -92,4 +92,4 @@ if grep -Eqi 'change[-_]?me|replace[-_]?me' "$ENV_FILE"; then
 fi
 
 info "environment $ESO_ENV is ready"
-info "next: deploy/bin/build.sh --env $ESO_ENV"
+info "next: deploy/bin/shared/build.sh --env $ESO_ENV"

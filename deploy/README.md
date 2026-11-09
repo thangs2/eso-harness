@@ -8,7 +8,12 @@ demand; those paths are not part of the build.
 
 ```text
 deploy/
-  bin/       runtime wrappers: bootstrap · build · start/stop · deploy · backup/restore · rollback
+  bin/       lib.sh · bootstrap.sh
+  bin/shared/  build.sh · logs.sh · shell.sh (shared implementation)
+  bin/stack/   start · stop · restart · status · deploy · rollback · e2e
+  bin/cp/      build · logs · shell (control-plane)
+  bin/ui/      build · logs · shell (ui)
+  bin/db/      backup · restore (PostgreSQL)
   compose/   compose.dev.yml · compose.prod.yml · compose.e2e.yml
   docker/    nginx.conf · postgres-init.sql (Dockerfiles live in eso/control-plane and eso/ui)
   env/       dev.env.example · staging.env.example · prod.env.example · .gitignore
@@ -40,17 +45,17 @@ bash deploy/bin/bootstrap.sh --env dev
 docker compose -f deploy/compose/compose.dev.yml --env-file deploy/env/dev.env config -q
 
 # 3. Build the two local images.
-bash deploy/bin/build.sh --env dev
+bash deploy/bin/shared/build.sh --env dev
 
 # 4. Start the stack and wait for health.
-bash deploy/bin/start.sh --env dev
+bash deploy/bin/stack/start.sh --env dev
 
 # 5. Check both health endpoints.
 curl -fsS http://127.0.0.1:8787/health
 curl -fsS http://127.0.0.1:4200/healthz
 
 # Stop; volumes are preserved.
-bash deploy/bin/stop.sh --env dev
+bash deploy/bin/stack/stop.sh --env dev
 ```
 
 The `Makefile` exposes the same operations as targets (`make bootstrap`, `make build`, `make up`,
@@ -99,20 +104,22 @@ the env file and rotate it there.
 
 The runtime wrappers live in `deploy/bin/`. They create the state, backup, and log directories on
 demand; building or validating the configuration does not create them. Run them as
-`bash deploy/bin/<script>` from the repository root.
+`bash deploy/bin/<group>/<script>` from the repository root (`bootstrap.sh` and `lib.sh` stay at the root).
+
+CP/UI/DB mapping is in [`deploy/bin/README.md`](bin/README.md).
 
 | Script | Operation | Notes |
 |---|---|---|
 | `bootstrap.sh --env <env>` | Create runtime env and directories | Copies the matching `*.env.example`, sets mode `0600`, and warns on remaining placeholders. |
-| `build.sh --env <env> [service]` | Build images | Builds `eso/control-plane/Dockerfile` and `eso/ui/Dockerfile` with each service directory as context; never pushes. |
-| `start.sh --env <env>` | Start and wait for health | Runs `docker compose up -d --remove-orphans`. |
-| `stop.sh --env <env>` | Stop the stack | Volumes are kept unless `--volumes` is passed. |
-| `restart.sh --env <env> [--build]` | Restart and wait for health | `--build` rebuilds first. |
-| `status.sh --env <env>` | Show service and HTTP status | Exits non-zero unless all three services run and both endpoints return 200. |
-| `logs.sh --env <env> [service]` | Follow logs | Defaults to `ESO_LOG_TAIL` lines. |
-| `deploy.sh --env <env> [--pull]` | Build or pull, start, health-check, record state | Writes `deploy/.state/current.env` and rotates `previous.env`; `--pull` is for staging/prod. |
-| `rollback.sh --env <env> [--to TAG]` | Return to a previous image tag | Defaults to the tag in `deploy/.state/previous.env`. |
-| `backup.sh --env <env>` | Dump PostgreSQL | Writes `deploy/backups/eso-<UTC>.dump` and prunes to `ESO_BACKUP_KEEP`. |
+| `shared/build.sh --env <env> [service]` | Build images | Builds `eso/control-plane/Dockerfile` and `eso/ui/Dockerfile`; never pushes. |
+| `stack/start.sh --env <env>` | Start and wait for health | Runs `docker compose up -d --remove-orphans`. |
+| `stack/stop.sh --env <env>` | Stop the stack | Volumes are kept unless `--volumes` is passed. |
+| `stack/restart.sh --env <env> [--build]` | Restart and wait for health | `--build` rebuilds first. |
+| `stack/status.sh --env <env>` | Show service and HTTP status | Exits non-zero unless all three services run and both endpoints return 200. |
+| `shared/logs.sh --env <env> [service]` | Follow logs | Defaults to `ESO_LOG_TAIL` lines. |
+| `stack/deploy.sh --env <env> [--pull]` | Build or pull, start, health-check, record state | Writes `deploy/.state/current.env` and rotates `previous.env`; `--pull` is for staging/prod. |
+| `stack/rollback.sh --env <env> [--to TAG]` | Return to a previous image tag | Defaults to the tag in `deploy/.state/previous.env`. |
+| `db/backup.sh --env <env>` | Dump PostgreSQL | Writes `deploy/backups/eso-<UTC>.dump` and prunes to `ESO_BACKUP_KEEP`. |
 | `restore.sh --env <env> [--yes] DUMP` | Restore a dump | Stops the app, restores, starts the stack, and waits for health. |
 | `e2e.sh [--keep]` | Run the disposable smoke stack | Uses project `eso-e2e`, no host ports, and preserves the smoke exit code. |
 
@@ -144,10 +151,10 @@ every stack: the API check calls `http://127.0.0.1:8787/health`; the UI check ca
 
 ```bash
 # Dump the selected environment; the wrapper prunes to ESO_BACKUP_KEEP.
-bash deploy/bin/backup.sh --env prod
+bash deploy/bin/db/backup.sh --env prod
 
 # Restore a chosen dump. The wrapper stops the app, restores, starts it, and waits for health.
-bash deploy/bin/restore.sh --env prod --yes deploy/backups/eso-YYYYMMDDTHHMMSSZ.dump
+bash deploy/bin/db/restore.sh --env prod --yes deploy/backups/eso-YYYYMMDDTHHMMSSZ.dump
 ```
 
 The restore path removes replaced objects with `--clean --if-exists --no-owner`. Take a fresh dump
@@ -159,10 +166,10 @@ Application rollback uses the previous image tag; it does not rewrite the databa
 
 ```bash
 # Roll back to the tag recorded in deploy/.state/previous.env.
-bash deploy/bin/rollback.sh --env prod
+bash deploy/bin/stack/rollback.sh --env prod
 
 # Or name an explicit tag.
-bash deploy/bin/rollback.sh --env prod --to 2026-11-09.1
+bash deploy/bin/stack/rollback.sh --env prod --to 2026-11-09.1
 ```
 
 The script overrides `ESO_IMAGE_TAG`, recreates the stack, waits for both health endpoints, and
@@ -216,4 +223,4 @@ add a default secret to a compose file.
 Take a dump first, or use the disposable e2e stack when a clean database is acceptable.
 
 For a one-command view of container state and both HTTP endpoints, run
-`bash deploy/bin/status.sh --env dev`.
+`bash deploy/bin/stack/status.sh --env dev`.
