@@ -1,6 +1,4 @@
 node_modules/
-# comments/artifacts is scratch: drafts only, never tracked
-comments/artifacts/
 .DS_Store
 *.log
 .harness/

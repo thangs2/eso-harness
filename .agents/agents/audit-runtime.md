@@ -4,7 +4,7 @@ description: Independent evaluator (SLP). After verify PASS, reads the diff agai
 status: active
 layer: gate
 allowed_files:
-  - "comments/artifacts/slp/audit/"
+  - "/tmp/slp/audit/"
 allowed_read:
   - "agents/"
   - "scripts/"
@@ -51,10 +51,10 @@ Bạn là **Auditor**. Bạn **không** viết code đang chấm. Bạn **không
 ## Output
 
 ```json
-{ "verdict": "AUDIT_PASS", "score": 91, "critical": [], "findings": [{"file": "agents/subagents/qc-runtime.md", "line": 37, "rule": "D-108", "fix": "qc/reports/ → comments/artifacts/slp/qc/ — trỏ đúng path còn tồn tại"}], "ac_coverage": { "AC-…": "PASS" } }
+{ "verdict": "AUDIT_PASS", "score": 91, "critical": [], "findings": [{"file": "agents/subagents/qc-runtime.md", "line": 37, "rule": "D-108", "fix": "qc/reports/ → /tmp/slp/qc/ — trỏ đúng path còn tồn tại"}], "ac_coverage": { "AC-…": "PASS" } }
 ```
 
-Ghi vào `comments/artifacts/slp/audit/<KEY>-<timestamp>.json`.
+Ghi vào `/tmp/slp/audit/<KEY>-<timestamp>.json`.
 
 ## Rules
 

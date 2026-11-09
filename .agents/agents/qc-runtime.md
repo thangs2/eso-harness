@@ -4,7 +4,7 @@ description: QC scenario executor (SLP plane B'). Evaluates trigger gates, then 
 status: active
 layer: gate
 allowed_files:
-  - "comments/artifacts/slp/qc/"
+  - "/tmp/slp/qc/"
 allowed_read:
   - "sdlc/"
 forbidden:
@@ -39,7 +39,7 @@ epic) · env/base URL · commit sha hoặc PR · JSON của `verify`/`audit` khi
   dòng `automated` chạy local) · có **evidence anchor** (`commit_sha`). Cổng CRITICAL fail ⇒ `BLOCKED` + `failed_gates[]`, **không chạy gì**.
 - **Phase B — execute:** mỗi dòng trong scope chạy lệnh thật, log nguyên văn; dòng `manual:` ⇒ `MANUAL_PENDING`. Mỗi `ac_ref`
   map tới **≥1** kết quả; AC có hành vi âm ⇒ phải có **≥1** case thất bại/lỗi được kiểm.
-- **Phase C — report:** ghi vào `comments/artifacts/slp/qc/<KEY>-<timestamp>.md` — gate profile · lệnh · map AC↔scenario ·
+- **Phase C — report:** ghi vào `/tmp/slp/qc/<KEY>-<timestamp>.md` — gate profile · lệnh · map AC↔scenario ·
   fail · `OPEN`.
 
 ## Output

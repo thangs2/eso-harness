@@ -1,37 +1,19 @@
----
-sot_doc_version: "0.1.0"
-source_of_truth: "sdlc/README.md"
-status: DRAFT
-phase: 1
-id: GOV-README
-type: standard
----
+# `02.governance` — luật · bản ghi · chính sách · sơ đồ
 
-# `02.governance` — bản ghi quản trị của **dự án này**
+**Phân loại theo vai trò**, không theo thứ tự viết. Bốn loại, bốn nhà — không trộn:
 
-> **Luật không ở đây nữa.** Chuẩn SDLC đã tách sang [`standard/`](01.standard/00.index.md) — nó là **sản phẩm**, ship cùng
-> eso-harness, và consumer **trỏ tới** chứ không nhận bản sao. Lý do: [`04.folders`](../03.inception/03.artifact-model/04.folders.md).
->
-> Folder này giữ **bản ghi của chính dự án**: trạng thái tài liệu, mục còn treo, và một phân tích. Đây là **instance**, không
-> phải chuẩn — nó được kiểm, không phải để kiểm người khác.
+| Folder | Vai trò | Câu hỏi trả lời | Ai đọc |
+|---|---|---|---|
+| [`01.standard/`](01.standard/00.index.md) | **LUẬT** | *điều gì phải đúng* (normative) | mọi người |
+| [`02.records/`](02.records/00.index.md) | **BẢN GHI** | *điều đang là* — đo được, có ngày | lead · auditor |
+| [`03.policies/`](03.policies/00.index.md) | **CHÍNH SÁCH CHO AGENT** | *agent phải làm gì* | agent · lead |
+| [`04.diagrams/`](04.diagrams/00.index.md) | **SƠ ĐỒ** | *luồng chạy thế nào* — Mermaid là SoT, ảnh sinh ra | mọi người |
 
-**Two independent number sequences.** Folders `01…` and files `01…` are numbered **separately** — a folder number says nothing
-about a file number. Mixing them (`01.file` · `02.file` · `03.folder`) is forbidden ([naming law](01.standard/02.artifacts.md) §4).
+## Nguyên tắc
 
-## Files
+1. **Luật** ở `01.standard/` — không có số đo, không có instance.
+2. **Số đo** ở `02.records/` — bảng là **kết quả chạy**, không gõ tay.
+3. **Chỉ dẫn agent** ở `03.policies/` — không lặp lại luật, chỉ nói *cách áp*.
+4. **Hình** ở `04.diagrams/` — **Mermaid là nguồn**; PNG là artifact sinh ra, không sửa tay.
 
-| # | File | Role |
-|---|---|---|
-| 01 | [`01.document-status.md`](01.document-status.md) | **trạng thái tài liệu**: "documented" nghĩa là gì · **47 phép kiểm** · instance đo được |
-| 02 | [`02.open-register.md`](02.open-register.md) | **register `OPEN`**: câu hỏi về hình dạng chưa có đáp án, mỗi câu kèm đề xuất |
-| 03 | [`03.x7-analysis.md`](03.x7-analysis.md) | phân tích `X7` — vì sao kiểm hình dạng theo `type` lại cần |
-| 04 | [`04.agent-rules.md`](04.agent-rules.md) | **10 luật cho agent** — mỗi luật kèm lỗi đã sinh ra nó |
-
-`README.md` is the only unnumbered file here — it is **navigation**, not an artifact.
-
-**Ba tầng, ba vai.** `standard/` nói điều gì phải **đúng**; `sdlc/` ghi điều **đang là**; `qc/` là **máy kiểm** đối chiếu hai
-cái đó. Không luật nào bị chép vào bản ghi, và không bản ghi nào tự phát minh luật.
-
-**`sdlc/` là nguồn duy nhất** cho luật, quyết định và artifact. Mã hiện có nằm trong `eso/` nhưng là **prior art**: mô tả
-nó thì cite `eso/`, và **không** được dùng nó để tuyên bố năng lực sản phẩm. Khi tài liệu và code lệch nhau, tài liệu phải
-trace được về pain point/vision; code chỉ là bằng chứng lịch sử.
+`README.md` là file duy nhất không đánh số ở đây — nó là **navigation**, không phải artifact.

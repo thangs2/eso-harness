@@ -18,7 +18,7 @@ consumer thuộc SDLC của chính consumer đó.
 ## Cấu trúc
 
 **Folder** đánh số `01…` **chỉ trong folder**; **file** đánh số `01…` **chỉ trong file**
-([naming law](02.governance/01.standard/02.artifacts.md) §4.1). Ở cấp `sdlc/` chỉ có folder, nên đây là **một** dãy — liền
+([naming law](02.governance/01.standard/01.artifacts.md) §4.1). Ở cấp `sdlc/` chỉ có folder, nên đây là **một** dãy — liền
 mạch, **không trùng số**, và **không mang nghĩa "stage"**.
 
 > **Luật nằm trong `sdlc/`.** Chuẩn SDLC (kind · cổng · BIP/FIP · workflow · các phép kiểm) sống ở
@@ -27,7 +27,7 @@ mạch, **không trùng số**, và **không mang nghĩa "stage"**.
 
 ```text
 01.agent-manifests   meta — vùng AI: spec domain + capability (≤150 dòng · ≤4 000 ký tự)
-02.governance        meta — bản ghi DỰ ÁN: trạng thái tài liệu · register OPEN · chuẩn SDLC
+02.governance        meta — luật (standard) · bản ghi (records) · chính sách agent (policies) · sơ đồ (diagrams)
 03.inception         vì sao tồn tại · pain point · vision · quyết định
 04.landscape         bối cảnh: đứng ở đâu, ai cho gì, chỗ không chơi
 05.requirements      phải LÀM được gì (BRD · PRD · FRD · SRS · NFR)

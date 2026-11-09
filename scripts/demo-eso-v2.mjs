@@ -5,8 +5,8 @@
  *   bun scripts/demo-eso-v2.mjs --check     # run assertions, exit 0/1
  *   bun scripts/demo-eso-v2.mjs --serve     # seed and keep the server on :8787
  *
- * Everything is written under /tmp. It never touches a real consumer, x79 or
- * comments/artifacts. The only repo write is `npm run build` in
+ * Everything is written under /tmp. It never touches a real consumer or x79.
+ * The only repo write is `npm run build` in
  * eso/control-plane (skip with --no-build).
  */
 import { spawnSync } from 'node:child_process';

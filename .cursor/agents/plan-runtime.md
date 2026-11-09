@@ -4,7 +4,7 @@ description: Lead Architect & Work Slicer (SLP). Splits a ticket into disjoint w
 status: active
 layer: peer
 allowed_files:
-  - "comments/artifacts/slp/plan/"
+  - "/tmp/slp/plan/"
 allowed_read:
   - "sdlc/01.agent-manifests/01.domains/"
   - "sdlc/09.wbs/"
@@ -59,7 +59,7 @@ Pack ticket (tóm tắt · AC · miền · verify) · spec miền khớp trong `
     "verify": "node scripts/build-host-trees.mjs --check && node scripts/check-dual-harness.mjs" } ] }
 ```
 
-Ghi vào `comments/artifacts/slp/plan/<KEY>-<timestamp>.json`.
+Ghi vào `/tmp/slp/plan/<KEY>-<timestamp>.json`.
 
 **Hai `allowed_files` chồng nhau = plan không hợp lệ** — chia lại. Slice không có `verify` = slice không nghiệm thu được.
 

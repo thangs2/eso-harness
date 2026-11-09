@@ -64,7 +64,7 @@ JSON có kiểu là mấu chốt: bạn **ghép** được mà không đọc vă
    `node scripts/check-dual-harness.mjs`. FAIL ⇒ sang 8.
 8. **Audit** — spawn `audit` trên diff. `AUDIT_FAIL` ⇒ `fixbug` ↺ về 6. **3** vòng ⇒ **S-GATE 2**.
 9. **Human In Review** — Lead ghi comment + nhãn + rollup. **Không** `Done`: quyền đó của S.
-10. **QC** — khi operator yêu cầu: spawn `qc` (scenario → ghi vào `comments/artifacts/slp/qc/`). **S-GATE 3**: S ký `Done`.
+10. **QC** — khi operator yêu cầu: spawn `qc` (scenario → trả trong response; log tạm `/tmp/slp/qc/`). **S-GATE 3**: S ký `Done`.
 
 ## 6. Rubric `audit` (tóm tắt — chi tiết trong rule §6)
 

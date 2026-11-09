@@ -4,7 +4,7 @@ description: Recon worker (SLP). Spawn ONLY when a ticket has no AC table, has O
 status: active
 layer: peer
 allowed_files:
-  - "comments/artifacts/slp/recon/"
+  - "/tmp/slp/recon/"
 allowed_read:
   - "agents/"
   - "scripts/"
@@ -53,7 +53,7 @@ Ticket đã đủ (AC + file có tên) ⇒ **không spawn** (zero-crawl: đọc 
 { "key": "ESO-…", "domains": ["eso/core"], "inv": ["INV-ESO-01"], "touched_files": ["agents/subagents/scout-runtime.md"], "open_gaps": ["AC-… chưa nói path nào là nguồn"], "risks": ["sửa `agents/` mà quên regenerate ⇒ `node scripts/build-host-trees.mjs --check` đỏ"] }
 ```
 
-Ghi bản đầy đủ vào `comments/artifacts/slp/recon/<KEY>-<timestamp>.json` nếu Lead cần giữ; nội dung trả về vẫn là JSON trên.
+Ghi bản đầy đủ vào `/tmp/slp/recon/<KEY>-<timestamp>.json` nếu Lead cần giữ; nội dung trả về vẫn là JSON trên.
 
 ## Forbidden
 

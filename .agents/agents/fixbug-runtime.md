@@ -17,7 +17,6 @@ forbidden:
   - ".cursor/**"
   - ".agents/**"
   - "sdlc/**"
-  - "comments/**"
 returns: "JSON — status FIXED|BLOCKED, root_cause, fix[], loop_count"
 verify: "same verify command as the failing slice — rerun by verify-runtime"
 ---
@@ -51,7 +50,7 @@ không lên agent khác.
 ## Output
 
 ```json
-{ "status": "FIXED", "root_cause": "worker doc còn trỏ path đã bị xoá khỏi repo", "fix": [{"file": "agents/subagents/qc-runtime.md", "line": 37, "change": "qc/reports/ → comments/artifacts/slp/qc/"}], "loop_count": 1 }
+{ "status": "FIXED", "root_cause": "worker doc còn trỏ path đã bị xoá khỏi repo", "fix": [{"file": "agents/subagents/qc-runtime.md", "line": 37, "change": "qc/reports/ → /tmp/slp/qc/"}], "loop_count": 1 }
 ```
 
 ## Forbidden

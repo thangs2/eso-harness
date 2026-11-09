@@ -53,8 +53,8 @@ function findRepoRoot(start) {
  * Parse `docgraph.scope` into the set of files the index is supposed to contain.
  *
  * The scope is an **allowlist** (`path:` roots) filtered by `ext:` and `exclude:` — not "every file
- * with these extensions". Walking the whole repo and comparing would report `comments/artifacts/`,
- * `packages/**` and `docs/08.archive/` as missing on a perfectly healthy index, so the roots
+ * with these extensions". Walking the whole repo and comparing would report `node_modules/`,
+ * `packages/**` and generated trees as missing on a perfectly healthy index, so the roots
  * are honoured literally: a path is covered when it is a root or lives under one.
  *
  * Directive names are read from the file rather than assumed, so a scope that gains `exclude:` or a

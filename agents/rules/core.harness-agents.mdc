@@ -47,4 +47,4 @@ canonical: AGENTS.md
 
 ## Commit
 
-Chỉ commit khi user yêu cầu. Không commit `.harness/`, không commit `comments/`.
+Chỉ commit khi user yêu cầu. Không commit `.harness/` hay `session/` của host.

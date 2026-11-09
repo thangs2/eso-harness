@@ -15,13 +15,13 @@
 
 | File | Role | Khi nào | Ghi vào |
 |---|---|---|---|
-| `scout-runtime.md` | recon, pack ≤300 từ | ticket thiếu AC / blast radius chưa biết | `comments/artifacts/slp/recon/` |
-| `plan-runtime.md` | chia slice rời nhau | task >1 tầng | `comments/artifacts/slp/plan/` |
+| `scout-runtime.md` | recon, pack ≤300 từ | ticket thiếu AC / blast radius chưa biết | `/tmp/slp/recon/` |
+| `plan-runtime.md` | chia slice rời nhau | task >1 tầng | `/tmp/slp/plan/` |
 | `build-runtime.md` | peer theo slice | mỗi slice, song song khi `depends_on` rỗng | `agents/` (**nguồn** — không `.cursor/**`/`.agents/**`) · `scripts/` · `tools/` |
-| `verify-runtime.md` | build/test thật | sau mỗi lượt build/fix | `comments/artifacts/slp/verify/` |
-| `audit-runtime.md` | diff vs INV/AC/biên, 0–100 | sau verify PASS | `comments/artifacts/slp/audit/` |
+| `verify-runtime.md` | build/test thật | sau mỗi lượt build/fix | `/tmp/slp/verify/` |
+| `audit-runtime.md` | diff vs INV/AC/biên, 0–100 | sau verify PASS | `/tmp/slp/audit/` |
 | `fixbug-runtime.md` | sửa tối thiểu | verify FAIL hoặc audit findings | **dẫn xuất** — `findings[].file` |
-| `qc-runtime.md` | scenario matrix | khi operator yêu cầu | `comments/artifacts/slp/qc/` |
+| `qc-runtime.md` | scenario matrix | khi operator yêu cầu | `/tmp/slp/qc/` |
 
 Nguồn duy nhất của 7 worker là `agents/subagents/`. Cursor/Antigravity nhận bản **sinh ra** ở `.cursor/agents/*.md` ·
 `.agents/agents/*.md` — **không sửa tay**; lệch bị `node scripts/build-host-trees.mjs --check` chặn.

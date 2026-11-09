@@ -4,7 +4,7 @@ description: Deterministic gate (SLP). Runs the real build/test commands named b
 status: active
 layer: gate
 allowed_files:
-  - "comments/artifacts/slp/verify/"
+  - "/tmp/slp/verify/"
 allowed_read:
   - "agents/"
   - "scripts/"
@@ -54,7 +54,7 @@ Bạn **không** viết code sản phẩm. Bạn chạy lệnh và trả **bằn
 { "status": "PASS", "commands_run": ["node scripts/build-host-trees.mjs --check", "node scripts/check-dual-harness.mjs"], "summary": "0 tree lệch / 0 vi phạm extension", "failure_log": null, "dod_notes": "không có ngưỡng coverage trong Task" }
 ```
 
-Ghi log vào `comments/artifacts/slp/verify/<KEY>-<timestamp>.log`.
+Ghi log vào `/tmp/slp/verify/<KEY>-<timestamp>.log`.
 
 ## Rules
 

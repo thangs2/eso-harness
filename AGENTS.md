@@ -2,7 +2,7 @@
 
 Repo này chứa **cấu hình agent dùng chung cho nhiều host** (`agents/`), **luật + artifact** (`sdlc/`), script vận hành
 (`scripts/`) và plugin DSH (`tools/`). Nó **không** chứa `packages/`, `docs/`, `profiles/` — xem `D-108` điều 8 trong
-[`03.artifact-va-folder`](sdlc/03.inception/02-decision-log/03.artifact-va-folder.md).
+[`03.artifact-va-folder`](sdlc/03.inception/02.decision-log/03.artifact-va-folder.md).
 
 ## Luật gốc — một nguồn, nhiều cửa
 
@@ -12,7 +12,7 @@ Repo này chứa **cấu hình agent dùng chung cho nhiều host** (`agents/`),
 | **Artifact sinh ra** | `.cursor/**` · `.agents/**` · `AGENTS.local.md` |
 | **Sinh lại** | `node scripts/build-host-trees.mjs` |
 | **Gate** | `node scripts/build-host-trees.mjs --check` · `node scripts/check-dual-harness.mjs` |
-| **Quyết định** | `D-108` — [`03.artifact-va-folder.md`](sdlc/03.inception/02-decision-log/03.artifact-va-folder.md) |
+| **Quyết định** | `D-108` — [`03.artifact-va-folder.md`](sdlc/03.inception/02.decision-log/03.artifact-va-folder.md) |
 
 **NEVER** sửa tay `.cursor/**`, `.agents/**`, `AGENTS.local.md`: đó là drift và `--check` sẽ đỏ. **NEVER** symlink trong tree
 provider (`D-108` điều 3). Sửa `agents/`, chạy generator, chạy hai gate.
@@ -73,7 +73,7 @@ duy nhất trong git.
 | Luật | [`agents/rules/core.slp.mdc`](agents/rules/core.slp.mdc) |
 | Procedure | skill `harness-engineering-team` |
 | 7 worker | [`agents/subagents/`](agents/subagents/) — `scout · plan · build · verify · audit · fixbug · qc` |
-| Evidence | `comments/artifacts/slp/` — **scratch**, không cite |
+| Evidence | trả trong **response** worker; bản tạm ở `/tmp/slp/` (ngoài repo) — **không cite** |
 
 **Thứ tự cứng:** build → verify PASS → audit (rubric ≥85, 0 CRITICAL) → `Human In Review`; QC chỉ khi operator yêu cầu. Cùng
 lỗi gốc **3 lần** ⇒ dừng, escalate **lên người**. **Không** agent nào tự ký `Done`; **không** commit/push/PR trừ khi user yêu cầu.
@@ -94,8 +94,8 @@ AGENTS.local.md    generated — mirror always-on cho DSH
 ## Quy ước
 
 - ESM `.mjs`; repo này **không có** `package.json` hay test runner — verify bằng hai gate script.
-- **Không** ghi tài liệu bền vào `comments/` (scratch, gitignored). Bền → `sdlc/<NN.topic>/`.
-- **Không** commit `.harness/`, `comments/`, `.cursor/session/`, `.agents/session/`.
+- **Không** dùng `comments/` (đã bỏ 2026-11-09). Scratch → `/tmp/`; tài liệu bền → `sdlc/<NN.topic>/`.
+- **Không** commit `.harness/`, `.cursor/session/`, `.agents/session/`.
 - Chỉ commit khi user yêu cầu.
 
 ## Phạm vi

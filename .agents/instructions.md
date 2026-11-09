@@ -56,7 +56,7 @@ host → law gate (agents/rules/core.law-gate.mdc) → Read AGENTS.md → rules 
 | `core.conversation-hygiene` | ✅ | — |
 | `core.harness-agents` | ✅ | — |
 | `delivery.jira-agent-execution` | — | `sdlc/09.wbs/**/*,scripts/jira-*` |
-| `core.slp` | — | `agents/**,scripts/**,tools/**,comments/artifacts/slp/**` |
+| `core.slp` | — | `agents/**,scripts/**,tools/**,sdlc/01.agent-manifests/**` |
 | `core.harness-tooling` | — | `.cursor/mcp.json,scripts/**` |
 | `core.paseo-provider` | ✅ | — |
 | `core.reply-format` | ✅ | — |

@@ -15,7 +15,6 @@ forbidden:
   - ".agents/**"
   - "AGENTS.local.md"
   - "sdlc/**"
-  - "comments/**"
 returns: "JSON — slice, status DONE|BLOCKED_SCOPE, files_changed[], tests_added[], notes"
 verify: "the slice's verify command, run by the peer; PASS is decided by verify-runtime"
 ---
@@ -55,5 +54,5 @@ Thiếu một phần ⇒ **hỏi lại Lead**, không đoán.
 
 ## Forbidden
 
-Ghi ngoài `allowed_files` · `.cursor/**` / `.agents/**` (artifact sinh ra) · `sdlc/**` · `comments/**` · chuyển trạng
+Ghi ngoài `allowed_files` · `.cursor/**` / `.agents/**` (artifact sinh ra) · `sdlc/**` · chuyển trạng
 thái ticket · `git commit`/`push` · tự chấm điểm · gọi worker khác.
