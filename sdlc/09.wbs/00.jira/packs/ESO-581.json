@@ -24,7 +24,7 @@
   "red_packets": [
     {
       "packet": "sdlc/10.test/121.s1.tdd-qc.md",
-      "test_file": "eso/e2e/ui-smoke.mjs",
+      "test_file": "eso/e2e/ui-smoke.e2e.mjs",
       "test_name": "SCN-15-1 · AC-15-1 — Use the control plane via the UI (US-15) · tdd-qc",
       "expected_failure": "`SCN_MISMATCH` ở `SCN-15-1`: **actual** chạy SCN-15-1, SCN-15-2, SCN-15-3 chưa xanh hoặc status còn `planned` · **expected** toàn bộ SCN của `S1` xanh và status được cập nhật kèm evidence"
     }
@@ -39,7 +39,7 @@
     ".agents/**"
   ],
   "verify": [
-    "node eso/e2e/ui-smoke.mjs"
+    "node eso/e2e/ui-smoke.e2e.mjs"
   ],
   "base_commit": "10e1646"
 }

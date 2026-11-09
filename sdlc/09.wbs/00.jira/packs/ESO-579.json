@@ -24,7 +24,7 @@
   "red_packets": [
     {
       "packet": "sdlc/10.test/119.s1.tdd-impl.md",
-      "test_file": "eso/e2e/ui-smoke.mjs",
+      "test_file": "eso/e2e/ui-smoke.e2e.mjs",
       "test_name": "SCN-15-1 · AC-15-1 — Use the control plane via the UI (US-15) · tdd-impl",
       "expected_failure": "`AssertionError` ở `SCN-15-1`: **actual** hành vi tích hợp của `S1` chưa đúng — AC-15-1, AC-15-2, AC-15-3 fail trên assert chính · **expected** hành vi tích hợp đạt đủ 3 AC và khớp SCN"
     }
@@ -39,7 +39,7 @@
     ".agents/**"
   ],
   "verify": [
-    "node eso/e2e/ui-smoke.mjs"
+    "node eso/e2e/ui-smoke.e2e.mjs"
   ],
   "base_commit": "10e1646"
 }
