@@ -1,0 +1,46 @@
+{
+  "ticket": "ESO-535",
+  "epic": "ESO-292",
+  "bip": {
+    "id": "BIP-L11",
+    "file": "sdlc/09.wbs/02.bootstrap-packets/01.bip/l1-1.bip.md"
+  },
+  "technical": false,
+  "inv": [
+    "BR-01",
+    "BR-02",
+    "BR-15"
+  ],
+  "ac": [
+    "AC-14-1",
+    "AC-14-2",
+    "AC-14-3"
+  ],
+  "scn": [
+    "SCN-14-1",
+    "SCN-14-2",
+    "SCN-14-3"
+  ],
+  "red_packets": [
+    {
+      "packet": "sdlc/10.test/71.l1-1-platform-schema.tdd-impl.md",
+      "test_file": "eso/control-plane/test/migrate.test.ts",
+      "test_name": "SCN-14-2 · AC-14-2 — platform tables after migrate",
+      "expected_failure": "`AssertionError` ở `SCN-14-2`: **actual** sau `eso migrate` chỉ có `platform.schema_version`, thiếu `platform.consumer` và `platform.consumer_event` · **expected** cả ba bảng `platform` tồn tại và `public` trống"
+    }
+  ],
+  "allowed_files": [
+    "eso/control-plane/**",
+    "eso/migrations/**",
+    "eso/cli/**"
+  ],
+  "forbidden": [
+    "sdlc/**",
+    ".cursor/**",
+    ".agents/**"
+  ],
+  "verify": [
+    "cd eso/control-plane && bun test test/migrate.test.ts"
+  ],
+  "base_commit": "8a61f02"
+}

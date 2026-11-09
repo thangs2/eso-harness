@@ -1,0 +1,24 @@
+{
+  "ticket": "ESO-534",
+  "epic": "ESO-292",
+  "bip": {
+    "id": "BIP-L11",
+    "file": "sdlc/09.wbs/02.bootstrap-packets/01.bip/l1-1.bip.md"
+  },
+  "technical": false,
+  "inv": ["BR-01", "BR-02", "BR-15"],
+  "ac": ["AC-14-1", "AC-14-2", "AC-14-3"],
+  "scn": ["SCN-14-1", "SCN-14-2", "SCN-14-3"],
+  "red_packets": [
+    {
+      "packet": "sdlc/10.test/70.l1-1-platform-schema.tdd-unit.md",
+      "test_file": "eso/control-plane/test/migrate.test.ts",
+      "test_name": "SCN-14-1 · AC-14-1 — platform schema + migrate idempotent",
+      "expected_failure": "`AssertionError` ở `SCN-14-1`: **actual** chạy `eso migrate` hai lần ghi thêm một dòng `platform.schema_version` (hoặc bảng `platform.*` chưa tồn tại) · **expected** chạy hai lần chỉ còn đúng một dòng `schema_version`, đủ ba bảng `platform` và `public` trống"
+    }
+  ],
+  "allowed_files": ["eso/control-plane/**", "eso/migrations/**", "eso/cli/**"],
+  "forbidden": ["sdlc/**", ".cursor/**", ".agents/**"],
+  "verify": ["cd eso/control-plane && bun test test/migrate.test.ts"],
+  "base_commit": "8a61f02"
+}
