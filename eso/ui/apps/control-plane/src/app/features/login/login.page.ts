@@ -1,32 +1,46 @@
-import { Component, ChangeDetectionStrategy, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
+import { MatButtonModule } from '@angular/material/button';
+import { MatCardModule } from '@angular/material/card';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
 import { AuthService } from '../../core/auth/auth.service.js';
 import { AppConfigService } from '../../core/config/app-config.service.js';
 
 @Component({
     selector: 'eso-login-page',
     standalone: true,
-    imports: [FormsModule],
+    imports: [FormsModule, MatButtonModule, MatCardModule, MatFormFieldModule, MatInputModule],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
-        <section class="panel login-panel" aria-label="Đăng nhập control plane">
-            <p class="eyebrow">Control Plane</p>
-            <h1>Đăng nhập</h1>
-            <p class="subtitle">Dùng credential trong <code>eso/.env</code> (HTTP Basic).</p>
-            @if (error()) {
-                <p class="form-error" role="alert">{{ error() }}</p>
-            }
-            <form (ngSubmit)="submit()">
-                <label>Tài khoản
-                    <input name="user" [(ngModel)]="user" autocomplete="username" required>
-                </label>
-                <label>Mật khẩu
-                    <input name="password" type="password" [(ngModel)]="password" autocomplete="current-password" required>
-                </label>
-                <button class="btn-primary" type="submit" [disabled]="loading()">Đăng nhập</button>
-            </form>
-        </section>
+        <main class="login-shell">
+            <mat-card class="login-panel" aria-label="Đăng nhập control plane">
+                <p class="eyebrow login-eyebrow">ESO Control Plane</p>
+                <mat-card-header>
+                    <mat-card-title>Đăng nhập</mat-card-title>
+                    <mat-card-subtitle>Dùng credential trong <code>eso/.env</code> (HTTP Basic).</mat-card-subtitle>
+                </mat-card-header>
+                <mat-card-content>
+                    @if (error()) {
+                        <p class="form-error" role="alert">{{ error() }}</p>
+                    }
+                    <form (ngSubmit)="submit()" class="login-form">
+                        <mat-form-field appearance="outline">
+                            <mat-label>Tài khoản</mat-label>
+                            <input matInput name="user" [(ngModel)]="user" autocomplete="username" required>
+                        </mat-form-field>
+                        <mat-form-field appearance="outline">
+                            <mat-label>Mật khẩu</mat-label>
+                            <input matInput name="password" type="password" [(ngModel)]="password" autocomplete="current-password" required>
+                        </mat-form-field>
+                        <button mat-flat-button color="primary" type="submit" [disabled]="loading()" class="login-submit">
+                            {{ loading() ? 'Đang đăng nhập…' : 'Đăng nhập' }}
+                        </button>
+                    </form>
+                </mat-card-content>
+            </mat-card>
+        </main>
     `,
 })
 export class LoginPage {
@@ -34,8 +48,11 @@ export class LoginPage {
     private readonly config = inject(AppConfigService);
     private readonly router = inject(Router);
 
-    user = '';
-    password = '';
+    private readonly isDev = this.config.environment() === 'development';
+
+    // Local dev convenience only: never ship these defaults in a production config.
+    user = this.isDev ? 'operator' : '';
+    password = this.isDev ? 'eso-dev-only-token' : '';
     readonly loading = signal(false);
     readonly error = signal<string | null>(null);
 

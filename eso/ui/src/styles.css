@@ -12,34 +12,96 @@
   --danger-ink: #9b1c1c;
   --ok-bg: #e8f5ee;
   --ok-ink: #166534;
-  --radius: 10px;
+  --radius: var(--radius-md);
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
   --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 8px 24px rgba(16, 24, 40, .06);
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-md: 16px;
+  --text-lg: 20px;
+  --text-xl: 24px;
+  --text-2xl: 32px;
+  --container: 1280px;
+  --header-h: 64px;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+
+  /* Material 3 palette overrides — keep the ESO teal brand, not Azure blue. */
+  --mat-sys-primary: #0f4c5c;
+  --mat-sys-on-primary: #ffffff;
+  --mat-sys-primary-container: #d7edf1;
+  --mat-sys-on-primary-container: #063137;
+  --mat-sys-secondary: #4a6b72;
+  --mat-sys-on-secondary: #ffffff;
+  --mat-sys-secondary-container: #e3eef0;
+  --mat-sys-on-secondary-container: #15202b;
+  --mat-sys-tertiary: #16695f;
+  --mat-sys-on-tertiary: #ffffff;
+  --mat-sys-tertiary-container: #d2efe9;
+  --mat-sys-on-tertiary-container: #063137;
+  --mat-sys-surface: #ffffff;
+  --mat-sys-surface-dim: #eef2f5;
+  --mat-sys-surface-bright: #ffffff;
+  --mat-sys-surface-container-lowest: #ffffff;
+  --mat-sys-surface-container-low: #f8fafb;
+  --mat-sys-surface-container: #f4f6f8;
+  --mat-sys-surface-container-high: #eef2f5;
+  --mat-sys-surface-container-highest: #e6ebef;
+  --mat-sys-on-surface: #15202b;
+  --mat-sys-on-surface-variant: #5c6b7a;
+  --mat-sys-outline: #c9d3dc;
+  --mat-sys-outline-variant: #dbe2e8;
+  --mat-sys-error: #9b1c1c;
+  --mat-sys-on-error: #ffffff;
+  --mat-sys-error-container: #fdecec;
+  --mat-sys-on-error-container: #7f1d1d;
+  --mat-card-elevated-container-shape: var(--radius-md);
+  --mat-card-filled-container-shape: var(--radius-md);
+  --mat-form-field-outlined-container-shape: var(--radius-sm);
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; min-height: 100%; }
 body {
   background: var(--bg);
   color: var(--ink);
-  font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  font: 400 var(--text-sm)/1.5 var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
+h1, h2, h3 { letter-spacing: -.015em; }
 a { color: var(--brand); }
 .eso-layout { min-height: 100vh; display: flex; flex-direction: column; }
 .eso-header {
-  display: flex; align-items: center; justify-content: space-between; gap: 24px;
-  padding: 14px 28px; background: #0b2b33; color: #eaf4f6;
+  min-height: var(--header-h);
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-4);
+  padding: var(--space-2) max(var(--space-5), calc((100vw - var(--container)) / 2 + var(--space-5)));
+  background: #0b2b33; color: #eaf4f6;
   border-bottom: 1px solid #123d47;
 }
-.eso-header .logo { font-weight: 700; letter-spacing: .02em; font-size: 15px; }
-.eso-nav { display: flex; flex-wrap: wrap; gap: 6px; }
+.brand { display: inline-flex; align-items: baseline; gap: var(--space-2); color: #eaf4f6; text-decoration: none; white-space: nowrap; }
+.brand-mark { font-weight: 800; letter-spacing: .08em; font-size: var(--text-sm); color: #7dd3c7; }
+.brand-text { font-weight: 700; letter-spacing: .02em; font-size: var(--text-sm); }
+.eso-nav { display: flex; flex: 1; flex-wrap: wrap; gap: var(--space-1); justify-content: center; }
 .eso-nav a {
   color: #cfe3e8; text-decoration: none; padding: 7px 11px; border-radius: 999px;
   font-size: 13px; border: 1px solid transparent;
 }
 .eso-nav a:hover { background: rgba(255,255,255,.08); color: #fff; }
 .eso-nav a.active { background: #eaf4f6; color: #0b2b33; border-color: #eaf4f6; font-weight: 600; }
-.eso-content { width: min(1120px, 100%); margin: 0 auto; padding: 28px 24px 48px; }
-.page-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
-.page-header h1 { margin: 2px 0 0; font-size: 24px; letter-spacing: -.02em; }
+.eso-content { width: min(var(--container), 100%); margin: 0 auto; padding: var(--space-5) var(--space-5) var(--space-7); }
+.page-header { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-5); }
+.page-header h1 { margin: var(--space-1) 0 0; font-size: var(--text-xl); letter-spacing: -.02em; }
 .page-header .eyebrow { margin: 0; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .12em; }
 .page-header .subtitle { margin: 4px 0 0; color: var(--muted); }
 .readonly-badge {
@@ -96,6 +158,32 @@ a { color: var(--brand); }
 .partial-banner, .stale-banner { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; color: var(--warn-ink); font-weight: 600; }
 .warning-icon { font-size: 16px; }
 footer.demo-note { margin-top: 20px; color: var(--muted); font-size: 12px; }
+
+/* Account menu + Material login */
+.account { position: relative; display: flex; align-items: center; }
+.account-trigger {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  border: 1px solid rgba(207, 227, 232, .28); background: rgba(255, 255, 255, .06);
+  color: #eaf4f6; border-radius: 999px; padding: var(--space-1) var(--space-2) var(--space-1) var(--space-1);
+  font: inherit; font-size: var(--text-xs); cursor: pointer;
+}
+.account-trigger:hover, .account-trigger[aria-expanded="true"] { background: rgba(255, 255, 255, .14); }
+.account-trigger:focus-visible { outline: 2px solid #9cc7d1; outline-offset: 2px; }
+.avatar {
+  width: 28px; height: 28px; display: inline-grid; place-items: center;
+  border-radius: 50%; background: #7dd3c7; color: #063137; font-weight: 800; font-size: var(--text-xs);
+}
+.account-name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-caret { opacity: .7; }
+.login-shell { min-height: 100vh; display: grid; place-items: center; padding: var(--space-5); background: radial-gradient(circle at 20% 0%, #e6f2f4, var(--bg) 55%); }
+.login-panel { width: min(420px, 100%); padding: var(--space-2); }
+.login-panel mat-card-header { display: block; margin-bottom: var(--space-2); }
+.login-panel .eyebrow { margin: 0 0 var(--space-1); }
+.login-panel mat-card-title { display: block; font-size: var(--text-xl); font-weight: 700; }
+.login-panel mat-card-subtitle { margin-top: var(--space-1); }
+.login-form { display: grid; gap: var(--space-3); margin-top: var(--space-4); }
+.login-form mat-form-field { width: 100%; }
+.login-submit { width: 100%; height: 44px; }
 @media (max-width: 720px) {
   .eso-header { align-items: flex-start; flex-direction: column; gap: 10px; padding: 14px 16px; }
   .eso-content { padding: 18px 12px 32px; }
@@ -104,7 +192,7 @@ footer.demo-note { margin-top: 20px; color: var(--muted); font-size: 12px; }
 }
 /* Onboarding + consumers */
 .onboarding { display: grid; gap: 18px; }
-.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 22px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: var(--space-5); }
 .stepper { display: flex; gap: 8px; flex-wrap: wrap; }
 .step { display: inline-flex; align-items: center; gap: 8px; padding: 7px 11px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); background: #fff; font-size: 13px; }
 .step-no { width: 22px; height: 22px; display: inline-grid; place-items: center; border-radius: 50%; background: #eef2f5; font-size: 12px; font-weight: 700; }
@@ -153,6 +241,26 @@ pre { background: #0f1b22; color: #d7e7ec; padding: 14px; border-radius: 8px; ov
 .empty-panel { text-align: center; display: grid; gap: 8px; place-items: center; }
 .empty-panel p { color: var(--muted); margin: 0; }
 .col-actions { display: flex; gap: 8px; }
+
+/* Account menu + Material login */
+.account { position: relative; display: flex; align-items: center; }
+.account-trigger {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  border: 1px solid rgba(207, 227, 232, .28); background: rgba(255, 255, 255, .06);
+  color: #eaf4f6; border-radius: 999px; padding: var(--space-1) var(--space-2) var(--space-1) var(--space-1);
+  font: inherit; font-size: var(--text-xs); cursor: pointer;
+}
+.account-trigger:hover, .account-trigger[aria-expanded="true"] { background: rgba(255, 255, 255, .14); }
+.account-trigger:focus-visible { outline: 2px solid #9cc7d1; outline-offset: 2px; }
+.avatar {
+  width: 28px; height: 28px; display: inline-grid; place-items: center;
+  border-radius: 50%; background: #7dd3c7; color: #063137; font-weight: 800; font-size: var(--text-xs);
+}
+.account-name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-caret { opacity: .7; }
+.login-form { display: grid; gap: var(--space-3); margin-top: var(--space-4); }
+.login-form mat-form-field { width: 100%; }
+.login-submit { width: 100%; height: 44px; }
 @media (max-width: 720px) {
   .form-grid { grid-template-columns: 1fr; }
   .zone-row { grid-template-columns: 1fr; }
@@ -203,6 +311,38 @@ pre { background: #0f1b22; color: #d7e7ec; padding: 14px; border-radius: 8px; ov
   --ok-bg: #0f2a22;
   --ok-ink: #6ee7b7;
   --shadow: 0 1px 2px rgba(0,0,0,.35), 0 12px 30px rgba(0,0,0,.22);
+
+  /* Material 3 dark palette — same dark surface as the console, cyan accent. */
+  --mat-sys-primary: #22d3ee;
+  --mat-sys-on-primary: #062027;
+  --mat-sys-primary-container: #0f2a33;
+  --mat-sys-on-primary-container: #7fe3f0;
+  --mat-sys-secondary: #7dd3c7;
+  --mat-sys-on-secondary: #062027;
+  --mat-sys-secondary-container: #16323a;
+  --mat-sys-on-secondary-container: #c8f3ef;
+  --mat-sys-tertiary: #67e8f9;
+  --mat-sys-on-tertiary: #062027;
+  --mat-sys-tertiary-container: #0d2b35;
+  --mat-sys-on-tertiary-container: #a5f3fc;
+  --mat-sys-surface: #111a2b;
+  --mat-sys-surface-dim: #0b111c;
+  --mat-sys-surface-bright: #1a2a3e;
+  --mat-sys-surface-container-lowest: #0b111c;
+  --mat-sys-surface-container-low: #0f1a2b;
+  --mat-sys-surface-container: #111a2b;
+  --mat-sys-surface-container-high: #162235;
+  --mat-sys-surface-container-highest: #1a2a3e;
+  --mat-sys-on-surface: #e6edf3;
+  --mat-sys-on-surface-variant: #8fa3b8;
+  --mat-sys-outline: #2a3b52;
+  --mat-sys-outline-variant: #223247;
+  --mat-sys-error: #fca5a5;
+  --mat-sys-on-error: #2a1216;
+  --mat-sys-error-container: #2a1216;
+  --mat-sys-on-error-container: #fecaca;
+  --mat-card-elevated-container-color: #111a2b;
+  --mat-card-filled-container-color: #111a2b;
 }
 html { color-scheme: dark; }
 body { background: radial-gradient(1200px 600px at 10% -10%, #10263a 0%, var(--bg) 55%); color: var(--ink); }
@@ -210,6 +350,11 @@ body { background: radial-gradient(1200px 600px at 10% -10%, #10263a 0%, var(--b
 .eso-nav a { color: #9fb3c8; }
 .eso-nav a:hover { background: #142235; color: #fff; }
 .eso-nav a.active { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); }
+.login-shell { background: radial-gradient(900px 500px at 20% 0%, #10263a 0%, var(--bg) 60%); }
+.login-panel { background: var(--surface); color: var(--ink); }
+.login-panel mat-card-title { color: var(--ink); }
+.login-panel mat-card-subtitle { color: var(--muted); }
+.login-panel .eyebrow { color: var(--muted); }
 .panel, .turns-table, .frame-loading, .frame-failed, .frame-denied, .frame-empty, .frame-partial, .frame-stale, .frame-ready {
   background: var(--surface); color: var(--ink); border-color: var(--line);
 }
@@ -263,9 +408,28 @@ h3 { color: #8fa3b8; }
 .stat { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: grid; gap: 2px; }
 .stat-value { font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
 .stat-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+
+/* Account menu + Material login */
+.account { position: relative; display: flex; align-items: center; }
+.account-trigger {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  border: 1px solid rgba(207, 227, 232, .28); background: rgba(255, 255, 255, .06);
+  color: #eaf4f6; border-radius: 999px; padding: var(--space-1) var(--space-2) var(--space-1) var(--space-1);
+  font: inherit; font-size: var(--text-xs); cursor: pointer;
+}
+.account-trigger:hover, .account-trigger[aria-expanded="true"] { background: rgba(255, 255, 255, .14); }
+.account-trigger:focus-visible { outline: 2px solid #9cc7d1; outline-offset: 2px; }
+.avatar {
+  width: 28px; height: 28px; display: inline-grid; place-items: center;
+  border-radius: 50%; background: #7dd3c7; color: #063137; font-weight: 800; font-size: var(--text-xs);
+}
+.account-name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-caret { opacity: .7; }
+.login-form { display: grid; gap: var(--space-3); margin-top: var(--space-4); }
+.login-form mat-form-field { width: 100%; }
+.login-submit { width: 100%; height: 44px; }
 @media (max-width: 720px) { .stats-row { grid-template-columns: 1fr; } }
 /* Onboarding layout/plan */
-.eso-content { width: min(1040px, 100%); }
 .stepper { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .step { justify-content: center; }
 .profile-cards { grid-auto-rows: 1fr; }
@@ -286,4 +450,126 @@ h3 { color: #8fa3b8; }
 @media (max-width: 900px) {
   .recipe-detail { grid-template-columns: 1fr; }
   .stepper { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* ---- login polish: dark surface, system sans, consistent shape ---- */
+.login-shell {
+  background: radial-gradient(1100px 600px at 18% -10%, #10263a 0%, #0b111c 62%);
+}
+.login-panel {
+  width: min(440px, 100%);
+  padding: var(--space-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .35);
+}
+.login-eyebrow { margin: 0 0 var(--space-3); }
+.login-panel mat-card-header { display: block; margin: 0 0 var(--space-2); padding: 0; }
+.login-panel mat-card-title,
+.login-panel .mat-mdc-card-title {
+  display: block; font-family: inherit !important;
+  font-size: var(--text-xl); font-weight: 700; line-height: 1.2; color: var(--ink);
+}
+.login-panel mat-card-subtitle,
+.login-panel .mat-mdc-card-subtitle {
+  margin-top: var(--space-2); font-family: inherit !important; color: var(--muted);
+}
+.login-form { display: grid; gap: var(--space-3); margin-top: var(--space-4); }
+.login-submit { width: 100%; height: 44px; border-radius: var(--radius-sm) !important; font-family: inherit !important; }
+body, button, input, textarea, select,
+.mat-mdc-card-title, .mat-mdc-card-subtitle, .mat-mdc-button-base,
+.mat-mdc-form-field, .mat-mdc-menu-item {
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif !important;
+}
+
+/* Material typography tokens: use the operator's system sans, not Roboto/serif fallback. */
+:root {
+  --mat-sys-body-large-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --mat-sys-body-medium-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --mat-sys-body-small-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --mat-sys-label-large-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --mat-sys-label-medium-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --mat-sys-label-small-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --mat-sys-title-large-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --mat-sys-title-medium-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --mat-sys-title-small-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+}
+:root {
+  --mat-sys-body-large: 400 1rem / 1.5rem ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --mat-sys-body-medium: 400 .875rem / 1.25rem ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --mat-sys-body-small: 400 .75rem / 1rem ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --mat-sys-label-large: 500 .875rem / 1.25rem ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --mat-sys-label-medium: 500 .75rem / 1rem ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --mat-sys-label-small: 500 .6875rem / 1rem ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --mat-sys-title-large: 400 1.375rem / 1.75rem ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --mat-sys-title-medium: 500 1rem / 1.5rem ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --mat-sys-title-small: 500 .875rem / 1.25rem ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+}
+
+/* Material child elements sometimes carry their own `font` shorthand. */
+.mat-mdc-button,
+.mat-mdc-button .mdc-button__label,
+.mat-mdc-unelevated-button,
+.mat-mdc-unelevated-button .mdc-button__label,
+.mat-mdc-form-field,
+.mat-mdc-form-field .mat-mdc-floating-label,
+.mat-mdc-form-field .mat-mdc-input-element,
+.mat-mdc-form-field .mdc-floating-label,
+.mat-mdc-menu-item,
+.mat-mdc-menu-item .mat-mdc-menu-item-text {
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif !important;
+}
+
+
+/* ---- login typography: professional hierarchy ---- */
+.login-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: #7dd3c7;
+}
+.login-panel { padding: var(--space-6); }
+.login-panel mat-card-title,
+.login-panel .mat-mdc-card-title {
+  font-size: 28px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -.02em;
+}
+.login-panel mat-card-subtitle,
+.login-panel .mat-mdc-card-subtitle {
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  font-weight: 400;
+  letter-spacing: normal;
+  color: var(--muted);
+}
+.login-panel .mat-mdc-floating-label,
+.login-panel .mdc-floating-label {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: .01em;
+}
+.login-panel .mat-mdc-form-field .mat-mdc-input-element {
+  font-size: 15px;
+  letter-spacing: normal;
+}
+.login-form { gap: 18px; margin-top: var(--space-3); }
+.login-submit {
+  height: 46px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: .01em;
+}
+
+/* Material label/button overrides need !important: component styles load after globals. */
+.login-panel .mat-mdc-floating-label,
+.login-panel .mdc-floating-label {
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  letter-spacing: .01em !important;
+}
+.login-panel .mdc-button__label {
+  font-weight: 600 !important;
+  letter-spacing: .01em !important;
 }

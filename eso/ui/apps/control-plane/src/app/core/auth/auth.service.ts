@@ -14,6 +14,17 @@ export class AuthService {
     readonly authorization = this._authorization.asReadonly();
     readonly isAuthenticated = computed(() => Boolean(this._authorization()));
 
+    /** Display name only; the password stays inside the encoded header. */
+    readonly user = computed(() => {
+        const value = this._authorization();
+        if (!value || !value.startsWith('Basic ')) return 'Operator';
+        try {
+            return atob(value.slice(6)).split(':')[0] || 'Operator';
+        } catch {
+            return 'Operator';
+        }
+    });
+
     setAuthorization(value: string | null): void {
         try {
             if (value) sessionStorage.setItem('eso.auth', value);

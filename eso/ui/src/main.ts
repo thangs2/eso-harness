@@ -1,4 +1,5 @@
 import { bootstrapApplication } from '@angular/platform-browser';
+import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { provideRouter } from '@angular/router';
 import { ShellComponent } from '../apps/control-plane/src/app/layout/shell/shell.component.js';
 import { APP_ROUTES } from '../apps/control-plane/src/app/routes.js';
@@ -10,6 +11,7 @@ const API_BASE = 'http://127.0.0.1:8787';
 bootstrapApplication(ShellComponent, {
     providers: [
         provideRouter(APP_ROUTES),
+        provideAnimationsAsync(),
         { provide: APP_CONFIG, useValue: { apiBaseUrl: API_BASE, environment: 'development' } },
         {
             provide: CONTROL_PLANE_API_CLIENT,
