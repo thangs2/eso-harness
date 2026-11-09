@@ -28,7 +28,7 @@ Ràng buộc còn lại là **bằng chứng**: code đổi sau lần QC ⇒ k�
 
 ## Inputs
 
-`key` ticket QC · scenario matrix (`sdlc/06.analysis/04.quality-control/`) · `ac_ids_in_scope` (**tập con**, không phải cả
+`key` ticket QC · scenario matrix (`sdlc/06.analysis/03.scn/`) · `ac_ids_in_scope` (**tập con**, không phải cả
 epic) · env/base URL · commit sha hoặc PR · JSON của `verify`/`audit` khi có.
 
 ## Protocol

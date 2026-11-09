@@ -1,56 +1,26 @@
-# `06.analysis` — Phân tích
+# `06.analysis` — Phân tích: US · AC · SCN
 
-**Trạng thái:** `DRAFT` · 2026-10-25 · **Giai đoạn:** discovery → planning ([`D-40`](../03.inception/02.decision-log/00.index.md))
-
-> **Vì sao folder này tồn tại.** `07.technical/01.architecture/` có 17 file mô tả **cách hệ thống chạy**, nhưng chưa có một dòng nào
-> mô tả **ai dùng nó để làm gì**. Kiến trúc đang trả lời câu hỏi **chưa được phát biểu**.
->
-> Folder này phát biểu câu hỏi đó — theo thứ tự: **ai → làm gì → để làm được thì phải thoả gì**.
-
-## Bắt đầu từ đây
-
-[`00.pain-point-trace.md`](00.pain-point-trace.md) — **P1–P7 → REQ → UC → US → AC**, và **tài liệu đầu tiên** mỗi nỗi đau
-cần. Đọc cái này trước để biết chỗ nào trống.
+**Điều này có nghĩa gì:** biến `REQ` (SRS) thành **user story** và **tiêu chí nghiệm thu kiểm được**, rồi thành
+**scenario**. Đây là nơi `WBS` lấy `AC` để giao slice, và `BIP/FIP` lấy `AC` để viết packet.
 
 ## 1. Cấu trúc
 
-```text
-01.business-analysis/
-  01.actors.md            ✅ 8 actor — ai, và ai có QUYỀN gì
-  02.use-cases.md         ✅ 14 UC-* với trigger · trước · sau
-  03.business-rules.md    ✅ 18 luật xuyên use case (BR-01…BR-18)
-  05.iam-functions.md     ✅ 6 chức năng IAM — 6 US + 23 AC
-  06.eso-features.md      ✅ 23 chức năng (18 v1 + 5 v2) + trạng thái
-  07.us-feature-map.md    ✅ US → feature: một nguồn, epic của story suy từ đây
-  00.baseline-v2-narrative/ ✅ **14 narrative v2** — 305–543 dòng/bản, 11 mục cố định
-02.user-stories/          ✅ **54 US**
-03.acceptance-criteria/   ✅ **349 AC** · 12 miền · US nào cũng có ≥ 1 AC
-04.quality-control/       ✅ **356 SCN** · 14 matrix · 0 đã chạy
-```
-⬜ = **chưa tạo**, vì chưa có nội dung thật. Repo này không tạo folder rỗng.
+| Folder | Giữ gì | Trạng thái |
+|---|---|---|
+| [`01.us/`](01.us/00.index.md) | **35 US** — một US cho mỗi `REQ` | ✅ GĐ1 16 · GĐ2 19 |
+| [`02.ac/`](02.ac/00.index.md) | **AC** — mỗi US một file, bảng 8 cột | ✅ GĐ1 16 · GĐ2 19 |
+| [`03.scn/`](03.scn/00.index.md) | `SCN` — scenario 1:1 với `AC`, status `planned` | ✅ 35 file |
 
-> **Sửa 2026-11-02.** Khối trên từng ghi `22 US` · `333 AC` · `337 dòng SCN` · `343/433 AC phủ` · `18 chức năng` · `BR-01…BR-13`, và
-> **không hề nhắc** `00.baseline-v2-narrative/`. Đo lại: **54 · 349 · 355 · 0 chạy · 23 · 18**. Mọi con số cũ đều **thấp hơn** thật —
-> nghĩa là tài liệu này đã ngừng được cập nhật từ lâu và vẫn đang là cửa vào của folder.
-
-## 2. Luật của folder này
-
-| Luật | Vì sao |
-|---|---|
-| **UC không nhắc tới công nghệ** | nếu UC nói "Postgres" thì nó là thiết kế, không phải phân tích |
-| **Mỗi UC có điều kiện trước/sau** | không có "sau" thì không biết đã xong chưa |
-| **AC phải test được bằng một test** | luật của [Stages](../02.governance/01.standard/04.workflow/02.workflow.md) §1 |
-| **AC thuộc ĐÚNG một US** | AC dùng US khác thì không test được một mình; luật xuyên suốt là **BR**, không phải AC |
-| **US truy về P1–P7** | không truy được thì nó là ý thích, không phải yêu cầu |
-| **Không chép lại `07.technical/01.architecture`** | analysis nói *cái gì*, architecture nói *thế nào* |
-
-## 3. Thứ tự đọc
+## 2. Chuỗi
 
 ```text
-03.inception/00.problem/00.index.md      (P1–P7 — nỗi đau)
-  → 06.analysis/01.*            (ai, làm gì)
-    → 06.analysis/02–03         (US, AC)
-      → 07.technical/01.architecture/        (thế nào)
+REQ (SRS) → US (01.us) → AC (02.ac) → SCN (03.scn) → WBS slice → BIP/FIP packet → code
 ```
 
-Đọc ngược lại là đọc **giải pháp trước vấn đề** — đúng thứ tự tôi đã làm sai trong phiên này.
+**Luật:**
+
+1. Mỗi `US` trace **đúng 1 `REQ`**; mỗi `AC` trace **đúng 1 `US`**; id ổn định, không tái dùng.
+2. AC phải **kiểm được** (có test/đường kiểm) và **một US không mượn AC của US khác**.
+3. AC có **"không kiểm gì"** — nếu không viết được, AC đang giả vờ đầy đủ.
+4. `SCN` viết **trước** code, **chạy sau** impl; packet `READY` chỉ cần SCN **đã khai** (`D-81`).
+5. Không nhắc công nghệ trong US/AC (đó là FRD/technical).

@@ -129,7 +129,7 @@ anti-pattern J-01…J-17 · WBS atomic "một subtask = một file hoặc một 
 Thứ tự **cứng**, không được đảo:
 
 ```text
-BA AC → QC soạn SCN (sdlc/06.analysis/04.quality-control, trạng thái `planned`)
+BA AC → QC soạn SCN (sdlc/06.analysis/03.scn, trạng thái `planned`)
       → packet §7 AC → SCN → RED/GREEN → §9 READY
       → tdd-unit (RED) → tdd-impl (GREEN) → tdd-coverage → tdd-qc CHẠY SCN + RTM
 ```
