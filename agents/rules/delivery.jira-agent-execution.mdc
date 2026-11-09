@@ -57,14 +57,14 @@ Mỗi ticket (trừ Epic) phải có **đủ bốn**: `subtask` (con) · `relate
 
 ### 2.1 Story/Task phải có **4 Subtask — TDD quartet** (chuẩn BAP)
 
-Một Story/Task/Bug **không** được tạo với 1–2 subtask tuỳ ý. Bắt buộc **đúng 4** subtask theo nhãn:
+Một Story/Task/Bug **không** được tạo với 1–2 subtask tuỳ ý. Bắt buộc **đúng 4** subtask quartet; slice runtime (`ESO-525` · `ESO-528` · `ESO-531`) có thêm `load` + `stress` ⇒ **6**, theo nhãn:
 
 | Subtask | Label | Summary | SP |
 |---|---|---|---|
 | Unit tests | `tdd-unit` | `[be]/[fe] <leaf> — unit tests` | **2** |
 | Implement | `tdd-impl` | `[…] <leaf> — Implement (DEV)` | **= WBS dev SP** |
 | Coverage gate | `tdd-coverage` | `[…] <leaf> — coverage gate` | **1** |
-| Thực thi SCN + RTM | `tdd-qc` | `[qc] <leaf> — run SCN + RTM` | **3** |
+| Thực thi SCN + evidence | `tdd-qc` | `[qc] <leaf> — run SCN + evidence` | **3** |
 | Làm rõ AC | `tdd-ba` | `[ba] … — clarify AC` | **2** (chỉ khi AC chưa rõ) |
 | Quyết định NFR | `tdd-perf` | `[qc] … — decide NFR` | **5** — Task độc lập, không subtask |
 | Load test | `tdd-load` | `[qc] … — load test` | **5** — chỉ slice runtime |

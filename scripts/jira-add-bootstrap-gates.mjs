@@ -41,7 +41,7 @@ for (const g of GATES) {
     for (const b of g.blockedBy) await link(b, key);
     for (const b of g.relates) await rel(key, b);
     const role = 'be';
-    const specs = [[`[${role}] ${g.summary} — unit tests`, 'tdd-unit', 2, 'first step in quartet lane — no incoming dependency'], [`[${role}] ${g.summary} — Implement (DEV)`, 'tdd-impl', 1, ''], [`[${role}] ${g.summary} — coverage gate`, 'tdd-coverage', 1, 'last step in quartet lane — no outgoing dependency'], [`[qc] ${g.summary} — run SCN + RTM`, 'tdd-qc', 3, 'last step in quartet lane — no outgoing dependency']];
+    const specs = [[`[${role}] ${g.summary} — unit tests`, 'tdd-unit', 2, 'first step in quartet lane — no incoming dependency'], [`[${role}] ${g.summary} — Implement (DEV)`, 'tdd-impl', 1, ''], [`[${role}] ${g.summary} — coverage gate`, 'tdd-coverage', 1, 'last step in quartet lane — no outgoing dependency'], [`[qc] ${g.summary} — run SCN + evidence`, 'tdd-qc', 3, 'last step in quartet lane — no outgoing dependency']];
     const subs = {};
     for (const [summary, label, pts, why] of specs) {
         const s = await call('POST', '/rest/api/2/issue', { fields: { project: { key: 'ESO' }, issuetype: { name: 'Subtask' }, parent: { key }, summary, labels: ['bootstrap', label], description: `h3. Parent\n* ${key} (${g.tmp})\n\nh3. Done when\n* Step test passes; parent gate holds.` + (why ? `\n\nh3. Link exception\n* ${why}` : ''), [SP]: pts } });

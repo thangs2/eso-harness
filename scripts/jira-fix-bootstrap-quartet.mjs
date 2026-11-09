@@ -45,7 +45,7 @@ for (const t of tops) {
         [`[${role}] ${leaf} — unit tests`, `tdd-unit`, 2],
         [`[${role}] ${leaf} — Implement (DEV)`, `tdd-impl`, dev],
         [`[${role}] ${leaf} — coverage gate`, `tdd-coverage`, 1],
-        [`[qc] ${leaf} — run SCN + RTM`, `tdd-qc`, 3],
+        [`[qc] ${leaf} — run SCN + evidence`, `tdd-qc`, 3],
     ];
     plan.push({ top: t.key, type: t.fields.issuetype.name, leaf, old, quartet, dev });
     console.log(`  ${t.key} ${t.fields.issuetype.name} ${leaf} · old_subtasks=${old.length} → quartet SP ${quartet.map((q) => q[2]).join('+')}=${quartet.reduce((a, q) => a + q[2], 0)}`);
