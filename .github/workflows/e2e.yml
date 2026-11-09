@@ -1,0 +1,35 @@
+name: e2e
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "deploy/**"
+      - "eso/**"
+      - ".github/workflows/e2e.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: compose e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Run e2e suite
+        run: bash deploy/bin/e2e.sh
+      - name: Upload deploy logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-deploy-logs
+          path: deploy/logs
+          if-no-files-found: ignore
+          retention-days: 7

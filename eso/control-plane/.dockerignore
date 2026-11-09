@@ -1,0 +1,11 @@
+# Rebuilt inside the image or never needed in the build context.
+node_modules
+dist
+test
+coverage
+.angular
+.git
+.env*
+*.log
+
+# Build inputs intentionally kept: package.json, package-lock.json, tsconfig.json, src/

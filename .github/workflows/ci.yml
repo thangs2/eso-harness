@@ -1,0 +1,99 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  harness:
+    name: harness gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Generated host trees are in sync
+        run: node scripts/build-host-trees.mjs --check
+      - name: Dual harness invariant
+        run: node scripts/check-dual-harness.mjs
+
+  shell:
+    name: deploy shell
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Bash syntax
+        run: bash -n deploy/bin/*.sh
+      - name: Deploy scripts are executable
+        run: |
+          for script in deploy/bin/*.sh; do
+            test -x "$script" || { echo "not executable: $script"; exit 1; }
+          done
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Shellcheck
+        run: shellcheck -x deploy/bin/*.sh
+
+  compose:
+    name: compose config
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Validate dev compose
+        run: docker compose --env-file deploy/env/dev.env.example -f deploy/compose/compose.dev.yml config -q
+      - name: Validate prod compose
+        run: docker compose --env-file deploy/env/prod.env.example -f deploy/compose/compose.prod.yml config -q
+      - name: Validate e2e compose
+        run: docker compose --env-file deploy/env/dev.env.example -f deploy/compose/compose.e2e.yml config -q
+
+  dockerfiles:
+    name: dockerfiles
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Check control-plane Dockerfile
+        run: docker buildx build --check -f eso/control-plane/Dockerfile eso/control-plane
+      - name: Check ui Dockerfile
+        run: docker buildx build --check -f eso/ui/Dockerfile eso/ui
+      - name: Build control-plane image
+        run: docker build -t tmp/eso-control-plane -f eso/control-plane/Dockerfile eso/control-plane
+      - name: Build ui image
+        run: docker build -t tmp/eso-ui -f eso/ui/Dockerfile eso/ui
+      - name: Assert non-root runtime
+        run: |
+          for img in tmp/eso-control-plane tmp/eso-ui; do
+            uid="$(docker run --rm --entrypoint id "$img" -u)"
+            echo "$img uid=$uid"
+            test "$uid" != "0"
+          done
+
+  make:
+    name: make dry-run
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Makefile parses and build target is printable
+        run: make -n build

@@ -1,0 +1,81 @@
+name: eso
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: "${ESO_DB_NAME:-eso}"
+      POSTGRES_USER: "${ESO_DB_USER:-eso}"
+      POSTGRES_PASSWORD: "${ESO_DB_PASSWORD:?ESO_DB_PASSWORD is required}"
+      PGTZ: UTC
+      TZ: UTC
+    ports:
+      - "${ESO_DB_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ../docker/postgres-init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    networks:
+      - eso
+
+  control-plane:
+    build:
+      context: ../../eso/control-plane
+      dockerfile: Dockerfile
+    image: "eso/control-plane:${ESO_IMAGE_TAG:-dev}"
+    environment:
+      ESO_PORT: "8788"
+      ESO_DB_URL: "postgres://${ESO_DB_USER:-eso}:${ESO_DB_PASSWORD:?ESO_DB_PASSWORD is required}@postgres:5432/${ESO_DB_NAME:-eso}"
+      ESO_AUTH_TOKEN: "${ESO_AUTH_TOKEN:?ESO_AUTH_TOKEN is required}"
+      ESO_AUTH_PROJECT: "${ESO_AUTH_PROJECT:?ESO_AUTH_PROJECT is required}"
+      # The current Bun server reads Basic/Bearer variables; map the contract token so the
+      # single-token dev/e2e environment can start without a product-source change.
+      ESO_AUTH_USER: "${ESO_AUTH_USER:-operator}"
+      ESO_AUTH_PASSWORD: "${ESO_AUTH_TOKEN:?ESO_AUTH_TOKEN is required}"
+      ESO_API_TOKEN: "${ESO_AUTH_TOKEN:?ESO_AUTH_TOKEN is required}"
+    ports:
+      - "${ESO_API_PORT:-8787}:8787"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8787/health | grep -q '\"status\":\"ok\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    networks:
+      - eso
+
+  ui:
+    build:
+      context: ../../eso/ui
+      dockerfile: Dockerfile
+    image: "eso/ui:${ESO_IMAGE_TAG:-dev}"
+    ports:
+      - "${ESO_UI_PORT:-4200}:8080"
+    depends_on:
+      control-plane:
+        condition: service_healthy
+    volumes:
+      - ../docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz | grep -qx ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+    networks:
+      - eso
+
+volumes:
+  postgres-data:
+
+networks:
+  eso:
+    driver: bridge

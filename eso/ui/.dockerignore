@@ -1,0 +1,13 @@
+# Rebuilt inside the image or never needed in the build context.
+node_modules
+dist
+.angular
+test
+coverage
+.git
+.env*
+*.log
+preview
+
+# Build inputs intentionally kept: bun.lock, package.json, angular.json,
+# tsconfig.json, tsconfig.app.json, src/, apps/, libs/, scripts/
