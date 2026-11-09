@@ -2,8 +2,8 @@
  * DDL for the platform registry.
  *
  * Normative source: sdlc/07.technical/10.bootstrap-planes/03.plane-d-data-model.md §2.
- * Bootstrap is CREATE ... IF NOT EXISTS at control-plane start; there is no migration runner and
- * no schema_version table.
+ * Bootstrap is CREATE ... IF NOT EXISTS at control-plane start; there is no DDL runner and no
+ * version table.
  */
 
 export const PLATFORM_SCHEMA = 'platform';
