@@ -12,21 +12,22 @@
     "BR-15"
   ],
   "ac": [
-    "AC-14-1"
+    "AC-02-1"
   ],
   "scn": [
-    "SCN-14-1"
+    "SCN-02-1"
   ],
   "red_packets": [
     {
       "packet": "sdlc/10.test/73.l1-1-platform-registry.tdd-qc.md",
       "test_file": "eso/control-plane/test/platform-registry.test.ts",
-      "test_name": "SCN-14-1 · AC-14-1 — Platform registry + create consumer schema · tdd-qc",
-      "expected_failure": "`SCN_MISMATCH` ở `SCN-14-1`: **actual** chạy SCN-14-1 chưa xanh hoặc status còn `planned` · **expected** SCN-14-1 xanh và status cập nhật kèm evidence"
+      "test_name": "SCN-02-1 · AC-02-1 — Platform registry + create consumer schema · tdd-qc",
+      "expected_failure": "`SCN_MISMATCH` ở `SCN-02-1`: **actual** chạy SCN-02-1 chưa xanh hoặc status còn `planned` · **expected** toàn bộ SCN của `L1.1` xanh và status cập nhật kèm evidence"
     }
   ],
   "allowed_files": [
-    "eso/control-plane/**"
+    "eso/control-plane/src/platform/registry/**",
+    "eso/control-plane/test/platform-registry.test.ts"
   ],
   "forbidden": [
     "sdlc/**",
@@ -36,5 +37,5 @@
   "verify": [
     "cd eso/control-plane && bun test test/platform-registry.test.ts"
   ],
-  "base_commit": "2798d94"
+  "base_commit": "d20eb88"
 }

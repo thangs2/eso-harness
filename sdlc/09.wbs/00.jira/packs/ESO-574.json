@@ -12,22 +12,33 @@
     "BR-15"
   ],
   "ac": [
-    "AC-10-1"
+    "AC-10-1",
+    "AC-10-2",
+    "AC-10-3",
+    "AC-11-1",
+    "AC-11-2",
+    "AC-11-3"
   ],
   "scn": [
-    "SCN-10-1"
+    "SCN-10-1",
+    "SCN-10-2",
+    "SCN-10-3",
+    "SCN-11-1",
+    "SCN-11-2",
+    "SCN-11-3"
   ],
   "red_packets": [
     {
       "packet": "sdlc/10.test/110.l4-4.tdd-unit.md",
       "test_file": "eso/control-plane/test/profile.test.ts",
-      "test_name": "SCN-10-1 · AC-10-1 — Ghi file nguyên tử + hash; check `ok/drift/missing/invalid` · tdd-unit",
-      "expected_failure": "`AssertionError` ở `SCN-10-1`: **actual** hành vi đơn vị của `L4.4` chưa đúng — AC-10-1 fail trên assert chính của test · **expected** hành vi đơn vị đạt đủ 1 AC, kết quả lặp lại được và khớp SCN"
+      "test_name": "SCN-10-1 · AC-10-1 — Materialize + drift check · tdd-unit",
+      "expected_failure": "`AssertionError` ở `SCN-10-1`: **actual** hành vi đơn vị của `L4.4` chưa đúng — AC-10-1, AC-10-2, AC-10-3, AC-11-1, AC-11-2, AC-11-3 fail trên assert chính · **expected** hành vi đơn vị đạt đủ 6 AC và khớp SCN"
     }
   ],
   "allowed_files": [
     "eso/control-plane/src/modules/profiles/**",
-    "eso/cli/**"
+    "eso/cli/**",
+    "eso/control-plane/test/profile.test.ts"
   ],
   "forbidden": [
     "sdlc/**",
@@ -37,5 +48,5 @@
   "verify": [
     "cd eso/control-plane && bun test test/profile.test.ts"
   ],
-  "base_commit": "10e1646"
+  "base_commit": "d20eb88"
 }

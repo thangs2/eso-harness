@@ -12,22 +12,26 @@
     "BR-15"
   ],
   "ac": [
-    "AC-12-1"
+    "AC-12-1",
+    "AC-12-2",
+    "AC-12-3"
   ],
   "scn": [
-    "SCN-12-1"
+    "SCN-12-1",
+    "SCN-12-2",
+    "SCN-12-3"
   ],
   "red_packets": [
     {
       "packet": "sdlc/10.test/117.l6-1.tdd-qc.md",
       "test_file": "eso/control-plane/test/isolation.test.ts",
-      "test_name": "SCN-12-1 · AC-12-1 — `search_path` theo route; fail-closed; 6 test đối kháng · tdd-qc",
-      "expected_failure": "`SCN_MISMATCH` ở `SCN-12-1`: **actual** chạy SCN-12-1 chưa xanh hoặc status còn `planned` · **expected** toàn bộ SCN của `L6.1` xanh và status được cập nhật kèm evidence"
+      "test_name": "SCN-12-1 · AC-12-1 — Isolation middleware + 6 test · tdd-qc",
+      "expected_failure": "`SCN_MISMATCH` ở `SCN-12-1`: **actual** chạy SCN-12-1, SCN-12-2, SCN-12-3 chưa xanh hoặc status còn `planned` · **expected** toàn bộ SCN của `L6.1` xanh và status cập nhật kèm evidence"
     }
   ],
   "allowed_files": [
     "eso/control-plane/src/common/db/**",
-    "eso/control-plane/test/isolation*"
+    "eso/control-plane/test/isolation.test.ts"
   ],
   "forbidden": [
     "sdlc/**",
@@ -37,5 +41,5 @@
   "verify": [
     "cd eso/control-plane && bun test test/isolation.test.ts"
   ],
-  "base_commit": "10e1646"
+  "base_commit": "d20eb88"
 }

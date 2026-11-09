@@ -12,22 +12,28 @@
     "BR-15"
   ],
   "ac": [
-    "AC-01-1"
+    "AC-01-1",
+    "AC-01-2",
+    "AC-01-3",
+    "AC-01-4"
   ],
   "scn": [
-    "SCN-01-1"
+    "SCN-01-1",
+    "SCN-01-2",
+    "SCN-01-3",
+    "SCN-01-4"
   ],
   "red_packets": [
     {
       "packet": "sdlc/10.test/85.l2-1.tdd-qc.md",
       "test_file": "eso/control-plane/test/auth.test.ts",
-      "test_name": "SCN-01-1 · AC-01-1 — Đọc `.env`, so khớp constant-time, 401 `AUTH_*`, `/auth/me` · tdd-qc",
-      "expected_failure": "`SCN_MISMATCH` ở `SCN-01-1`: **actual** chạy SCN-01-1 chưa xanh hoặc status còn `planned` · **expected** toàn bộ SCN của `L2.1` xanh và status được cập nhật kèm evidence"
+      "test_name": "SCN-01-1 · AC-01-1 — Auth middleware Basic/Bearer · tdd-qc",
+      "expected_failure": "`SCN_MISMATCH` ở `SCN-01-1`: **actual** chạy SCN-01-1, SCN-01-2, SCN-01-3, SCN-01-4 chưa xanh hoặc status còn `planned` · **expected** toàn bộ SCN của `L2.1` xanh và status cập nhật kèm evidence"
     }
   ],
   "allowed_files": [
     "eso/control-plane/src/common/auth/**",
-    "eso/control-plane/test/auth*"
+    "eso/control-plane/test/auth.test.ts"
   ],
   "forbidden": [
     "sdlc/**",
@@ -37,5 +43,5 @@
   "verify": [
     "cd eso/control-plane && bun test test/auth.test.ts"
   ],
-  "base_commit": "10e1646"
+  "base_commit": "d20eb88"
 }

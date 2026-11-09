@@ -12,22 +12,26 @@
     "BR-15"
   ],
   "ac": [
-    "AC-06-1"
+    "AC-06-1",
+    "AC-06-2",
+    "AC-06-3"
   ],
   "scn": [
-    "SCN-06-1"
+    "SCN-06-1",
+    "SCN-06-2",
+    "SCN-06-3"
   ],
   "red_packets": [
     {
       "packet": "sdlc/10.test/101.l4-1.tdd-qc.md",
-      "test_file": "eso/control-plane/test/registry.test.ts",
-      "test_name": "SCN-06-1 · AC-06-1 — PUT + `expected_version`; version+1; materialize lại · tdd-qc",
-      "expected_failure": "`SCN_MISMATCH` ở `SCN-06-1`: **actual** chạy SCN-06-1 chưa xanh hoặc status còn `planned` · **expected** toàn bộ SCN của `L4.1` xanh và status được cập nhật kèm evidence"
+      "test_file": "eso/control-plane/test/update.test.ts",
+      "test_name": "SCN-06-1 · AC-06-1 — Update profile + version · tdd-qc",
+      "expected_failure": "`SCN_MISMATCH` ở `SCN-06-1`: **actual** chạy SCN-06-1, SCN-06-2, SCN-06-3 chưa xanh hoặc status còn `planned` · **expected** toàn bộ SCN của `L4.1` xanh và status cập nhật kèm evidence"
     }
   ],
   "allowed_files": [
-    "eso/control-plane/src/modules/consumers/**",
-    "eso/control-plane/test/registry*"
+    "eso/control-plane/src/modules/consumers/update/**",
+    "eso/control-plane/test/update.test.ts"
   ],
   "forbidden": [
     "sdlc/**",
@@ -35,7 +39,7 @@
     ".agents/**"
   ],
   "verify": [
-    "cd eso/control-plane && bun test test/registry.test.ts"
+    "cd eso/control-plane && bun test test/update.test.ts"
   ],
-  "base_commit": "10e1646"
+  "base_commit": "d20eb88"
 }

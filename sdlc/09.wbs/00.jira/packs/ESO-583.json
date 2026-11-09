@@ -12,22 +12,26 @@
     "BR-15"
   ],
   "ac": [
-    "AC-12-1"
+    "AC-12-1",
+    "AC-12-2",
+    "AC-12-3"
   ],
   "scn": [
-    "SCN-12-1"
+    "SCN-12-1",
+    "SCN-12-2",
+    "SCN-12-3"
   ],
   "red_packets": [
     {
       "packet": "sdlc/10.test/115.l6-1.tdd-impl.md",
       "test_file": "eso/control-plane/test/isolation.test.ts",
-      "test_name": "SCN-12-1 · AC-12-1 — `search_path` theo route; fail-closed; 6 test đối kháng · tdd-impl",
-      "expected_failure": "`AssertionError` ở `SCN-12-1`: **actual** hành vi tích hợp của `L6.1` chưa đúng — AC-12-1 fail trên assert chính của test · **expected** hành vi tích hợp đạt đủ 1 AC, kết quả lặp lại được và khớp SCN"
+      "test_name": "SCN-12-1 · AC-12-1 — Isolation middleware + 6 test · tdd-impl",
+      "expected_failure": "`AssertionError` ở `SCN-12-1`: **actual** hành vi tích hợp của `L6.1` chưa đúng — AC-12-1, AC-12-2, AC-12-3 fail trên assert chính · **expected** hành vi tích hợp đạt đủ 3 AC và khớp SCN"
     }
   ],
   "allowed_files": [
     "eso/control-plane/src/common/db/**",
-    "eso/control-plane/test/isolation*"
+    "eso/control-plane/test/isolation.test.ts"
   ],
   "forbidden": [
     "sdlc/**",
@@ -37,5 +41,5 @@
   "verify": [
     "cd eso/control-plane && bun test test/isolation.test.ts"
   ],
-  "base_commit": "10e1646"
+  "base_commit": "d20eb88"
 }

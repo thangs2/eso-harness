@@ -12,21 +12,32 @@
     "BR-15"
   ],
   "ac": [
-    "AC-07-1"
+    "AC-07-1",
+    "AC-07-2",
+    "AC-07-3",
+    "AC-08-1",
+    "AC-08-2",
+    "AC-08-3"
   ],
   "scn": [
-    "SCN-07-1"
+    "SCN-07-1",
+    "SCN-07-2",
+    "SCN-07-3",
+    "SCN-08-1",
+    "SCN-08-2",
+    "SCN-08-3"
   ],
   "red_packets": [
     {
       "packet": "sdlc/10.test/102.l4-2.tdd-unit.md",
       "test_file": "eso/control-plane/test/lifecycle.test.ts",
-      "test_name": "SCN-07-1 · AC-07-1 — State machine `ready ⇄ retired` · `deleted` · restore; giữ dữ liệu · tdd-unit",
-      "expected_failure": "`AssertionError` ở `SCN-07-1`: **actual** hành vi đơn vị của `L4.2` chưa đúng — AC-07-1 fail trên assert chính của test · **expected** hành vi đơn vị đạt đủ 1 AC, kết quả lặp lại được và khớp SCN"
+      "test_name": "SCN-07-1 · AC-07-1 — Retire/soft delete/restore · tdd-unit",
+      "expected_failure": "`AssertionError` ở `SCN-07-1`: **actual** hành vi đơn vị của `L4.2` chưa đúng — AC-07-1, AC-07-2, AC-07-3, AC-08-1, AC-08-2, AC-08-3 fail trên assert chính · **expected** hành vi đơn vị đạt đủ 6 AC và khớp SCN"
     }
   ],
   "allowed_files": [
-    "eso/control-plane/src/modules/consumers/lifecycle/**"
+    "eso/control-plane/src/modules/consumers/lifecycle/**",
+    "eso/control-plane/test/lifecycle.test.ts"
   ],
   "forbidden": [
     "sdlc/**",
@@ -36,5 +47,5 @@
   "verify": [
     "cd eso/control-plane && bun test test/lifecycle.test.ts"
   ],
-  "base_commit": "10e1646"
+  "base_commit": "d20eb88"
 }

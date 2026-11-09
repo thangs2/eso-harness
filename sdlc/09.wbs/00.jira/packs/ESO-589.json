@@ -25,13 +25,13 @@
     {
       "packet": "sdlc/10.test/125.l6-2.tdd-qc.md",
       "test_file": "eso/e2e/bootstrap.e2e.mjs",
-      "test_name": "SCN-13-1 · AC-13-1 — Unified 404 + E2E + smoke · tdd-qc",
-      "expected_failure": "`SCN_MISMATCH` ở `SCN-13-1`: **actual** chạy SCN-13-1, SCN-13-2, SCN-13-3 chưa xanh hoặc status còn `planned` · **expected** toàn bộ SCN của `L6.2` xanh và status được cập nhật kèm evidence"
+      "test_name": "SCN-13-1 · AC-13-1 — 404 thống nhất + E2E + smoke · tdd-qc",
+      "expected_failure": "`SCN_MISMATCH` ở `SCN-13-1`: **actual** chạy SCN-13-1, SCN-13-2, SCN-13-3 chưa xanh hoặc status còn `planned` · **expected** toàn bộ SCN của `L6.2` xanh và status cập nhật kèm evidence"
     }
   ],
   "allowed_files": [
-    "eso/e2e/**",
-    "eso/control-plane/**",
+    "eso/control-plane/src/common/http/**",
+    "eso/e2e/bootstrap.e2e.mjs",
     "scripts/**"
   ],
   "forbidden": [
@@ -42,5 +42,5 @@
   "verify": [
     "node eso/e2e/bootstrap.e2e.mjs"
   ],
-  "base_commit": "10e1646"
+  "base_commit": "d20eb88"
 }

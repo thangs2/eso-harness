@@ -12,21 +12,32 @@
     "BR-15"
   ],
   "ac": [
-    "AC-07-1"
+    "AC-07-1",
+    "AC-07-2",
+    "AC-07-3",
+    "AC-08-1",
+    "AC-08-2",
+    "AC-08-3"
   ],
   "scn": [
-    "SCN-07-1"
+    "SCN-07-1",
+    "SCN-07-2",
+    "SCN-07-3",
+    "SCN-08-1",
+    "SCN-08-2",
+    "SCN-08-3"
   ],
   "red_packets": [
     {
       "packet": "sdlc/10.test/104.l4-2.tdd-coverage.md",
       "test_file": "eso/control-plane/test/lifecycle.test.ts",
-      "test_name": "SCN-07-1 · AC-07-1 — State machine `ready ⇄ retired` · `deleted` · restore; giữ dữ liệu · tdd-coverage",
-      "expected_failure": "`COVERAGE_BELOW_THRESHOLD` ở `SCN-07-1`: **actual** nhánh lỗi/biên của `L4.2` chưa được test, coverage dưới ngưỡng pack · **expected** mọi nhánh của `L4.2` có test, coverage đạt ngưỡng"
+      "test_name": "SCN-07-1 · AC-07-1 — Retire/soft delete/restore · tdd-coverage",
+      "expected_failure": "`COVERAGE_BELOW_THRESHOLD` ở `SCN-07-1`: **actual** nhánh lỗi/biên của `L4.2` chưa được test · **expected** mọi nhánh của `L4.2` có test, coverage đạt ngưỡng"
     }
   ],
   "allowed_files": [
-    "eso/control-plane/src/modules/consumers/lifecycle/**"
+    "eso/control-plane/src/modules/consumers/lifecycle/**",
+    "eso/control-plane/test/lifecycle.test.ts"
   ],
   "forbidden": [
     "sdlc/**",
@@ -36,5 +47,5 @@
   "verify": [
     "cd eso/control-plane && bun test test/lifecycle.test.ts"
   ],
-  "base_commit": "10e1646"
+  "base_commit": "d20eb88"
 }

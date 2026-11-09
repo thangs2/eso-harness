@@ -12,22 +12,26 @@
     "BR-15"
   ],
   "ac": [
-    "AC-06-1"
+    "AC-06-1",
+    "AC-06-2",
+    "AC-06-3"
   ],
   "scn": [
-    "SCN-06-1"
+    "SCN-06-1",
+    "SCN-06-2",
+    "SCN-06-3"
   ],
   "red_packets": [
     {
       "packet": "sdlc/10.test/100.l4-1.tdd-coverage.md",
-      "test_file": "eso/control-plane/test/registry.test.ts",
-      "test_name": "SCN-06-1 · AC-06-1 — PUT + `expected_version`; version+1; materialize lại · tdd-coverage",
-      "expected_failure": "`COVERAGE_BELOW_THRESHOLD` ở `SCN-06-1`: **actual** nhánh lỗi/biên của `L4.1` chưa được test, coverage dưới ngưỡng pack · **expected** mọi nhánh của `L4.1` có test, coverage đạt ngưỡng"
+      "test_file": "eso/control-plane/test/update.test.ts",
+      "test_name": "SCN-06-1 · AC-06-1 — Update profile + version · tdd-coverage",
+      "expected_failure": "`COVERAGE_BELOW_THRESHOLD` ở `SCN-06-1`: **actual** nhánh lỗi/biên của `L4.1` chưa được test · **expected** mọi nhánh của `L4.1` có test, coverage đạt ngưỡng"
     }
   ],
   "allowed_files": [
-    "eso/control-plane/src/modules/consumers/**",
-    "eso/control-plane/test/registry*"
+    "eso/control-plane/src/modules/consumers/update/**",
+    "eso/control-plane/test/update.test.ts"
   ],
   "forbidden": [
     "sdlc/**",
@@ -35,7 +39,7 @@
     ".agents/**"
   ],
   "verify": [
-    "cd eso/control-plane && bun test test/registry.test.ts"
+    "cd eso/control-plane && bun test test/update.test.ts"
   ],
-  "base_commit": "10e1646"
+  "base_commit": "d20eb88"
 }

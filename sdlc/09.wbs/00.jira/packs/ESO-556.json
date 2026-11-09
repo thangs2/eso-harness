@@ -12,22 +12,30 @@
     "BR-15"
   ],
   "ac": [
-    "AC-02-1"
+    "AC-02-2",
+    "AC-02-3",
+    "AC-03-1",
+    "AC-03-2",
+    "AC-03-3"
   ],
   "scn": [
-    "SCN-02-1"
+    "SCN-02-2",
+    "SCN-02-3",
+    "SCN-03-1",
+    "SCN-03-2",
+    "SCN-03-3"
   ],
   "red_packets": [
     {
       "packet": "sdlc/10.test/92.l3-1.tdd-coverage.md",
       "test_file": "eso/control-plane/test/consumer.test.ts",
-      "test_name": "SCN-02-1 · AC-02-1 — Validate slug/root; một transaction schema + record + event; materialize file · tdd-coverage",
-      "expected_failure": "`COVERAGE_BELOW_THRESHOLD` ở `SCN-02-1`: **actual** nhánh lỗi/biên của `L3.1` chưa được test, coverage dưới ngưỡng pack · **expected** mọi nhánh của `L3.1` có test, coverage đạt ngưỡng"
+      "test_name": "SCN-02-2 · AC-02-2 — Đăng ký consumer (transaction) · tdd-coverage",
+      "expected_failure": "`COVERAGE_BELOW_THRESHOLD` ở `SCN-02-2`: **actual** nhánh lỗi/biên của `L3.1` chưa được test · **expected** mọi nhánh của `L3.1` có test, coverage đạt ngưỡng"
     }
   ],
   "allowed_files": [
-    "eso/control-plane/src/modules/consumers/**",
-    "eso/control-plane/test/consumer*"
+    "eso/control-plane/src/modules/consumers/registration/**",
+    "eso/control-plane/test/consumer.test.ts"
   ],
   "forbidden": [
     "sdlc/**",
@@ -37,5 +45,5 @@
   "verify": [
     "cd eso/control-plane && bun test test/consumer.test.ts"
   ],
-  "base_commit": "10e1646"
+  "base_commit": "d20eb88"
 }

@@ -12,22 +12,24 @@
     "BR-15"
   ],
   "ac": [
+    "AC-14-1",
     "AC-14-3"
   ],
   "scn": [
+    "SCN-14-1",
     "SCN-14-3"
   ],
   "red_packets": [
     {
       "packet": "sdlc/10.test/80.l1-3.tdd-coverage.md",
-      "test_file": "eso/control-plane/test/audit.test.ts",
-      "test_name": "SCN-14-3 · AC-14-3 — Đọc event theo consumer; không endpoint sửa/xoá · tdd-coverage",
-      "expected_failure": "`COVERAGE_BELOW_THRESHOLD` ở `SCN-14-3`: **actual** nhánh lỗi/biên của `L1.3` chưa được test, coverage dưới ngưỡng pack · **expected** mọi nhánh của `L1.3` có test, coverage đạt ngưỡng"
+      "test_file": "eso/control-plane/test/event-read.test.ts",
+      "test_name": "SCN-14-1 · AC-14-1 — Event read API (append-only) · tdd-coverage",
+      "expected_failure": "`COVERAGE_BELOW_THRESHOLD` ở `SCN-14-1`: **actual** nhánh lỗi/biên của `L1.3` chưa được test · **expected** mọi nhánh của `L1.3` có test, coverage đạt ngưỡng"
     }
   ],
   "allowed_files": [
-    "eso/control-plane/src/platform/events/**",
-    "eso/control-plane/test/**"
+    "eso/control-plane/src/platform/events/read/**",
+    "eso/control-plane/test/event-read.test.ts"
   ],
   "forbidden": [
     "sdlc/**",
@@ -35,7 +37,7 @@
     ".agents/**"
   ],
   "verify": [
-    "cd eso/control-plane && bun test test/audit.test.ts"
+    "cd eso/control-plane && bun test test/event-read.test.ts"
   ],
-  "base_commit": "10e1646"
+  "base_commit": "d20eb88"
 }

@@ -12,22 +12,27 @@
     "BR-15"
   ],
   "ac": [
-    "AC-16-1"
+    "AC-16-1",
+    "AC-16-2",
+    "AC-16-3"
   ],
   "scn": [
-    "SCN-16-1"
+    "SCN-16-1",
+    "SCN-16-2",
+    "SCN-16-3"
   ],
   "red_packets": [
     {
       "packet": "sdlc/10.test/88.l2-2.tdd-coverage.md",
       "test_file": "eso/control-plane/test/errors.test.ts",
-      "test_name": "SCN-16-1 · AC-16-1 — `{code,message,detail?}`; mã lỗi ⊆ BRD/06; CORS allowlist UI · tdd-coverage",
-      "expected_failure": "`COVERAGE_BELOW_THRESHOLD` ở `SCN-16-1`: **actual** nhánh lỗi/biên của `L2.2` chưa được test, coverage dưới ngưỡng pack · **expected** mọi nhánh của `L2.2` có test, coverage đạt ngưỡng"
+      "test_name": "SCN-16-1 · AC-16-1 — Error envelope + CORS · tdd-coverage",
+      "expected_failure": "`COVERAGE_BELOW_THRESHOLD` ở `SCN-16-1`: **actual** nhánh lỗi/biên của `L2.2` chưa được test · **expected** mọi nhánh của `L2.2` có test, coverage đạt ngưỡng"
     }
   ],
   "allowed_files": [
     "eso/control-plane/src/common/errors/**",
-    "eso/control-plane/src/main.ts"
+    "eso/control-plane/src/main.ts",
+    "eso/control-plane/test/errors.test.ts"
   ],
   "forbidden": [
     "sdlc/**",
@@ -37,5 +42,5 @@
   "verify": [
     "cd eso/control-plane && bun test test/errors.test.ts"
   ],
-  "base_commit": "10e1646"
+  "base_commit": "d20eb88"
 }

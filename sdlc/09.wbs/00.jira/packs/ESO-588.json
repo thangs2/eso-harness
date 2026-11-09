@@ -25,13 +25,13 @@
     {
       "packet": "sdlc/10.test/124.l6-2.tdd-coverage.md",
       "test_file": "eso/e2e/bootstrap.e2e.mjs",
-      "test_name": "SCN-13-1 · AC-13-1 — Unified 404 + E2E + smoke · tdd-coverage",
+      "test_name": "SCN-13-1 · AC-13-1 — 404 thống nhất + E2E + smoke · tdd-coverage",
       "expected_failure": "`COVERAGE_BELOW_THRESHOLD` ở `SCN-13-1`: **actual** nhánh lỗi/biên của `L6.2` chưa được test · **expected** mọi nhánh của `L6.2` có test, coverage đạt ngưỡng"
     }
   ],
   "allowed_files": [
-    "eso/e2e/**",
-    "eso/control-plane/**",
+    "eso/control-plane/src/common/http/**",
+    "eso/e2e/bootstrap.e2e.mjs",
     "scripts/**"
   ],
   "forbidden": [
@@ -42,5 +42,5 @@
   "verify": [
     "node eso/e2e/bootstrap.e2e.mjs"
   ],
-  "base_commit": "10e1646"
+  "base_commit": "d20eb88"
 }

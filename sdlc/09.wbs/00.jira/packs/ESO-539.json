@@ -20,13 +20,14 @@
   "red_packets": [
     {
       "packet": "sdlc/10.test/75.l1-2.tdd-impl.md",
-      "test_file": "eso/control-plane/test/audit.test.ts",
-      "test_name": "SCN-14-2 · AC-14-2 — Ghi event trong transaction khi tạo/đổi trạng thái consumer · tdd-impl",
-      "expected_failure": "`AssertionError` ở `SCN-14-2`: **actual** hành vi tích hợp của `L1.2` chưa đúng — AC-14-2 fail trên assert chính của test · **expected** hành vi tích hợp đạt đủ 1 AC, kết quả lặp lại được và khớp SCN"
+      "test_file": "eso/control-plane/test/audit-write.test.ts",
+      "test_name": "SCN-14-2 · AC-14-2 — Event store + ghi event · tdd-impl",
+      "expected_failure": "`AssertionError` ở `SCN-14-2`: **actual** hành vi tích hợp của `L1.2` chưa đúng — AC-14-2 fail trên assert chính · **expected** hành vi tích hợp đạt đủ 1 AC và khớp SCN"
     }
   ],
   "allowed_files": [
-    "eso/control-plane/src/platform/events/**"
+    "eso/control-plane/src/platform/events/write/**",
+    "eso/control-plane/test/audit-write.test.ts"
   ],
   "forbidden": [
     "sdlc/**",
@@ -34,7 +35,7 @@
     ".agents/**"
   ],
   "verify": [
-    "cd eso/control-plane && bun test test/audit.test.ts"
+    "cd eso/control-plane && bun test test/audit-write.test.ts"
   ],
-  "base_commit": "10e1646"
+  "base_commit": "d20eb88"
 }

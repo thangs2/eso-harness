@@ -25,13 +25,13 @@
     {
       "packet": "sdlc/10.test/123.l6-2.tdd-impl.md",
       "test_file": "eso/e2e/bootstrap.e2e.mjs",
-      "test_name": "SCN-13-1 · AC-13-1 — Unified 404 + E2E + smoke · tdd-impl",
+      "test_name": "SCN-13-1 · AC-13-1 — 404 thống nhất + E2E + smoke · tdd-impl",
       "expected_failure": "`AssertionError` ở `SCN-13-1`: **actual** hành vi tích hợp của `L6.2` chưa đúng — AC-13-1, AC-13-2, AC-13-3 fail trên assert chính · **expected** hành vi tích hợp đạt đủ 3 AC và khớp SCN"
     }
   ],
   "allowed_files": [
-    "eso/e2e/**",
-    "eso/control-plane/**",
+    "eso/control-plane/src/common/http/**",
+    "eso/e2e/bootstrap.e2e.mjs",
     "scripts/**"
   ],
   "forbidden": [
@@ -42,5 +42,5 @@
   "verify": [
     "node eso/e2e/bootstrap.e2e.mjs"
   ],
-  "base_commit": "10e1646"
+  "base_commit": "d20eb88"
 }

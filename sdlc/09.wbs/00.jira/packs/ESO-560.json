@@ -12,21 +12,32 @@
     "BR-15"
   ],
   "ac": [
-    "AC-04-1"
+    "AC-04-1",
+    "AC-04-2",
+    "AC-04-3",
+    "AC-05-1",
+    "AC-05-2",
+    "AC-05-3"
   ],
   "scn": [
-    "SCN-04-1"
+    "SCN-04-1",
+    "SCN-04-2",
+    "SCN-04-3",
+    "SCN-05-1",
+    "SCN-05-2",
+    "SCN-05-3"
   ],
   "red_packets": [
     {
       "packet": "sdlc/10.test/96.l3-2.tdd-coverage.md",
       "test_file": "eso/control-plane/test/registry.test.ts",
-      "test_name": "SCN-04-1 · AC-04-1 — List ẩn deleted/purged; detail có profile + version + hash · tdd-coverage",
-      "expected_failure": "`COVERAGE_BELOW_THRESHOLD` ở `SCN-04-1`: **actual** nhánh lỗi/biên của `L3.2` chưa được test, coverage dưới ngưỡng pack · **expected** mọi nhánh của `L3.2` có test, coverage đạt ngưỡng"
+      "test_name": "SCN-04-1 · AC-04-1 — Registry list/detail · tdd-coverage",
+      "expected_failure": "`COVERAGE_BELOW_THRESHOLD` ở `SCN-04-1`: **actual** nhánh lỗi/biên của `L3.2` chưa được test · **expected** mọi nhánh của `L3.2` có test, coverage đạt ngưỡng"
     }
   ],
   "allowed_files": [
-    "eso/control-plane/src/modules/consumers/**"
+    "eso/control-plane/src/modules/consumers/query/**",
+    "eso/control-plane/test/registry.test.ts"
   ],
   "forbidden": [
     "sdlc/**",
@@ -36,5 +47,5 @@
   "verify": [
     "cd eso/control-plane && bun test test/registry.test.ts"
   ],
-  "base_commit": "10e1646"
+  "base_commit": "d20eb88"
 }

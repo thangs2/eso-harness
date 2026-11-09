@@ -12,22 +12,24 @@
     "BR-15"
   ],
   "ac": [
+    "AC-14-1",
     "AC-14-3"
   ],
   "scn": [
+    "SCN-14-1",
     "SCN-14-3"
   ],
   "red_packets": [
     {
       "packet": "sdlc/10.test/79.l1-3.tdd-impl.md",
-      "test_file": "eso/control-plane/test/audit.test.ts",
-      "test_name": "SCN-14-3 · AC-14-3 — Đọc event theo consumer; không endpoint sửa/xoá · tdd-impl",
-      "expected_failure": "`AssertionError` ở `SCN-14-3`: **actual** hành vi tích hợp của `L1.3` chưa đúng — AC-14-3 fail trên assert chính của test · **expected** hành vi tích hợp đạt đủ 1 AC, kết quả lặp lại được và khớp SCN"
+      "test_file": "eso/control-plane/test/event-read.test.ts",
+      "test_name": "SCN-14-1 · AC-14-1 — Event read API (append-only) · tdd-impl",
+      "expected_failure": "`AssertionError` ở `SCN-14-1`: **actual** hành vi tích hợp của `L1.3` chưa đúng — AC-14-1, AC-14-3 fail trên assert chính · **expected** hành vi tích hợp đạt đủ 2 AC và khớp SCN"
     }
   ],
   "allowed_files": [
-    "eso/control-plane/src/platform/events/**",
-    "eso/control-plane/test/**"
+    "eso/control-plane/src/platform/events/read/**",
+    "eso/control-plane/test/event-read.test.ts"
   ],
   "forbidden": [
     "sdlc/**",
@@ -35,7 +37,7 @@
     ".agents/**"
   ],
   "verify": [
-    "cd eso/control-plane && bun test test/audit.test.ts"
+    "cd eso/control-plane && bun test test/event-read.test.ts"
   ],
-  "base_commit": "10e1646"
+  "base_commit": "d20eb88"
 }

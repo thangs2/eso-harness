@@ -20,13 +20,14 @@
   "red_packets": [
     {
       "packet": "sdlc/10.test/77.l1-2.tdd-qc.md",
-      "test_file": "eso/control-plane/test/audit.test.ts",
-      "test_name": "SCN-14-2 · AC-14-2 — Ghi event trong transaction khi tạo/đổi trạng thái consumer · tdd-qc",
-      "expected_failure": "`SCN_MISMATCH` ở `SCN-14-2`: **actual** chạy SCN-14-2 chưa xanh hoặc status còn `planned` · **expected** toàn bộ SCN của `L1.2` xanh và status được cập nhật kèm evidence"
+      "test_file": "eso/control-plane/test/audit-write.test.ts",
+      "test_name": "SCN-14-2 · AC-14-2 — Event store + ghi event · tdd-qc",
+      "expected_failure": "`SCN_MISMATCH` ở `SCN-14-2`: **actual** chạy SCN-14-2 chưa xanh hoặc status còn `planned` · **expected** toàn bộ SCN của `L1.2` xanh và status cập nhật kèm evidence"
     }
   ],
   "allowed_files": [
-    "eso/control-plane/src/platform/events/**"
+    "eso/control-plane/src/platform/events/write/**",
+    "eso/control-plane/test/audit-write.test.ts"
   ],
   "forbidden": [
     "sdlc/**",
@@ -34,7 +35,7 @@
     ".agents/**"
   ],
   "verify": [
-    "cd eso/control-plane && bun test test/audit.test.ts"
+    "cd eso/control-plane && bun test test/audit-write.test.ts"
   ],
-  "base_commit": "10e1646"
+  "base_commit": "d20eb88"
 }

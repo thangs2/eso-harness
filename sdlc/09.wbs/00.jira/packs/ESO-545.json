@@ -12,22 +12,24 @@
     "BR-15"
   ],
   "ac": [
+    "AC-14-1",
     "AC-14-3"
   ],
   "scn": [
+    "SCN-14-1",
     "SCN-14-3"
   ],
   "red_packets": [
     {
       "packet": "sdlc/10.test/81.l1-3.tdd-qc.md",
-      "test_file": "eso/control-plane/test/audit.test.ts",
-      "test_name": "SCN-14-3 · AC-14-3 — Đọc event theo consumer; không endpoint sửa/xoá · tdd-qc",
-      "expected_failure": "`SCN_MISMATCH` ở `SCN-14-3`: **actual** chạy SCN-14-3 chưa xanh hoặc status còn `planned` · **expected** toàn bộ SCN của `L1.3` xanh và status được cập nhật kèm evidence"
+      "test_file": "eso/control-plane/test/event-read.test.ts",
+      "test_name": "SCN-14-1 · AC-14-1 — Event read API (append-only) · tdd-qc",
+      "expected_failure": "`SCN_MISMATCH` ở `SCN-14-1`: **actual** chạy SCN-14-1, SCN-14-3 chưa xanh hoặc status còn `planned` · **expected** toàn bộ SCN của `L1.3` xanh và status cập nhật kèm evidence"
     }
   ],
   "allowed_files": [
-    "eso/control-plane/src/platform/events/**",
-    "eso/control-plane/test/**"
+    "eso/control-plane/src/platform/events/read/**",
+    "eso/control-plane/test/event-read.test.ts"
   ],
   "forbidden": [
     "sdlc/**",
@@ -35,7 +37,7 @@
     ".agents/**"
   ],
   "verify": [
-    "cd eso/control-plane && bun test test/audit.test.ts"
+    "cd eso/control-plane && bun test test/event-read.test.ts"
   ],
-  "base_commit": "10e1646"
+  "base_commit": "d20eb88"
 }

@@ -19,6 +19,7 @@
  * Usage:
  *   node scripts/ticket-gate.mjs ESO-401
  *   node scripts/ticket-gate.mjs ESO-401 --out /tmp/ESO-401-gate.json
+ *   node scripts/ticket-gate.mjs --pack <file> --base HEAD~1   # slice commit boundary
  *   node scripts/ticket-gate.mjs --pack /tmp/complete.json --root /tmp/fixture --content-only
  *
  * `--content-only` runs the pack-contract checks and skips everything that needs a git HEAD (dirty
@@ -449,7 +450,8 @@ function main() {
     const packFile = readFlag(argv, '--pack');
     const root = resolve(readFlag(argv, '--root') || process.cwd());
     const contentOnly = argv.includes('--content-only');
-    const ticketArg = argv.find((arg, index) => !arg.startsWith('--') && !['--out', '--pack', '--root'].includes(argv[index - 1]));
+    const baseOverride = readFlag(argv, '--base');
+    const ticketArg = argv.find((arg, index) => !arg.startsWith('--') && !['--out', '--pack', '--root', '--base'].includes(argv[index - 1]));
 
     if (!ticketArg && !packFile) {
         console.error('usage: node scripts/ticket-gate.mjs <ESO-nnn> [--out file]');
@@ -514,7 +516,7 @@ function main() {
         // 5. Clean HEAD only. No --no-verify, no dirty worktree.
         const dirty = git(['status', '--porcelain'], root);
         if (dirty) failures.push('DIRTY_WORKTREE: commit the slice before running the gate');
-        const baseRef = pack.base_commit || pack.base_ref || 'HEAD~1';
+        const baseRef = baseOverride || pack.base_commit || pack.base_ref || 'HEAD~1';
         let baseValid = true;
         try { git(['rev-parse', '--verify', `${baseRef}^{commit}`], root); } catch { baseValid = false; failures.push(`MISSING_BASE_COMMIT:${baseRef}`); }
         if (baseValid) {

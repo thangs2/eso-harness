@@ -12,21 +12,22 @@
     "BR-15"
   ],
   "ac": [
-    "AC-14-1"
+    "AC-02-1"
   ],
   "scn": [
-    "SCN-14-1"
+    "SCN-02-1"
   ],
   "red_packets": [
     {
       "packet": "sdlc/10.test/72.l1-1-platform-registry.tdd-coverage.md",
       "test_file": "eso/control-plane/test/platform-registry.test.ts",
-      "test_name": "SCN-14-1 · AC-14-1 — Platform registry + create consumer schema · tdd-coverage",
-      "expected_failure": "`COVERAGE_BELOW_THRESHOLD` ở `SCN-14-1`: **actual** nhánh lỗi của transaction tạo consumer (insert registry fail, create schema fail) chưa có test · **expected** mọi nhánh được test, coverage đạt ngưỡng"
+      "test_name": "SCN-02-1 · AC-02-1 — Platform registry + create consumer schema · tdd-coverage",
+      "expected_failure": "`COVERAGE_BELOW_THRESHOLD` ở `SCN-02-1`: **actual** nhánh lỗi/biên của `L1.1` chưa được test · **expected** mọi nhánh của `L1.1` có test, coverage đạt ngưỡng"
     }
   ],
   "allowed_files": [
-    "eso/control-plane/**"
+    "eso/control-plane/src/platform/registry/**",
+    "eso/control-plane/test/platform-registry.test.ts"
   ],
   "forbidden": [
     "sdlc/**",
@@ -36,5 +37,5 @@
   "verify": [
     "cd eso/control-plane && bun test test/platform-registry.test.ts"
   ],
-  "base_commit": "2798d94"
+  "base_commit": "d20eb88"
 }

@@ -12,21 +12,26 @@
     "BR-15"
   ],
   "ac": [
-    "AC-09-1"
+    "AC-09-1",
+    "AC-09-2",
+    "AC-09-3"
   ],
   "scn": [
-    "SCN-09-1"
+    "SCN-09-1",
+    "SCN-09-2",
+    "SCN-09-3"
   ],
   "red_packets": [
     {
       "packet": "sdlc/10.test/108.l4-3.tdd-coverage.md",
-      "test_file": "eso/control-plane/test/lifecycle.test.ts",
-      "test_name": "SCN-09-1 · AC-09-1 — `confirm_id`; drop schema + xoá file generated; giữ audit · tdd-coverage",
-      "expected_failure": "`COVERAGE_BELOW_THRESHOLD` ở `SCN-09-1`: **actual** nhánh lỗi/biên của `L4.3` chưa được test, coverage dưới ngưỡng pack · **expected** mọi nhánh của `L4.3` có test, coverage đạt ngưỡng"
+      "test_file": "eso/control-plane/test/purge.test.ts",
+      "test_name": "SCN-09-1 · AC-09-1 — Purge · tdd-coverage",
+      "expected_failure": "`COVERAGE_BELOW_THRESHOLD` ở `SCN-09-1`: **actual** nhánh lỗi/biên của `L4.3` chưa được test · **expected** mọi nhánh của `L4.3` có test, coverage đạt ngưỡng"
     }
   ],
   "allowed_files": [
-    "eso/control-plane/src/modules/consumers/lifecycle/**"
+    "eso/control-plane/src/modules/consumers/purge/**",
+    "eso/control-plane/test/purge.test.ts"
   ],
   "forbidden": [
     "sdlc/**",
@@ -34,7 +39,7 @@
     ".agents/**"
   ],
   "verify": [
-    "cd eso/control-plane && bun test test/lifecycle.test.ts"
+    "cd eso/control-plane && bun test test/purge.test.ts"
   ],
-  "base_commit": "10e1646"
+  "base_commit": "d20eb88"
 }

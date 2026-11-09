@@ -12,21 +12,22 @@
     "BR-15"
   ],
   "ac": [
-    "AC-14-1"
+    "AC-02-1"
   ],
   "scn": [
-    "SCN-14-1"
+    "SCN-02-1"
   ],
   "red_packets": [
     {
       "packet": "sdlc/10.test/70.l1-1-platform-registry.tdd-unit.md",
       "test_file": "eso/control-plane/test/platform-registry.test.ts",
-      "test_name": "SCN-14-1 · AC-14-1 — Platform registry + create consumer schema · tdd-unit",
-      "expected_failure": "`AssertionError` ở `SCN-14-1`: **actual** CP start không bảo đảm `platform.consumer`/`consumer_event` tồn tại, hoặc tạo consumer không nhận `CREATE SCHEMA c_<id>` trong cùng transaction · **expected** bảng registry tồn tại (IF NOT EXISTS) và transaction tạo consumer + schema rollback cùng nhau"
+      "test_name": "SCN-02-1 · AC-02-1 — Platform registry + create consumer schema · tdd-unit",
+      "expected_failure": "`AssertionError` ở `SCN-02-1`: **actual** hành vi đơn vị của `L1.1` chưa đúng — AC-02-1 fail trên assert chính · **expected** hành vi đơn vị đạt đủ 1 AC và khớp SCN"
     }
   ],
   "allowed_files": [
-    "eso/control-plane/**"
+    "eso/control-plane/src/platform/registry/**",
+    "eso/control-plane/test/platform-registry.test.ts"
   ],
   "forbidden": [
     "sdlc/**",
@@ -36,5 +37,5 @@
   "verify": [
     "cd eso/control-plane && bun test test/platform-registry.test.ts"
   ],
-  "base_commit": "2798d94"
+  "base_commit": "d20eb88"
 }

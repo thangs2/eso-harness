@@ -31,7 +31,7 @@
   ],
   "allowed_files": [
     "eso/ui/**",
-    "eso/e2e/**"
+    "eso/e2e/ui-smoke.e2e.mjs"
   ],
   "forbidden": [
     "sdlc/**",
@@ -41,5 +41,5 @@
   "verify": [
     "node eso/e2e/ui-smoke.e2e.mjs"
   ],
-  "base_commit": "10e1646"
+  "base_commit": "d20eb88"
 }

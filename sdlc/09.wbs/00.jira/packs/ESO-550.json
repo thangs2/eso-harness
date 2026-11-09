@@ -12,22 +12,27 @@
     "BR-15"
   ],
   "ac": [
-    "AC-16-1"
+    "AC-16-1",
+    "AC-16-2",
+    "AC-16-3"
   ],
   "scn": [
-    "SCN-16-1"
+    "SCN-16-1",
+    "SCN-16-2",
+    "SCN-16-3"
   ],
   "red_packets": [
     {
       "packet": "sdlc/10.test/86.l2-2.tdd-unit.md",
       "test_file": "eso/control-plane/test/errors.test.ts",
-      "test_name": "SCN-16-1 · AC-16-1 — `{code,message,detail?}`; mã lỗi ⊆ BRD/06; CORS allowlist UI · tdd-unit",
-      "expected_failure": "`AssertionError` ở `SCN-16-1`: **actual** hành vi đơn vị của `L2.2` chưa đúng — AC-16-1 fail trên assert chính của test · **expected** hành vi đơn vị đạt đủ 1 AC, kết quả lặp lại được và khớp SCN"
+      "test_name": "SCN-16-1 · AC-16-1 — Error envelope + CORS · tdd-unit",
+      "expected_failure": "`AssertionError` ở `SCN-16-1`: **actual** hành vi đơn vị của `L2.2` chưa đúng — AC-16-1, AC-16-2, AC-16-3 fail trên assert chính · **expected** hành vi đơn vị đạt đủ 3 AC và khớp SCN"
     }
   ],
   "allowed_files": [
     "eso/control-plane/src/common/errors/**",
-    "eso/control-plane/src/main.ts"
+    "eso/control-plane/src/main.ts",
+    "eso/control-plane/test/errors.test.ts"
   ],
   "forbidden": [
     "sdlc/**",
@@ -37,5 +42,5 @@
   "verify": [
     "cd eso/control-plane && bun test test/errors.test.ts"
   ],
-  "base_commit": "10e1646"
+  "base_commit": "d20eb88"
 }

@@ -12,22 +12,30 @@
     "BR-15"
   ],
   "ac": [
-    "AC-02-1"
+    "AC-02-2",
+    "AC-02-3",
+    "AC-03-1",
+    "AC-03-2",
+    "AC-03-3"
   ],
   "scn": [
-    "SCN-02-1"
+    "SCN-02-2",
+    "SCN-02-3",
+    "SCN-03-1",
+    "SCN-03-2",
+    "SCN-03-3"
   ],
   "red_packets": [
     {
       "packet": "sdlc/10.test/90.l3-1.tdd-unit.md",
       "test_file": "eso/control-plane/test/consumer.test.ts",
-      "test_name": "SCN-02-1 · AC-02-1 — Validate slug/root; một transaction schema + record + event; materialize file · tdd-unit",
-      "expected_failure": "`AssertionError` ở `SCN-02-1`: **actual** hành vi đơn vị của `L3.1` chưa đúng — AC-02-1 fail trên assert chính của test · **expected** hành vi đơn vị đạt đủ 1 AC, kết quả lặp lại được và khớp SCN"
+      "test_name": "SCN-02-2 · AC-02-2 — Đăng ký consumer (transaction) · tdd-unit",
+      "expected_failure": "`AssertionError` ở `SCN-02-2`: **actual** hành vi đơn vị của `L3.1` chưa đúng — AC-02-2, AC-02-3, AC-03-1, AC-03-2, AC-03-3 fail trên assert chính · **expected** hành vi đơn vị đạt đủ 5 AC và khớp SCN"
     }
   ],
   "allowed_files": [
-    "eso/control-plane/src/modules/consumers/**",
-    "eso/control-plane/test/consumer*"
+    "eso/control-plane/src/modules/consumers/registration/**",
+    "eso/control-plane/test/consumer.test.ts"
   ],
   "forbidden": [
     "sdlc/**",
@@ -37,5 +45,5 @@
   "verify": [
     "cd eso/control-plane && bun test test/consumer.test.ts"
   ],
-  "base_commit": "10e1646"
+  "base_commit": "d20eb88"
 }

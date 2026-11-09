@@ -12,21 +12,32 @@
     "BR-15"
   ],
   "ac": [
-    "AC-04-1"
+    "AC-04-1",
+    "AC-04-2",
+    "AC-04-3",
+    "AC-05-1",
+    "AC-05-2",
+    "AC-05-3"
   ],
   "scn": [
-    "SCN-04-1"
+    "SCN-04-1",
+    "SCN-04-2",
+    "SCN-04-3",
+    "SCN-05-1",
+    "SCN-05-2",
+    "SCN-05-3"
   ],
   "red_packets": [
     {
       "packet": "sdlc/10.test/95.l3-2.tdd-impl.md",
       "test_file": "eso/control-plane/test/registry.test.ts",
-      "test_name": "SCN-04-1 · AC-04-1 — List ẩn deleted/purged; detail có profile + version + hash · tdd-impl",
-      "expected_failure": "`AssertionError` ở `SCN-04-1`: **actual** hành vi tích hợp của `L3.2` chưa đúng — AC-04-1 fail trên assert chính của test · **expected** hành vi tích hợp đạt đủ 1 AC, kết quả lặp lại được và khớp SCN"
+      "test_name": "SCN-04-1 · AC-04-1 — Registry list/detail · tdd-impl",
+      "expected_failure": "`AssertionError` ở `SCN-04-1`: **actual** hành vi tích hợp của `L3.2` chưa đúng — AC-04-1, AC-04-2, AC-04-3, AC-05-1, AC-05-2, AC-05-3 fail trên assert chính · **expected** hành vi tích hợp đạt đủ 6 AC và khớp SCN"
     }
   ],
   "allowed_files": [
-    "eso/control-plane/src/modules/consumers/**"
+    "eso/control-plane/src/modules/consumers/query/**",
+    "eso/control-plane/test/registry.test.ts"
   ],
   "forbidden": [
     "sdlc/**",
@@ -36,5 +47,5 @@
   "verify": [
     "cd eso/control-plane && bun test test/registry.test.ts"
   ],
-  "base_commit": "10e1646"
+  "base_commit": "d20eb88"
 }
