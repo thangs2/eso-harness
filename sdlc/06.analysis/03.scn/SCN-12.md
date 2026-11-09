@@ -16,7 +16,7 @@ type: scenario-matrix
 | `SCN-12-1` | `AC-12-1` | happy | 2 consumer A/B có dữ liệu | gọi route A rồi B | mỗi bên chỉ thấy dữ liệu của mình | yes | `planned` |
 | `SCN-12-2` | `AC-12-2` | edge | cùng connection pool | A rồi B | B không thấy A | yes | `planned` |
 | `SCN-12-3` | `AC-12-3` | edge | path injection `../b` | gọi route | 400/404 | yes | `planned` |
-| `SCN-12-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — GĐ1 chỉ một operator |
+| `SCN-12-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — Bootstrap chỉ một operator |
 | `SCN-12-TENANT-OUT` | — | tenant | — | — | — | — | `OUT` — consumer không phải tenant (`BR-14`) |
 
 ## Luật

@@ -16,7 +16,7 @@ type: scenario-matrix
 | `SCN-30-1` | `AC-30-1` | happy | host có native | chọn | host-native + reason | yes | `planned` |
 | `SCN-30-2` | `AC-30-2` | edge | host thiếu | chọn | `none` + lý do | yes | `planned` |
 | `SCN-30-3` | `AC-30-3` | failure | capability lạ | chọn | `UNKNOWN_CAPABILITY` | yes | `planned` |
-| `SCN-30-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — GĐ1 chỉ một operator |
+| `SCN-30-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — Bootstrap chỉ một operator |
 | `SCN-30-TENANT-OUT` | — | tenant | — | — | — | — | `OUT` — consumer không phải tenant (`BR-14`) |
 
 ## Luật

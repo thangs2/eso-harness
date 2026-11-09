@@ -16,7 +16,7 @@ type: scenario-matrix
 | `SCN-35-1` | `AC-35-1` | happy | 2 lớp khớp | kiểm | 100% resolve | yes | `planned` |
 | `SCN-35-2` | `AC-35-2` | failure | chép nguyên văn | kiểm | `DOC_CONTRACT_VIOLATION` | yes | `planned` |
 | `SCN-35-3` | `AC-35-3` | edge | mục AI mồ côi | kiểm | finding mồ côi | yes | `planned` |
-| `SCN-35-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — GĐ1 chỉ một operator |
+| `SCN-35-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — Bootstrap chỉ một operator |
 | `SCN-35-TENANT-OUT` | — | tenant | — | — | — | — | `OUT` — consumer không phải tenant (`BR-14`) |
 
 ## Luật

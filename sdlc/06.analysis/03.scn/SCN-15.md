@@ -16,7 +16,7 @@ type: scenario-matrix
 | `SCN-15-1` | `AC-15-1` | happy | có credential | mở UI, đăng nhập | thấy danh sách consumer | no (smoke tay) | `planned` |
 | `SCN-15-2` | `AC-15-2` | happy | đã đăng nhập | đăng ký qua wizard | consumer mới xuất hiện trong list | no (smoke tay) | `planned` |
 | `SCN-15-3` | `AC-15-3` | edge | server trả lỗi | bấm nút | UI hiện mã lỗi + message | no (smoke tay) | `planned` |
-| `SCN-15-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — GĐ1 chỉ một operator |
+| `SCN-15-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — Bootstrap chỉ một operator |
 | `SCN-15-TENANT-OUT` | — | tenant | — | — | — | — | `OUT` — consumer không phải tenant (`BR-14`) |
 
 ## Luật

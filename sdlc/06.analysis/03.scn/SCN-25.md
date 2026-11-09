@@ -16,7 +16,7 @@ type: scenario-matrix
 | `SCN-25-1` | `AC-25-1` | happy | tín hiệu khớp | kiểm | `current` | yes | `planned` |
 | `SCN-25-2` | `AC-25-2` | failure | nguồn đổi hash | kiểm | `stale` + lý do | yes | `planned` |
 | `SCN-25-3` | `AC-25-3` | edge | không tín hiệu | kiểm | `unknown` (không mặc định current) | yes | `planned` |
-| `SCN-25-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — GĐ1 chỉ một operator |
+| `SCN-25-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — Bootstrap chỉ một operator |
 | `SCN-25-TENANT-OUT` | — | tenant | — | — | — | — | `OUT` — consumer không phải tenant (`BR-14`) |
 
 ## Luật

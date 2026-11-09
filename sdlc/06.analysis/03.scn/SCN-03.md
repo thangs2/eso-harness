@@ -16,7 +16,7 @@ type: scenario-matrix
 | `SCN-03-1` | `AC-03-1` | failure | id 1 ký tự / có dấu cách | đăng ký | 400 `INVALID_CONSUMER_ID` | yes | `planned` |
 | `SCN-03-2` | `AC-03-2` | failure | id đã tồn tại (kể cả đã xoá) | đăng ký | 409 `CONSUMER_EXISTS` | yes | `planned` |
 | `SCN-03-3` | `AC-03-3` | failure | root là file | đăng ký | 422 `ROOT_NOT_FOUND` | yes | `planned` |
-| `SCN-03-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — GĐ1 chỉ một operator |
+| `SCN-03-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — Bootstrap chỉ một operator |
 | `SCN-03-TENANT-OUT` | — | tenant | — | — | — | — | `OUT` — consumer không phải tenant (`BR-14`) |
 
 ## Luật

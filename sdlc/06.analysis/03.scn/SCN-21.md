@@ -16,7 +16,7 @@ type: scenario-matrix
 | `SCN-21-1` | `AC-21-1` | happy | task khớp 2 entry | chọn | selected 2 + lý do | yes | `planned` |
 | `SCN-21-2` | `AC-21-2` | edge | không khớp | chọn | `no-match` | yes | `planned` |
 | `SCN-21-3` | `AC-21-3` | edge | KB rỗng | chọn | `no-match` | yes | `planned` |
-| `SCN-21-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — GĐ1 chỉ một operator |
+| `SCN-21-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — Bootstrap chỉ một operator |
 | `SCN-21-TENANT-OUT` | — | tenant | — | — | — | — | `OUT` — consumer không phải tenant (`BR-14`) |
 
 ## Luật

@@ -16,7 +16,7 @@ type: scenario-matrix
 | `SCN-33-1` | `AC-33-1` | happy | operator duyệt | duyệt | allowed + event | yes | `planned` |
 | `SCN-33-2` | `AC-33-2` | failure | máy gọi Done | thử | denied + `FORBIDDEN_ACTOR` | yes | `planned` |
 | `SCN-33-3` | `AC-33-3` | failure | không rõ actor | thử | `UNKNOWN_ACTOR` | yes | `planned` |
-| `SCN-33-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — GĐ1 chỉ một operator |
+| `SCN-33-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — Bootstrap chỉ một operator |
 | `SCN-33-TENANT-OUT` | — | tenant | — | — | — | — | `OUT` — consumer không phải tenant (`BR-14`) |
 
 ## Luật

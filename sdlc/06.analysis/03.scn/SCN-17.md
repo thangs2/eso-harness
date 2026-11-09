@@ -16,7 +16,7 @@ type: scenario-matrix
 | `SCN-17-1` | `AC-17-1` | happy | có evidence đủ | gọi verdict | trả `level` + `basis` + `mode` | yes | `planned` |
 | `SCN-17-2` | `AC-17-2` | failure | evidence thiếu | gọi verdict | `missing[]` nêu thiếu | yes | `planned` |
 | `SCN-17-3` | `AC-17-3` | edge | cannot-judge | gọi verdict | `mode` = ask/block | yes | `planned` |
-| `SCN-17-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — GĐ1 chỉ một operator |
+| `SCN-17-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — Bootstrap chỉ một operator |
 | `SCN-17-TENANT-OUT` | — | tenant | — | — | — | — | `OUT` — consumer không phải tenant (`BR-14`) |
 
 ## Luật

@@ -16,7 +16,7 @@ type: scenario-matrix
 | `SCN-22-1` | `AC-22-1` | happy | KB có đủ kind | inventory | mỗi kind có instance | yes | `planned` |
 | `SCN-22-2` | `AC-22-2` | failure | kind bắt buộc thiếu | inventory | `MISSING_KIND` | yes | `planned` |
 | `SCN-22-3` | `AC-22-3` | edge | artifact mồ côi | inventory | finding mồ côi | yes | `planned` |
-| `SCN-22-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — GĐ1 chỉ một operator |
+| `SCN-22-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — Bootstrap chỉ một operator |
 | `SCN-22-TENANT-OUT` | — | tenant | — | — | — | — | `OUT` — consumer không phải tenant (`BR-14`) |
 
 ## Luật

@@ -16,7 +16,7 @@ type: scenario-matrix
 | `SCN-24-1` | `AC-24-1` | happy | proposal có nguồn | gửi | `proposed` | yes | `planned` |
 | `SCN-24-2` | `AC-24-2` | happy | người duyệt | duyệt | `approved` + entry | yes | `planned` |
 | `SCN-24-3` | `AC-24-3` | failure | agent duyệt | thử | `NEEDS_APPROVAL` | yes | `planned` |
-| `SCN-24-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — GĐ1 chỉ một operator |
+| `SCN-24-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — Bootstrap chỉ một operator |
 | `SCN-24-TENANT-OUT` | — | tenant | — | — | — | — | `OUT` — consumer không phải tenant (`BR-14`) |
 
 ## Luật

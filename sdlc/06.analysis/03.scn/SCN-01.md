@@ -17,7 +17,7 @@ type: scenario-matrix
 | `SCN-01-2` | `AC-01-2` | edge | dùng `ESO_API_TOKEN` | gọi API registry bằng Bearer | 200 như Basic | yes | `planned` |
 | `SCN-01-3` | `AC-01-3` | failure | không có header | gọi API bất kỳ | 401 `AUTH_REQUIRED` | yes | `planned` |
 | `SCN-01-4` | `AC-01-4` | failure | sai user/pass | gọi API | 401 `AUTH_INVALID` | yes | `planned` |
-| `SCN-01-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — GĐ1 chỉ một operator |
+| `SCN-01-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — Bootstrap chỉ một operator |
 | `SCN-01-TENANT-OUT` | — | tenant | — | — | — | — | `OUT` — consumer không phải tenant (`BR-14`) |
 
 ## Luật

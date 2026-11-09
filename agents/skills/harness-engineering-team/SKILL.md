@@ -88,3 +88,13 @@ Slice chỉ **đọc** (scout/verify/audit) được chia theo cùng trục như
 Lead: pack ESO-… → plan → S1(agents/rules) ∥ S2(agents/skills) → regenerate → verify(PASS) → audit(91, 0 CRITICAL) → HIR
       nếu audit fail: fixbug(findings) → regenerate → verify ↺ (loop 2/3)
 ```
+
+## Jira — chuẩn ticket & rollup
+
+Ticket sinh từ **packet + AC**. Hierarchy: `Epic → (Story|Task|Bug) → Subtask`. **Story** chỉ khi map 1:1 `US-nn` + AC người dùng thấy; work package kỹ thuật/enabler = **Task**; không tạo Story và Task cho cùng việc.
+Mỗi ticket phải đủ 4 quan hệ: `subtask` · `relates` · `blocks` · `is blocked by` (ngoại lệ root phải có `why`).
+Điểm: **Fibonacci 1/2/3/5/8/13 chỉ trên Subtask**; parent = Σ subtask, Epic = Σ task; `jira-points-rollup.mjs` kiểm.
+Status rollup: chạy `jira-rollup.mjs` sau **mỗi** child transition; agent không ký `Done`.
+**Ngôn ngữ:** mọi nội dung ticket Jira (summary/description/comment/label/attachment) = **English**; docs ngoài Jira vẫn có thể tiếng Việt.
+Chi tiết: rule `delivery.jira-agent-execution`.
+

@@ -1,37 +1,122 @@
 ---
-description: Jira parent-child status rollup — child In Progress ⇒ Story In Progress; all children Human In Review/Done ⇒ Story Human In Review; never auto Done.
+description: Jira standard — hierarchy Epic→(Story|Task|Bug)→Subtask; bắt buộc subtask/relates/blocks/is-blocked; Fibonacci trên subtask + rollup parent; status rollup; agent không ký Done.
 layer: delivery
-globs: "sdlc/09.wbs/**/*,scripts/jira-*"
+globs: "sdlc/09.wbs/**,scripts/jira-*"
 alwaysApply: false
-version: "1.0.0"
+version: "2.1.0"
 ---
 
-# Jira — parent/child status rollup (ESO)
+# Jira — chuẩn ticket, liên kết, điểm, rollup (ESO)
 
-**Nguồn:** [`sdlc/07.technical/01.architecture/17.jira-slp-operating.md` §6.1](../../sdlc/07.technical/01.architecture/17.jira-slp-operating.md)
-· baplatform `sdlc/00.governance/05.operating-model/05.jira/04.story-subtask-rollup.md`.
+**Live SoT là Jira.** WBS markdown là dẫn xuất, sync on-demand (`D-43`). Ticket sinh từ **packet + AC** — không từ FRD/SRS.
+Nguồn: `sdlc/07.technical/01.architecture/17.jira-slp-operating.md` §6 + operator 2026-11-09.
 
-Jira **không** tự sync Story khi Task/Subtask đổi. Sau **mỗi** child transition, người chuyển (agent/Lead) phải tính lại
-Story trong **cùng session**; không đợi cuối batch.
+## 1. Hierarchy — chỉ ba hình dạng
 
-## Luật
+```text
+Epic (feature) → Story → Subtask
+Epic (feature) → Task  → Subtask
+Epic (feature) → Bug            (Bug có Subtask khi cần tái hiện)
+```
 
-| Child pattern | Story transition |
+| Cấm | Vì sao |
 |---|---|
-| **Bất kỳ** con `In Progress` | Story → **In Progress** (kể cả đang HIR — rework mở lại) |
-| **Tất cả** con `Human In Review`/`Done` | Story → **Human In Review** |
-| Hỗn hợp HIR/Done + còn `To Do`/Backlog | Story → **In Progress**, không HIR |
-| Tất cả con `To Do`/Backlog | Không đổi (không kéo Story về sau) |
-| Không có con / status lạ | Không đổi; ghi `OPEN`, không đoán |
+| Subtask không có parent | mồ côi, không rollup được |
+| Story/Task/Bug không thuộc Epic | không có feature để rollup |
+| Epic lồng Epic · Subtask lồng Subtask | Jira không hỗ trợ; hierarchy sai |
+| Task không có Subtask | không có đơn vị thi công/kiểm |
 
-**Cấm:** agent set Story `Done`/`Closed`; reopen Story `Done`/`Closed`; chuyển Story sang HIR khi còn con `To Do`/`In Progress`.
+## 1.1 Story hay Task — tiêu chí, không đoán
 
-## Cách làm
+| Loại | Dùng khi | Ví dụ |
+|---|---|---|
+| **Story** | map **1:1** với một `US-nn` (actor + giá trị); AC **người dùng quan sát được**; demo được cho operator | US-15 "dùng control plane qua UI" |
+| **Task** | **enabler kỹ thuật** không có actor nhìn thấy; **hoặc** work package phục vụ **nhiều** story | migration, auth middleware, isolation, E2E harness |
+| **Bug** | defect đối chiếu `AC`/`INV` — không phải "việc cần làm" | sai 404 message, purge không drop schema |
 
-1. Đọc Story + direct children từ Jira MCP/API.
-2. Chạy `node scripts/jira-rollup.mjs <STORY-KEY>` (dry-run).
-3. Nếu target đúng, chạy lại với `--apply`.
-4. Comment lên Story: child statuses + target; giữ `ESO-405` là ví dụ.
-5. Nếu script không có transition tới target: dừng, comment `OPEN`, không sửa status tay.
+**Luật phân biệt:**
 
-**Không** sync WBS markdown trừ khi người yêu cầu. Jira là live SoT.
+1. **Một việc = một loại.** Không tạo Story và Task cho cùng một việc.
+2. **Story không phải container của Task.** Story cần nhiều đơn vị thi công ⇒ **Subtask** (không Task con).
+3. Work package phục vụ **>1 story** ⇒ **Task** (không bẻ thành story giả).
+4. Không chắc ⇒ **Task** + ghi `why` — không đoán thành Story.
+5. Ticket Story phải trích `US-nn`; Task trích leaf WBS/packet; không có nguồn ⇒ chưa tạo.
+
+## 2. Bốn quan hệ — **bắt buộc**, không trang trí
+
+Mỗi ticket (trừ Epic) phải có **đủ bốn**: `subtask` (con) · `relates` · `blocks` · `is blocked by`.
+
+| Loại | subtask | relates | blocks | is blocked by |
+|---|---|---|---|---|
+| **Story/Task** | **≥1** | **≥1** | **≥1** | **≥1** |
+| **Bug** | **≥1** (tái hiện) | **≥1** | **≥1** | **≥1** |
+| **Subtask** | — | **≥1** (sibling hoặc parent) | **≥1** (subtask kế tiếp) | **≥1** (subtask trước) |
+| **Epic** | ≥1 con | ≥1 Epic khác | ≥1 (epic bị nó mở khoá) | ≥1 (trừ epic gốc, ghi `why`) |
+
+**Ngoại lệ duy nhất:** ticket **gốc** (không có incoming) được trống `is blocked by`, và ticket **cuối** (không có
+outgoing) được trống `blocks` — **nếu** ghi `why` trong description (vd *"root của Bootstrap"* / *"sink — không mở khoá ticket nào"*).
+Không có `why` ⇒ ticket chưa đủ. Không được bịa link cho đủ số.
+
+**Link đúng chiều:** `A blocks B` ⇔ `B is blocked by A` — tạo **một** chiều, Jira tự hiện chiều kia.
+Không tạo cả hai (link đôi). `relates` dùng cho quan hệ ngang (cùng deliverable/AC/plane), không thay `blocks`.
+
+## 3. Điểm — Fibonacci trên **subtask**, rollup lên parent
+
+| Luật | Nội dung |
+|---|---|
+| Thang | **1 · 2 · 3 · 5 · 8 · 13** — không số khác, không 0 |
+| Nơi nhập | **chỉ Subtask** (đơn vị thi công nhỏ nhất) |
+| Parent | `Story/Task/Bug` = **tổng Subtask con**; **Epic** = tổng Task/Story/Bug |
+| Cấm | nhập tay điểm cho parent; sửa điểm parent lệch tổng; dùng SP để "cho đẹp" |
+| Máy | `node scripts/jira-points-rollup.mjs` (dry-run) → `--apply`; lệch ⇒ `POINTS_MISMATCH` |
+| Kiểm | mọi subtask ∈ thang · parent = Σ con · Epic = Σ task · Σ Epic = WBS SP |
+
+## 4. Thứ tự tạo (không đảo)
+
+1. **Epic** (reuse nếu còn đúng scope; sửa summary/label thay vì tạo trùng).
+2. `Task`/`Story`/`Bug` dưới Epic.
+3. `Subtask` dưới từng Task/Story/Bug.
+4. **Link 4 quan hệ** (§2) — trước khi set điểm.
+5. **Điểm** subtask (Fibonacci) → rollup parent (§3).
+6. **Verify**: dry-run `jira-create.mjs`, rồi `jira-points-rollup` + `jira-audit`.
+
+## 5. Status rollup (Story/Task ← children)
+
+Jira **không** tự sync parent. Sau **mỗi** child transition, người chuyển phải tính lại parent trong **cùng session**.
+
+| Child pattern | Parent transition |
+|---|---|
+| **Bất kỳ** child `In Progress` | parent → **In Progress** (kể cả đang HIR — rework) |
+| **Tất cả** child `Human In Review`/`Done` | parent → **Human In Review** |
+| Hỗn hợp HIR/Done + còn `To Do`/Backlog | parent → **In Progress** |
+| Tất cả con `To Do`/Backlog | **không đổi** |
+| Không con / status lạ | **không đổi** + ghi `OPEN`, không đoán |
+
+**Cấm:** agent set `Done`/`Closed`; reopen `Done`/`Closed`; parent → HIR khi còn con `To Do`/`In Progress`.
+Máy: `node scripts/jira-rollup.mjs <KEY>` (dry-run) → `--apply` khi đúng luật.
+
+## 6.5 Ngôn ngữ — **English-only cho Jira**
+
+Mọi thứ thuộc **ticket Jira** viết bằng **tiếng Anh**, kể cả khi tài liệu nguồn (WBS/packet/SCN) là tiếng Việt:
+
+| Trường | Ngôn ngữ |
+|---|---|
+| `summary` | **English** |
+| `description` | **English** (dịch từ packet, không thêm nội dung) |
+| `comment` | **English** |
+| `label` | English slug (`bootstrap`, `leaf-l1-1`) |
+| Tên file đính kèm / screenshot | **English** |
+
+**Giữ nguyên** (không dịch): mã `AC-*`, `SCN-*`, `REQ-*`, `BR-*`, `F-*`, `C-*`, `INV-*`, error code (`AUTH_*`, `INVALID_STATE`…),
+slug consumer, path, tên bảng/cột.
+
+**Luật:** ticket mới mà summary/description tiếng Việt ⇒ **không tạo**. Ticket cũ chạm tới ⇒ dịch sang English trong cùng lần sửa.
+Doc ngoài Jira (WBS · packet · SCN · plan) vẫn có thể tiếng Việt — rule này chỉ áp cho ticket.
+
+## 6. Cấm chung
+
+- Không tạo ticket không có `AC`/`packet`; không tự thêm AC vào ticket.
+- Không đổi §9 packet từ `OPEN` thành `READY` để tạo ticket.
+- Không sync WBS markdown trừ khi người yêu cầu.
+- Không tạo link đôi (`A blocks B` + `B is blocked by A`).
+- Không chuyển status tay khi script không hỗ trợ — comment `OPEN`.
