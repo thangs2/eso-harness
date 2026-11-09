@@ -1,4 +1,4 @@
-// @ts-ignore - core domain is plain ESM during the migration
+// @ts-ignore - core domain is plain ESM during the transition
 import { UI_STATES, renderStateFrame, projectS1WorkOverview } from '../../../../../core/src/ui-frames.mjs';
 
 function escapeHtml(str: any) {

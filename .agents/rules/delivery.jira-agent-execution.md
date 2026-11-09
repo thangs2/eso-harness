@@ -10,7 +10,7 @@ version: "2.2.0"
 
 # Jira — chuẩn ticket, liên kết, điểm, rollup (ESO)
 
-**Luật gốc:** [`sdlc/02.governance/01.standard/07.jira-ticket-law.md`](../../sdlc/02/governance/01.standard/07.jira-ticket-law.md) (normative).
+**Luật gốc:** [`sdlc/02.governance/01.standard/07.jira-ticket-law.md`](../../sdlc/02.governance/01.standard/07.jira-ticket-law.md) (normative).
 
 **Live SoT là Jira.** WBS markdown là dẫn xuất, sync on-demand (`D-43`). Ticket sinh từ **packet + AC** — không từ FRD/SRS.
 Nguồn: `sdlc/07.technical/01.architecture/17.jira-slp-operating.md` §6 + operator 2026-11-09.
@@ -35,7 +35,7 @@ Epic (feature) → Bug            (Bug có Subtask khi cần tái hiện)
 | Loại | Dùng khi | Ví dụ |
 |---|---|---|
 | **Story** | map **1:1** với một `US-nn` (actor + giá trị); AC **người dùng quan sát được**; demo được cho operator | US-15 "dùng control plane qua UI" |
-| **Task** | **enabler kỹ thuật** không có actor nhìn thấy; **hoặc** work package phục vụ **nhiều** story | migration, auth middleware, isolation, E2E harness |
+| **Task** | **enabler kỹ thuật** không có actor nhìn thấy; **hoặc** work package phục vụ **nhiều** story | transfer, auth middleware, isolation, E2E harness |
 | **Bug** | defect đối chiếu `AC`/`INV` — không phải "việc cần làm" | sai 404 message, purge không drop schema |
 
 **Luật phân biệt:**

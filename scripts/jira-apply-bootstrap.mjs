@@ -56,7 +56,7 @@ const EPICS = [
 
 // type, leaf, epic, title, ac, packet, sp, subtasks[[id,title,sp]], relates[], blocks[], blockedBy[], why
 const TOPS = [
-    ['Task', 'L1.1', 'E1', 'Platform schema + migration runner', 'AC-14-1', 'l1-1.bip', 5, [['T1a', 'Platform DDL + schema_version', 2], ['T1b', 'Migration runner + idempotent test', 3]], ['T2'], ['T2'], [], 'root of Bootstrap — no incoming dependency'],
+    ['Task', 'L1.1', 'E1', 'Platform schema + DDL runner', 'AC-14-1', 'l1-1.bip', 5, [['T1a', 'Platform DDL + schema_version', 2], ['T1b', 'Transfer runner + idempotent test', 3]], ['T2'], ['T2'], [], 'root of Bootstrap — no incoming dependency'],
     ['Task', 'L1.2', 'E1', 'Event store + write event', 'AC-14-2', 'l1-2.bip', 3, [['T2a', 'consumer_event table + index', 1], ['T2b', 'Write event in transaction', 2]], ['T1'], ['T3'], ['T1']],
     ['Task', 'L1.3', 'E1', 'Event read API (append-only)', 'AC-14-3', 'l1-3.bip', 3, [['T3a', 'GET /events + limit', 1], ['T3b', 'No update/delete endpoint + test', 2]], ['T2'], ['T4'], ['T2']],
     ['Task', 'L2.1', 'E2', 'Auth middleware Basic/Bearer', 'AC-01-1…4', 'l2-1.bip', 5, [['T4a', 'Read .env + constant-time compare', 2], ['T4b', '/auth/me + 401 AUTH_*', 3]], ['T3'], ['T5'], ['T3']],

@@ -237,7 +237,7 @@ export async function startJiraFixture(options = {}) {
             if (path === '/rest/api/2/search' && req.method === 'GET') {
                 json(res, 410, {
                     errorMessages: [
-                        'The requested API has been removed. Please migrate to the /rest/api/3/search/jql API.',
+                        'The requested API has been removed. Please transfer to the /rest/api/3/search/jql API.',
                     ],
                     errors: {},
                 });

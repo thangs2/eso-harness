@@ -59,7 +59,7 @@ lỏng hơn.
 
 ### 2. `/rest/api/2/search` đã bị xoá (410) — search phải dùng `/rest/api/3/search/jql`
 
-Đo 2026-11-08: `GET /rest/api/2/search?jql=…` → **410** kèm message "migrate to
+Đo 2026-11-08: `GET /rest/api/2/search?jql=…` → **410** kèm message "transfer to
 /rest/api/3/search/jql". Endpoint mới là POST, trả `{ issues, nextPageToken, isLast }` và **không
 có `total`** (khác API cũ). `search_issues` vì thế phân trang bằng `nextPageToken`, không hứa một
 con số tổng, và cap `maxResults` ở 100.

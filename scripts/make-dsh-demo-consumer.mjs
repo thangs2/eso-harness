@@ -9,7 +9,7 @@
  * The fixture declares:
  *   - a `locked` directory, so writing there is denied outright;
  *   - a `gated` file, so an unapproved write is denied with a reason;
- *   - one `eso.checks.migration` file with `drop table`, so the prompt gate refuses the next step and
+ *   - one `eso.checks.transfer` file with `drop table`, so the prompt gate refuses the next step and
  *     leaves a record in the product-state trail.
  */
 import fs from 'node:fs';
@@ -41,14 +41,14 @@ export function makeDemoConsumer(options = {}) {
                 enabled: true,
                 mode: 'hint',
                 enforceWrites: 'fail_closed',
-                checks: { migration: { files: ['db/migrations/001_drop.sql'] } },
+                checks: { transfer: { files: ['db/transfers/001_drop.sql'] } },
             },
             paths: { locked: ['secrets/'], gated: ['AGENTS.md'], ask: [], sot: [] },
         },
         null,
         4,
     );
-    files['db/migrations/001_drop.sql'] = 'drop table orders;\n';
+    files['db/transfers/001_drop.sql'] = 'drop table orders;\n';
     files['AGENTS.md'] = '# Demo workspace\n\nThis file is in the gated tier.\n';
     files['README.md'] = [
         '# ESO demo consumer',

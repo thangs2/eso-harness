@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
  * @mu/eso-control-plane — Configuration Change & Attribute Management
  * Covers:
  * - US-IAM-06 (ESO-295): Preview impact, single-action save, one-action revert, tenant isolation
- * - US-IAM-09 (ESO-325): Attribute impact preview, RBAC, optimistic locking, rename migration
+ * - US-IAM-09 (ESO-325): Attribute impact preview, RBAC, optimistic locking, rename transition
  */
 
 function computeHash(data) {
@@ -199,7 +199,7 @@ export function saveAttributeChange({
     currentVersion = 1,
     requestedVersion = 1,
     actorRole = 'operator',
-    hasMigrationPlan = false,
+    hasTransitionPlan = false,
 }: any = {}) {
     // AC-IAM-09-02 / rbac: Only operator/human can mutate policies/attributes
     if (actorRole !== 'operator' && actorRole !== 'admin') {
@@ -238,12 +238,12 @@ export function saveAttributeChange({
         throw err;
     }
 
-    // AC-IAM-09-05 / ED10: Renaming attribute currently in use without migration plan
-    if (action === 'rename' && inUsePolicies.length > 0 && !hasMigrationPlan) {
+    // AC-IAM-09-05 / ED10: Renaming attribute currently in use without an explicit transition plan
+    if (action === 'rename' && inUsePolicies.length > 0 && !hasTransitionPlan) {
         const err: any = new Error(
-            `RENAME_WITHOUT_MIGRATION: Cannot rename attribute '${attributeKey}' without an explicit migration plan`
+            `RENAME_WITHOUT_TRANSITION: Cannot rename attribute '${attributeKey}' without an explicit transition plan`
         );
-        err.code = 'RENAME_WITHOUT_MIGRATION';
+        err.code = 'RENAME_WITHOUT_TRANSITION';
         err.attribute_key = attributeKey;
         throw err;
     }

@@ -133,7 +133,7 @@ CREATE TABLE IF NOT EXISTS graph_index_run (
   PRIMARY KEY (project, build_id, source_kind)
 );
 
--- Existing graph databases predate the source_path column; keep migration idempotent.
+-- Existing graph databases predate the source_path column; keep DDL idempotent.
 ALTER TABLE graph_index_run ADD COLUMN IF NOT EXISTS source_path text;
 
 CREATE INDEX IF NOT EXISTS idx_graph_index_run_build ON graph_index_run (project, build_id);

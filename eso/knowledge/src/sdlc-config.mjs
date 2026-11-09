@@ -7,7 +7,7 @@ import path from 'node:path';
  *
  * Covers:
  * - US-CFG-01 (ESO-201): Unified 4-group config (sdlc, team, tools, project), atomic save,
- *   sdlc_root migration guard, preserve customized roles, RBAC, no-op zero change, hash check.
+ *   sdlc_root transition guard, preserve customized roles, RBAC, no-op zero change, hash check.
  * - US-SDLC-01 (ESO-206): SDLC project initialization (init, check, upgrade), idempotency,
  *   missing config guard, applies_when filtering, tenant isolation, multi-project upgrade,
  *   dangling root detection.
@@ -53,7 +53,7 @@ export function savePageConfiguration({
     previewHash,
     actorRole = 'operator',
     existingArtefacts = [],
-    migrationPlan = null,
+    transitionPlan = null,
 } = {}) {
     if (!project) throw new Error('Project is required');
 
@@ -96,16 +96,16 @@ export function savePageConfiguration({
         project: { ...(currentGroups.project || {}), ...(pendingChanges.project || {}) },
     };
 
-    // AC-CFG-01-02: Changed sdlc_root while documents exist under old sdlc_root without migration plan
+    // AC-CFG-01-02: Changed sdlc_root while documents exist under old sdlc_root without an explicit transition plan
     const oldRoot = currentGroups.sdlc && currentGroups.sdlc.sdlc_root;
     const newRoot = newGroups.sdlc && newGroups.sdlc.sdlc_root;
     if (oldRoot && newRoot && oldRoot !== newRoot) {
         const docsUnderOldRoot = existingArtefacts.filter((a) => a.project === project && a.path && a.path.startsWith(oldRoot));
-        if (docsUnderOldRoot.length > 0 && !migrationPlan) {
+        if (docsUnderOldRoot.length > 0 && !transitionPlan) {
             const err = new Error(
-                `MIGRATION_PLAN_REQUIRED: Cannot change sdlc_root from '${oldRoot}' to '${newRoot}'. Existing documents detected under old root without migration plan.`
+                `TRANSITION_PLAN_REQUIRED: Cannot change sdlc_root from '${oldRoot}' to '${newRoot}'. Existing documents detected under old root without an explicit transition plan.`
             );
-            err.code = 'MIGRATION_PLAN_REQUIRED';
+            err.code = 'TRANSITION_PLAN_REQUIRED';
             err.affected_paths = docsUnderOldRoot.map((d) => d.path);
             throw err;
         }

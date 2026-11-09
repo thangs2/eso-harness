@@ -199,7 +199,7 @@ CREATE POLICY config_event_project_only ON config_event
 
 /**
  * Create the evidence tables. PostgreSQL only (D-93): the SQLite trigger syntax this
- * module carried until the D-93 migration is gone, so an old SQLite handle cannot pass.
+ * module carried until the D-93 switch is gone, so an old SQLite handle cannot pass.
  *
  * RLS is opt-in: enabling it requires every session to set `eso.project`, which belongs to
  * the adapter that opens the connection (see eso/graph/src/schema.mjs for the pattern).

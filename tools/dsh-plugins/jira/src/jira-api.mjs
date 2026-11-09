@@ -19,7 +19,7 @@
  *     explicit `insecureTls` turns verification off.
  *
  * API facts measured on the same host (2026-11-08):
- *   - `GET /rest/api/2/search` is **removed** (410, "migrate to
+ *   - `GET /rest/api/2/search` is **removed** (410, "transfer to
  *     /rest/api/3/search/jql"). Search uses POST `/rest/api/3/search/jql`, whose
  *     response has `issues`, `nextPageToken`, `isLast` and **no `total`**.
  *   - `/rest/api/2` still accepts Jira wiki markup for description/comment

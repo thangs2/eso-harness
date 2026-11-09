@@ -21,7 +21,7 @@
  * present: it is resolved through `ctx.credentials` so the secret lives in
  * `$DSH_HOME/.credentials.yaml` (owner-only), not in a repo file. A repo MCP
  * config that already carries `JIRA_API_TOKEN` inline is used as a fallback for
- * machines that have not migrated to the credential store yet — the plugin never
+ * machines that have not transferred to the credential store yet — the plugin never
  * copies it anywhere.
  *
  * A config file that exists but does not parse stops resolution instead of being

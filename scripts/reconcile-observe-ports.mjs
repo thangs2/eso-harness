@@ -18,7 +18,7 @@ import path from 'node:path';
 import {
     LEGACY_PROJECTS_SUBDIR,
     loadWorkspace,
-    migrateProjectDocuments,
+    transferProjectDocuments,
     productStateDir,
     saveWorkspace,
     syncProjectsFromWorkspace,
@@ -42,21 +42,21 @@ function duplicatePorts(ws) {
 
 const apply = process.argv.includes('--apply');
 const stateDir = productStateDir();
-const migration = migrateProjectDocuments();
+const transfer = transferProjectDocuments();
 const ws = loadWorkspace();
 
 console.log(`product state: ${stateDir}`);
 console.log(`registry:      ${workspaceFile()}`);
 
-if (migration.migrated) {
+if (transfer.transferred) {
     console.log('');
-    console.log('Migrated to registry v2:');
-    if (migration.folded) console.log(`  folded ${migration.folded} project document(s) into the registry row`);
-    if (migration.adopted) console.log(`  adopted ${migration.adopted} project(s) the workspace did not know`);
-    if (migration.removed) console.log(`  removed ${path.join(stateDir, LEGACY_PROJECTS_SUBDIR)}/`);
-    if (migration.broken?.length) {
-        console.log(`  ${migration.broken.length} unreadable file(s) left in place:`);
-        for (const f of migration.broken) console.log(`    ${f}`);
+    console.log('Transferred to registry v2:');
+    if (transfer.folded) console.log(`  folded ${transfer.folded} project document(s) into the registry row`);
+    if (transfer.adopted) console.log(`  adopted ${transfer.adopted} project(s) the workspace did not know`);
+    if (transfer.removed) console.log(`  removed ${path.join(stateDir, LEGACY_PROJECTS_SUBDIR)}/`);
+    if (transfer.broken?.length) {
+        console.log(`  ${transfer.broken.length} unreadable file(s) left in place:`);
+        for (const f of transfer.broken) console.log(`    ${f}`);
     }
 } else if (fs.existsSync(path.join(stateDir, LEGACY_PROJECTS_SUBDIR))) {
     console.log('');
