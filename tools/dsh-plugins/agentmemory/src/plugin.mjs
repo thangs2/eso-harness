@@ -65,8 +65,10 @@ const MAX_TOOL_NAME_LENGTH = 64;
 const TOOL_NAME_OF = (exec) => String(exec?.name ?? exec?.tool ?? '');
 const IS_MEMORY_TOOL = (tool) => tool.startsWith('memory_');
 const IS_MEMORY_SEARCH = (tool) => tool === 'memory_smart_search' || tool === 'memory_recall';
-const BLOCKED_REASON =
-    'AgentMemory first: this prompt touches eso/sdlc/scripts/qc — call memory_smart_search before any other tool.';
+/** The blocked reason names **only the folders that actually matched** — a fixed four-folder sentence reads
+ *  like scripts/qc triggered when the call only touched sdlc, which is the false impression this fixes. */
+export const blockedReason = (matched) =>
+    `AgentMemory first: this prompt touches ${matched.join(' / ')} — call memory_smart_search before any other tool.`;
 const DEFAULT_ENFORCE = true;
 /** Work outside these folders does not need a memory check; see `touchesScope`. */
 const DEFAULT_SCOPE = ['eso', 'sdlc', 'scripts', 'qc'];
@@ -85,13 +87,84 @@ const escapeForRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
  * @param {string[]} scope folder names.
  * @returns {boolean} true when the call touches at least one scope folder.
  */
+/** Keys whose value is explicitly a filesystem path — a bare folder name in one of these is a path. */
+const PATH_KEYS = new Set([
+    'path',
+    'paths',
+    'file',
+    'files',
+    'file_path',
+    'filepath',
+    'workdir',
+    'working_directory',
+    'cwd',
+    'root',
+    'dir',
+    'directory',
+    'target',
+    'destination',
+    'source',
+    'glob',
+]);
+
+/** Shell commands whose first argument is a path; `cd sdlc` is a folder reference without a slash. */
+const PATH_COMMANDS = 'cd|pushd|ls|find|tree|grep|rg|cat|sed|head|tail|wc|git';
+
+/**
+ * Escaped folder-name patterns over a raw string.
+ *
+ * **Path-shaped only.** The old test was a bare-word regex, so `grep 'scripts' package.json` or prose inside
+ * a shell heredoc counted as touching `scripts/`; that produced blocks on commands with no real path — the
+ * defect this fixes. A reference must now be followed by a separator (`sdlc/…`), preceded by one
+ * (`/repo/qc`), be a `./…`/`../…` prefix, or be the path argument of a path command (`cd sdlc`).
+ *
+ * @param {string} text raw command or path
+ * @param {string} name folder name
+ */
+function folderReference(text, name) {
+    const esc = escapeForRegExp(name);
+    const before = `(?:^|[\\s'"\`=:(,/\\\\])`;
+    return [
+        new RegExp(`${before}${esc}[\\\\/]`, 'i'),
+        new RegExp(`[\\\\/]${esc}(?=$|[\\s'"\`),])`, 'i'),
+        new RegExp(`${before}(?:\\.{1,2}[\\\\/])+${esc}(?=$|[\\s'"\`),])`, 'i'),
+        new RegExp(`(?<![\\w-])(?:${PATH_COMMANDS})\\s+(?:\\.{1,2}[\\\\/])*${esc}(?=$|[\\s'"\`),])`, 'i'),
+    ].some((pattern) => pattern.test(text));
+}
+
+/**
+ * Whether a tool call works inside the enforced folders.
+ *
+ * Synchronous by design: a pure string test over non-prose tool arguments (file paths, `cd`/path inside a
+ * shell command, a `working_directory`). Path-key values count when a **path segment** equals the folder,
+ * so `path: 'qc'` and `path: 'sdlc/03.inception'` match while `scripts-old/` does not. Boundaries exclude
+ * `-` and word characters, so `eso-harness` never counts as the `eso` folder.
+ *
+ * @param {{ name?: string, arguments?: unknown }} exec tool call under judgement.
+ * @param {string[]} scope folder names.
+ * @returns {string[]} folders actually matched (empty = outside scope). Used for the blocked reason.
+ */
+export function matchedScope(exec, scope) {
+    const values = [];
+    collectPathValues(exec?.arguments ?? {}, values, '');
+    const matched = [];
+    for (const name of scope) {
+        const lower = name.toLowerCase();
+        const hit = values.some(({ key, value }) => {
+            if (PATH_KEYS.has(key.toLowerCase())) {
+                const segments = value.split(/[\\/]+/).filter(Boolean);
+                if (segments.some((segment) => segment.toLowerCase() === lower)) return true;
+            }
+            return folderReference(value, name);
+        });
+        if (hit) matched.push(name);
+    }
+    return matched;
+}
+
+/** Back-compat boolean wrapper (tests and guards only need "inside scope or not"). */
 export function touchesScope(exec, scope) {
-    const values = collectPathValues(exec?.arguments ?? {}, [], '');
-    if (values.length === 0) return false;
-    return scope.some((name) => {
-        const pattern = new RegExp(`(?<![\\w-])${escapeForRegExp(name)}(?![\\w-])`, 'i');
-        return values.some((text) => pattern.test(text));
-    });
+    return matchedScope(exec, scope).length > 0;
 }
 
 /**
@@ -120,7 +193,7 @@ const PROSE_KEYS = new Set([
 /** @returns {string[]} every non-prose string in the argument tree (arrays included). */
 function collectPathValues(value, values, key) {
     if (typeof value === 'string') {
-        if (!PROSE_KEYS.has(key.toLowerCase())) values.push(value);
+        if (!PROSE_KEYS.has(key.toLowerCase())) values.push({ key, value });
         return values;
     }
     if (Array.isArray(value)) {
@@ -374,8 +447,9 @@ export function createAgentMemoryPlugin(defaults = {}) {
                 const tool = TOOL_NAME_OF(exec);
                 if (IS_MEMORY_TOOL(tool)) return undefined; // the way out is always open
                 // Work that never touches the enforced folders is not held to a memory check.
-                if (!touchesScope(exec, scope)) return undefined;
-                return state.searched ? undefined : BLOCKED_REASON;
+                const matched = matchedScope(exec, scope);
+                if (matched.length === 0) return undefined;
+                return state.searched ? undefined : blockedReason(matched);
             };
 
             /** agent → { client, disposers } so disposal can tear down the process. */

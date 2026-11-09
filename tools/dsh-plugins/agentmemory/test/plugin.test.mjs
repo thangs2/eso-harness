@@ -473,6 +473,29 @@ test('force (per prompt): every turn/start resets the memory check', async () =>
     }
 });
 
+test('touchesScope: path-shaped only — prose and bare words do not count', () => {
+    const scope = ['eso', 'sdlc', 'scripts', 'qc'];
+    // Lỗi cũ: bare-word match ⇒ chặn cả command không có path thật.
+    assert.equal(touchesScope({ arguments: { command: "grep 'scripts' package.json" } }, scope), false);
+    assert.equal(touchesScope({ arguments: { command: 'echo sdlc qc' } }, scope), false);
+    assert.equal(touchesScope({ arguments: { command: 'npm run test -- --grep qc' } }, scope), false);
+    // Nhưng path thật vẫn phải bắt.
+    assert.equal(touchesScope({ arguments: { command: 'cat qc/report.md' } }, scope), true);
+    assert.equal(touchesScope({ arguments: { command: 'cd sdlc' } }, scope), true);
+    assert.equal(touchesScope({ arguments: { path: '../qc' } }, scope), true);
+    assert.equal(touchesScope({ arguments: { file_path: '/repo/scripts/build.mjs' } }, scope), true);
+});
+
+test('blockedReason: chỉ nêu folder thật sự match', async () => {
+    const { blockedReason, matchedScope } = await import('../src/plugin.mjs');
+    const scope = ['eso', 'sdlc', 'scripts', 'qc'];
+    const exec = { arguments: { path: 'sdlc/02.governance/README.md' } };
+    assert.deepEqual(matchedScope(exec, scope), ['sdlc']);
+    const reason = blockedReason(['sdlc']);
+    assert.match(reason, /touches sdlc/);
+    assert.doesNotMatch(reason, /scripts|qc/);
+});
+
 test('touchesScope: literal folder names, not substrings', () => {
     const scope = ['eso', 'sdlc', 'scripts', 'qc'];
     assert.equal(touchesScope({ arguments: { path: 'sdlc/03.inception' } }, scope), true);
