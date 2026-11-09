@@ -1,24 +1,44 @@
 import { Injectable, signal, computed } from '@angular/core';
 
 /**
- * Authentication Service (Angular 22 Signals)
- * Security rule (SKILL.md §7): Bearer tokens stored in memory ONLY.
- * NEVER persist tokens in localStorage or sessionStorage.
+ * Authentication Service (Angular 22 Signals).
+ * AC-15-1 / FRD-F07: the UI keeps the HTTP Basic credential in sessionStorage
+ * (never localStorage, never a server-side session).
  */
 @Injectable({
     providedIn: 'root',
 })
 export class AuthService {
-    private readonly _token = signal<string | null>(null);
+    private readonly _authorization = signal<string | null>(this.read());
 
-    readonly token = this._token.asReadonly();
-    readonly isAuthenticated = computed(() => this._token() !== null);
+    readonly authorization = this._authorization.asReadonly();
+    readonly isAuthenticated = computed(() => Boolean(this._authorization()));
 
-    setToken(token: string | null): void {
-        this._token.set(token);
+    setAuthorization(value: string | null): void {
+        try {
+            if (value) sessionStorage.setItem('eso.auth', value);
+            else sessionStorage.removeItem('eso.auth');
+        } catch {
+            // Storage can be unavailable (private mode); the in-memory signal still works.
+        }
+        this._authorization.set(value);
     }
 
-    clearToken(): void {
-        this._token.set(null);
+    setCredential(user: string, password: string): string {
+        const value = `Basic ${btoa(`${user}:${password}`)}`;
+        this.setAuthorization(value);
+        return value;
+    }
+
+    clear(): void {
+        this.setAuthorization(null);
+    }
+
+    private read(): string | null {
+        try {
+            return sessionStorage.getItem('eso.auth');
+        } catch {
+            return null;
+        }
     }
 }

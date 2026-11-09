@@ -6,7 +6,7 @@ import { APP_CONFIG, type AppConfig } from '../tokens.js';
 })
 export class AppConfigService {
     private readonly initialConfig = inject(APP_CONFIG, { optional: true }) || {
-        apiBaseUrl: 'http://127.0.0.1:8792',
+        apiBaseUrl: 'http://127.0.0.1:8787',
         environment: 'development' as const,
     };
 

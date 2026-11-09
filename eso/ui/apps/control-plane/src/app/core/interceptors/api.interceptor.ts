@@ -15,9 +15,9 @@ export function createApiRequest(req: HttpRequestLike): HttpRequestLike {
     const authService = inject(AuthService);
     const headers = { ...req.headers };
 
-    const token = authService.token();
+    const token = authService.authorization();
     if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
+        headers['Authorization'] = /^(Basic|Bearer)\s/i.test(token) ? token : `Bearer ${token}`;
     }
 
     if (!headers['X-Trace-Id']) {

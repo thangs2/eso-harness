@@ -12,7 +12,7 @@ export class ControlPlaneApiClient {
     private tokenProvider: () => string | null;
 
     constructor(options: { baseUrl?: string; tokenProvider?: () => string | null } = {}) {
-        this.baseUrl = (options.baseUrl || 'http://127.0.0.1:8792').replace(/\/$/, '');
+        this.baseUrl = (options.baseUrl || 'http://127.0.0.1:8787').replace(/\/$/, '');
         this.tokenProvider = options.tokenProvider || (() => null);
     }
 
@@ -22,7 +22,7 @@ export class ControlPlaneApiClient {
         };
         const token = this.tokenProvider();
         if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
+            headers['Authorization'] = /^(Basic|Bearer)\s/i.test(token) ? token : `Bearer ${token}`;
         }
         return headers;
     }
@@ -94,7 +94,8 @@ export class ControlPlaneApiClient {
     async listConsumers(): Promise<ConsumerListResponse> {
         const res = await fetch(`${this.baseUrl}/api/v1/consumers`, { headers: this.getHeaders() });
         if (!res.ok) throw await this.problem(res);
-        return (await res.json()) as ConsumerListResponse;
+        const data = await res.json();
+        return (Array.isArray(data) ? { items: data } : data) as ConsumerListResponse;
     }
 
     async getConsumer(project: string): Promise<ConsumerProfile> {

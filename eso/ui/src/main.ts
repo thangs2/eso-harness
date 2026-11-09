@@ -6,7 +6,6 @@ import { APP_CONFIG, CONTROL_PLANE_API_CLIENT } from '../apps/control-plane/src/
 import { ControlPlaneApiClient } from '../libs/api-client/client.js';
 
 const API_BASE = 'http://127.0.0.1:8787';
-const DEMO_TOKEN = 'demo-token';
 
 bootstrapApplication(ShellComponent, {
     providers: [
@@ -17,8 +16,7 @@ bootstrapApplication(ShellComponent, {
             useFactory: () =>
                 new ControlPlaneApiClient({
                     baseUrl: API_BASE,
-                    // Demo-only token; the real shell will read it from the auth service.
-                    tokenProvider: () => globalThis.localStorage?.getItem('eso.token') ?? DEMO_TOKEN,
+                    tokenProvider: () => globalThis.sessionStorage?.getItem('eso.auth') ?? null,
                 }),
         },
     ],

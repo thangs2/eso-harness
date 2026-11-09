@@ -3,8 +3,12 @@ import type { Routes } from '@angular/router';
 export const APP_ROUTES: Routes = [
     {
         path: '',
-        redirectTo: 'work-overview',
+        redirectTo: 'consumers',
         pathMatch: 'full',
+    },
+    {
+        path: 'login',
+        loadChildren: () => import('./features/login/login.routes.js').then((m) => m.LOGIN_ROUTES),
     },
     {
         path: 'consumers',
