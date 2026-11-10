@@ -19,6 +19,9 @@ export const ERROR_STATUS: Readonly<Record<string, number>> = {
     INVALID_STATE: 409,
     PURGE_CONFIRM_MISMATCH: 409,
     MATERIALIZE_FAILED: 500,
+    MATERIAL_FAILED: 500,
+    PROVISION_FAILED: 500,
+    SCHEMA_MISMATCH: 409,
     PROFILE_DRIFT: 409,
     DATABASE_UNAVAILABLE: 503,
 };
@@ -36,6 +39,9 @@ export const ERROR_MESSAGE: Readonly<Record<string, string>> = {
     INVALID_STATE: 'Transition is not allowed from the current state',
     PURGE_CONFIRM_MISMATCH: 'Purge confirmation does not match the consumer id',
     MATERIALIZE_FAILED: 'Could not materialize the consumer profile',
+    MATERIAL_FAILED: 'Could not provision material bundle',
+    PROVISION_FAILED: 'Consumer provisioning failed',
+    SCHEMA_MISMATCH: 'Schema does not match consumer id',
     PROFILE_DRIFT: 'Profile artifact differs from the registry',
     DATABASE_UNAVAILABLE: 'Database is unavailable',
 };
