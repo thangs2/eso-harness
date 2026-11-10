@@ -16,7 +16,7 @@ type: scenario-matrix
 | `SCN-31-1` | `AC-31-1` | happy | 2 host đủ năng lực | chạy | parity | yes | `planned` |
 | `SCN-31-2` | `AC-31-2` | edge | 1 host thiếu | chạy | khác biệt có lý do `none` | yes | `planned` |
 | `SCN-31-3` | `AC-31-3` | failure | khác biệt không lý do | chạy | finding parity | yes | `planned` |
-| `SCN-31-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — Bootstrap chỉ một operator |
+| `SCN-31-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — baseline chỉ một operator |
 | `SCN-31-TENANT-OUT` | — | tenant | — | — | — | — | `OUT` — consumer không phải tenant (`BR-14`) |
 
 ## Luật

@@ -8,7 +8,7 @@ demand; those paths are not part of the build.
 
 ```text
 deploy/
-  bin/       lib.sh · bootstrap.sh
+  bin/       lib.sh · env-init.sh
   bin/shared/  build.sh · logs.sh · shell.sh (shared implementation)
   bin/stack/   start · stop · restart · status · deploy · rollback · e2e
   bin/cp/      build · logs · shell (control-plane)
@@ -38,8 +38,8 @@ The e2e compose file builds both application images and runs a disposable stack 
 ## Quickstart (dev)
 
 ```bash
-# 1. Bootstrap: create the ignored runtime env file and runtime directories.
-bash deploy/bin/bootstrap.sh --env dev
+# 1. Init: create the ignored runtime env file and runtime directories.
+bash deploy/bin/env-init.sh --env dev
 
 # 2. Validate the rendered configuration.
 docker compose -f deploy/compose/compose.dev.yml --env-file deploy/env/dev.env config -q
@@ -58,7 +58,7 @@ curl -fsS http://127.0.0.1:4200/healthz
 bash deploy/bin/stack/stop.sh --env dev
 ```
 
-The `Makefile` exposes the same operations as targets (`make bootstrap`, `make build`, `make up`,
+The `Makefile` exposes the same operations as targets (`make init`, `make build`, `make up`,
 `make status`, `make e2e`, `make backup`, and so on).
 
 Develop on the host instead of in containers when that is faster:
@@ -104,13 +104,13 @@ the env file and rotate it there.
 
 The runtime wrappers live in `deploy/bin/`. They create the state, backup, and log directories on
 demand; building or validating the configuration does not create them. Run them as
-`bash deploy/bin/<group>/<script>` from the repository root (`bootstrap.sh` and `lib.sh` stay at the root).
+`bash deploy/bin/<group>/<script>` from the repository root (`env-init.sh` and `lib.sh` stay at the root).
 
 CP/UI/DB mapping is in [`deploy/bin/README.md`](bin/README.md).
 
 | Script | Operation | Notes |
 |---|---|---|
-| `bootstrap.sh --env <env>` | Create runtime env and directories | Copies the matching `*.env.example`, sets mode `0600`, and warns on remaining placeholders. |
+| `env-init.sh --env <env>` | Create runtime env and directories | Copies the matching `*.env.example`, sets mode `0600`, and warns on remaining placeholders. |
 | `shared/build.sh --env <env> [service]` | Build images | Builds `eso/control-plane/Dockerfile` and `eso/ui/Dockerfile`; never pushes. |
 | `stack/start.sh --env <env>` | Start and wait for health | Runs `docker compose up -d --remove-orphans`. |
 | `stack/stop.sh --env <env>` | Stop the stack | Volumes are kept unless `--volumes` is passed. |

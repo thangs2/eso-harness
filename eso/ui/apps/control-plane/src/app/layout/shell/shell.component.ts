@@ -18,7 +18,6 @@ import { AuthService } from '../../core/auth/auth.service.js';
                     </a>
                     <nav class="eso-nav" aria-label="Main Navigation">
                         <a routerLink="/consumers" routerLinkActive="active" class="nav-link">Consumers</a>
-                        <a routerLink="/onboarding" routerLinkActive="active" class="nav-link">Setup</a>
                         <a routerLink="/work-overview" routerLinkActive="active" class="nav-link">Work overview</a>
                         <a routerLink="/diagnosis" routerLinkActive="active" class="nav-link">Diagnosis</a>
                         <a routerLink="/declaration" routerLinkActive="active" class="nav-link">Declaration</a>

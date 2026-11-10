@@ -16,7 +16,6 @@ import type { ConsumerSummary } from '../../../../../../../libs/api-client/types
                 <h1>Consumers</h1>
                 <p class="subtitle">Profile đã đăng ký; chọn một consumer để xử lý case-by-case.</p>
             </div>
-            <a class="btn-primary" routerLink="/onboarding">Thiết lập consumer</a>
         </header>
 
         <div class="stats-row">
@@ -33,8 +32,8 @@ import type { ConsumerSummary } from '../../../../../../../libs/api-client/types
         } @else if (items().length === 0) {
             <section class="panel empty-panel">
                 <h2>Chưa có consumer</h2>
-                <p>Bắt đầu bằng việc khai báo profile cho một repo cụ thể.</p>
-                <a class="btn-primary" routerLink="/onboarding">Thiết lập consumer đầu tiên</a>
+                <p>Bắt đầu bằng việc khai báo host, harness source và repo consumer.</p>
+                <a class="btn-primary" routerLink="/onboarding">Khởi tạo consumer</a>
             </section>
         } @else {
             <section class="panel table-panel">
@@ -45,13 +44,12 @@ import type { ConsumerSummary } from '../../../../../../../libs/api-client/types
                             <tr>
                                 <td class="col-work"><strong>{{ item.id }}</strong><br><small>{{ item.name }}</small></td>
                                 <td>{{ item.root }}</td>
-                                <td><span class="pill">{{ item.profile?.recipe }}</span><br><small>{{ item.profile?.hostProfile }}</small></td>
+                                <td><span class="pill">{{ item.profile?.source || item.profile?.recipe }}</span><br><small>{{ item.profile?.host || item.profile?.hostProfile }}</small></td>
                                 <td>v{{ item.version }}</td>
                                 <td>{{ item.updatedAt | date: 'dd/MM/yyyy HH:mm' }}</td>
                                 <td class="col-actions">
                                     <a class="btn-why" [routerLink]="['/consumers', item.id]">Chi tiết</a>
                                     <a class="btn-why" [routerLink]="['/work-overview']" [queryParams]="{ project: item.id }">Work</a>
-                                    <a class="btn-why" [routerLink]="['/onboarding', item.id]">Sửa</a>
                                 </td>
                             </tr>
                         }

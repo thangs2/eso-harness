@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Rebuild ESO Bootstrap ticket graph theo luật ESO (07.jira-ticket-law + 03.ticket-model §6):
+// Rebuild ESO baseline ticket graph theo luật ESO (07.jira-ticket-law + 03.ticket-model §6):
 // - quartet subtasks (giữ), lane links, top-level WBS DAG, sibling relates
 // - mỗi ticket KHAI BÁO 4 quan hệ trong description; `none` phải kèm lý do (không bịa link)
 // Dry-run mặc định; --apply mới ghi.
@@ -15,6 +15,7 @@ if (env.NODE_TLS_REJECT_UNAUTHORIZED === '0') process.env.NODE_TLS_REJECT_UNAUTH
 const base = env.JIRA_BASE_URL.replace(/\/$/, ''); const auth = 'Basic ' + Buffer.from(`${env.JIRA_USER_EMAIL}:${env.JIRA_API_TOKEN}`).toString('base64');
 const call = async (m, p, b, soft) => { const r = await fetch(base + p, { method: m, headers: { Authorization: auth, Accept: 'application/json', 'Content-Type': 'application/json' }, body: b ? JSON.stringify(b) : undefined }); const t = await r.text(); if (!r.ok) { if (soft) return {}; throw new Error(`${m} ${p} → ${r.status} ${t.slice(0, 200)}`); } return t.trim() ? JSON.parse(t) : {}; };
 const get = async (p) => (await fetch(base + p, { headers: { Authorization: auth, Accept: 'application/json' } })).json();
+// Legacy Jira label `bootstrap` is retained for existing issues; do not rewrite labels.
 const q = await call('POST', '/rest/api/3/search/jql', { jql: 'project = ESO AND labels = bootstrap ORDER BY key', fields: ['issuetype', 'summary', 'parent', 'labels', 'subtasks', 'description', SP], maxResults: 200 });
 const iss = q.issues || [];
 const type = new Map(iss.map((i) => [i.key, i.fields.issuetype.name]));
@@ -51,7 +52,7 @@ for (let i = 0; i < epics.length - 1; i++) { add(epics[i], epics[i + 1], 'Blocks
 const seen = new Set(); const links = pairs.filter(([a, b, t]) => { const s = `${a}|${b}|${t}`; if (seen.has(s) || a === b) return false; seen.add(s); return true; });
 console.log(`DRY-RUN=${!apply} · issues=${iss.length} · tops=${tops.length} · epics=${epics.length} · links=${links.length}`);
 if (!apply) process.exit(0);
-// 1) delete all links among bootstrap set
+// 1) delete all links among legacy-bootstrap set
 let del = 0;
 for (const i of iss) { const x = await get('/rest/api/2/issue/' + i.key + '?fields=issuelinks'); for (const l of x.fields.issuelinks || []) { const o = l.outwardIssue?.key || l.inwardIssue?.key; if (o && type.has(o)) { await call('DELETE', '/rest/api/2/issueLink/' + l.id, undefined, true); del++; } } }
 console.log('deleted links:', del);

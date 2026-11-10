@@ -3,7 +3,7 @@
   "epic": "ESO-491",
   "bip": {
     "id": "BIP-L62",
-    "file": "sdlc/09.wbs/02.bootstrap-packets/01.bip/l6-2.bip.md"
+    "file": "sdlc/09.wbs/02.baseline-packets/01.bip/l6-2.bip.md"
   },
   "technical": false,
   "inv": [
@@ -24,14 +24,14 @@
   "red_packets": [
     {
       "packet": "sdlc/10.test/122.l6-2.tdd-unit.md",
-      "test_file": "eso/e2e/bootstrap.e2e.mjs",
+      "test_file": "eso/e2e/baseline.e2e.mjs",
       "test_name": "SCN-13-1 · AC-13-1 — 404 thống nhất + E2E + smoke · tdd-unit",
       "expected_failure": "`AssertionError` ở `SCN-13-1`: **actual** hành vi đơn vị của `L6.2` chưa đúng — AC-13-1, AC-13-2, AC-13-3 fail trên assert chính · **expected** hành vi đơn vị đạt đủ 3 AC và khớp SCN"
     }
   ],
   "allowed_files": [
     "eso/control-plane/src/common/http/**",
-    "eso/e2e/bootstrap.e2e.mjs",
+    "eso/e2e/baseline.e2e.mjs",
     "scripts/**"
   ],
   "forbidden": [
@@ -40,7 +40,7 @@
     ".agents/**"
   ],
   "verify": [
-    "node eso/e2e/bootstrap.e2e.mjs"
+    "node eso/e2e/baseline.e2e.mjs"
   ],
   "base_commit": "d20eb88"
 }

@@ -16,7 +16,7 @@ type: scenario-matrix
 | `SCN-23-1` | `AC-23-1` | happy | 2 bản gần trùng | kiểm | `NEAR_DUPLICATE` + copies | yes | `planned` |
 | `SCN-23-2` | `AC-23-2` | failure | 2 bản mâu thuẫn | kiểm | `CONTENT_CONTRADICTS` | yes | `planned` |
 | `SCN-23-3` | `AC-23-3` | edge | finding không hậu quả | kiểm | bị loại | yes | `planned` |
-| `SCN-23-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — Bootstrap chỉ một operator |
+| `SCN-23-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — baseline chỉ một operator |
 | `SCN-23-TENANT-OUT` | — | tenant | — | — | — | — | `OUT` — consumer không phải tenant (`BR-14`) |
 
 ## Luật

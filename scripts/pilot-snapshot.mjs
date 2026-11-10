@@ -101,7 +101,7 @@ function main() {
             '.harness/host-pack',
             '.harness/decision-policy.json',
             '.harness/host-install-state.json',
-            '.harness/host-bootstrap.json',
+            '.harness/host-init.json',
             '.harness/integrations.json',
             '.cursor/hooks',
             '.agents/hooks',

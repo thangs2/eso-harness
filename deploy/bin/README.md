@@ -2,7 +2,7 @@
 
 | Script | Scope | Service |
 |---|---|---|
-| `bootstrap.sh` | env | stack |
+| `env-init.sh` | env | stack |
 | `shared/build.sh [--env] [--no-pull] [control-plane\|ui\|all]` | image build | both |
 | `shared/logs.sh [--env] [service]` | logs | both |
 | `shared/shell.sh [--env] [service]` | shell | both |

@@ -46,7 +46,7 @@ export interface ConsumerProfile {
     hostMode?: string;
     observePort?: number;
     sdlcRoot: string;
-    profile: { recipe: string; hostProfile: string; description?: string };
+    profile: { recipe?: string; hostProfile?: string; host?: string; source?: string; description?: string; observation?: { consent: boolean; events: string[] } };
     integration: { jevMode: string; consent: boolean; hostPack: string; memoryAdapter: string };
     zones: ConsumerZone[];
     headerProfile: string;
@@ -69,7 +69,7 @@ export interface ConsumerSummary {
     name: string;
     root: string;
     sdlcRoot: string;
-    profile: { recipe: string; hostProfile: string; description?: string };
+    profile: { recipe?: string; hostProfile?: string; host?: string; source?: string; description?: string; observation?: { consent: boolean; events: string[] } };
     integration: { jevMode: string; consent: boolean; hostPack: string; memoryAdapter: string };
     version: number;
     status: string;
@@ -89,8 +89,23 @@ export interface ConsumerPlanFile {
 export interface ConsumerPlan {
     root: string;
     consumer: string;
-    profile: { recipe: string; hostProfile: string; description?: string };
+    profile: { recipe?: string; hostProfile?: string; host?: string; source?: string; description?: string; observation?: { consent: boolean; events: string[] } };
     files: ConsumerPlanFile[];
     warnings: string[];
     generatedAt: string;
+}
+
+/** Phase 1 setup payload — no Lite/Pro/recipe fields. */
+export interface SetupProfilePayload {
+    host: string;
+    source: 'market' | 'eso-native' | 'host-native';
+    observation: { consent: boolean; events: string[] };
+}
+
+export interface SetupConsumerPayload {
+    id: string;
+    name: string;
+    root: string;
+    sdlcRoot: string;
+    profile: SetupProfilePayload;
 }

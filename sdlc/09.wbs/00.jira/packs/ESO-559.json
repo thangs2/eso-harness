@@ -3,7 +3,7 @@
   "epic": "ESO-489",
   "bip": {
     "id": "BIP-L32",
-    "file": "sdlc/09.wbs/02.bootstrap-packets/01.bip/l3-2.bip.md"
+    "file": "sdlc/09.wbs/02.baseline-packets/01.bip/l3-2.bip.md"
   },
   "technical": false,
   "inv": [

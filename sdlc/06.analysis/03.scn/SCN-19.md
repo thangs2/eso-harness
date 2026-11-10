@@ -16,7 +16,7 @@ type: scenario-matrix
 | `SCN-19-1` | `AC-19-1` | happy | evidence hợp lệ | ghi | có id + hash | yes | `planned` |
 | `SCN-19-2` | `AC-19-2` | failure | derived không khớp nguồn | ghi | `DOC_CONTRACT_VIOLATION` | yes | `planned` |
 | `SCN-19-3` | `AC-19-3` | failure | gọi PUT/DELETE | thử sửa | 405/404 | yes | `planned` |
-| `SCN-19-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — Bootstrap chỉ một operator |
+| `SCN-19-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — baseline chỉ một operator |
 | `SCN-19-TENANT-OUT` | — | tenant | — | — | — | — | `OUT` — consumer không phải tenant (`BR-14`) |
 
 ## Luật

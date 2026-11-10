@@ -16,7 +16,7 @@ type: scenario-matrix
 | `SCN-07-1` | `AC-07-1` | happy | consumer `ready` | `POST .../retire` | 200, status `retired` | yes | `planned` |
 | `SCN-07-2` | `AC-07-2` | edge | consumer `retired` | gọi route dữ liệu `/c/<id>/...` | 404 `CONSUMER_NOT_FOUND` | yes | `planned` |
 | `SCN-07-3` | `AC-07-3` | happy | consumer `retired` | `POST .../reactivate` | 200, `ready` | yes | `planned` |
-| `SCN-07-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — Bootstrap chỉ một operator |
+| `SCN-07-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — baseline chỉ một operator |
 | `SCN-07-TENANT-OUT` | — | tenant | — | — | — | — | `OUT` — consumer không phải tenant (`BR-14`) |
 
 ## Luật

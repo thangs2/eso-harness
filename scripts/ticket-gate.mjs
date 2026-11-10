@@ -39,8 +39,8 @@ export const SCN_DIR = 'sdlc/06.analysis/03.scn';
 
 /** Stage 5 packets. A pack names one BIP, and only a `READY` BIP may be built. */
 export const BIP_DIR = 'sdlc/09.wbs/01.packets/01.bip';
-/** Bootstrap packets (v2) live here; packs may name either set. */
-export const BIP_DIRS = [BIP_DIR, 'sdlc/09.wbs/02.bootstrap-packets/01.bip', 'sdlc/09.wbs/02.bootstrap-packets/02.fip'];
+/** Baseline packets (v2) live here; packs may name either set. */
+export const BIP_DIRS = [BIP_DIR, 'sdlc/09.wbs/02.baseline-packets/01.bip', 'sdlc/09.wbs/02.baseline-packets/02.fip'];
 
 /** The one status a BIP may have and still be built. Everything else is a decision not yet made. */
 export const BUILDABLE_BIP_STATUS = 'READY';

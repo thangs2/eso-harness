@@ -16,7 +16,7 @@ type: scenario-matrix
 | `SCN-10-1` | `AC-10-1` | happy | consumer `ready` | materialize | file tồn tại, có `_generated` + `hash` | yes | `planned` |
 | `SCN-10-2` | `AC-10-2` | edge | materialize lần 2 | materialize lại | file giống hệt (idempotent) | yes | `planned` |
 | `SCN-10-3` | `AC-10-3` | failure | root bị xoá | materialize | 422 `ROOT_NOT_FOUND` | yes | `planned` |
-| `SCN-10-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — Bootstrap chỉ một operator |
+| `SCN-10-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — baseline chỉ một operator |
 | `SCN-10-TENANT-OUT` | — | tenant | — | — | — | — | `OUT` — consumer không phải tenant (`BR-14`) |
 
 ## Luật

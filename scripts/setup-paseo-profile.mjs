@@ -121,7 +121,7 @@ function main() {
     if (!installed()) fail(1, `${PLUGIN} still missing from ${PROFILE_DIR}/node_modules`);
 
     // pnpm prunes packages the manifest does not declare, and the bridge is written into node_modules
-    // by the Paseo plugin's own bootstrap rather than declared here. It is rewritten on every plugin
+    // by the Paseo plugin's own initialization rather than declared here. It is rewritten on every plugin
     // load, so this is recoverable — but only after the reload, and until then no agent can start.
     if (!fs.existsSync(path.join(PROFILE_DIR, 'node_modules', BRIDGE))) {
         console.warn(`⚠ pnpm removed ${BRIDGE} from node_modules — the Paseo plugin rewrites it on load.`);

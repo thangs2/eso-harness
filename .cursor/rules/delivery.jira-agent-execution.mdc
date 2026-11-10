@@ -136,7 +136,7 @@ Mọi thứ thuộc **ticket Jira** viết bằng **tiếng Anh**, kể cả khi
 | `summary` | **English** |
 | `description` | **English** (dịch từ packet, không thêm nội dung) |
 | `comment` | **English** |
-| `label` | English slug (`bootstrap`, `leaf-l1-1`) |
+| `label` | English slug (`baseline`, `leaf-l1-1`) |
 | Tên file đính kèm / screenshot | **English** |
 
 **Giữ nguyên** (không dịch): mã `AC-*`, `SCN-*`, `REQ-*`, `BR-*`, `F-*`, `C-*`, `INV-*`, error code (`AUTH_*`, `INVALID_STATE`…),

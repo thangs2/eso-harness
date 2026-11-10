@@ -1,7 +1,7 @@
 /**
  * Platform registry types — the shape of `platform.consumer` / `platform.consumer_event`.
  *
- * Source of truth: sdlc/07.technical/10.bootstrap-planes/03.plane-d-data-model.md §2.
+ * Source of truth: sdlc/07.technical/10.planes/03.plane-d-data-model.md §2.
  * This module is the L1.1 slice; later slices add behaviour around the same record.
  */
 

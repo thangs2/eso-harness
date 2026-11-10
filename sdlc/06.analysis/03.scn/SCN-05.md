@@ -16,7 +16,7 @@ type: scenario-matrix
 | `SCN-05-1` | `AC-05-1` | happy | consumer tồn tại | `GET /api/v1/consumers/{id}` | 200 + đủ trường | yes | `planned` |
 | `SCN-05-2` | `AC-05-2` | failure | id không tồn tại | get | 404 `CONSUMER_NOT_FOUND` | yes | `planned` |
 | `SCN-05-3` | `AC-05-3` | edge | response chứa profile | in response | không có credential/DSN | yes | `planned` |
-| `SCN-05-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — Bootstrap chỉ một operator |
+| `SCN-05-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — baseline chỉ một operator |
 | `SCN-05-TENANT-OUT` | — | tenant | — | — | — | — | `OUT` — consumer không phải tenant (`BR-14`) |
 
 ## Luật

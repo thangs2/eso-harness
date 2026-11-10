@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * `eso serve` equivalent for the Bootstrap control plane.
+ * `eso serve` equivalent for the baseline control plane.
  *
  * The HTTP server needs Bun.SQL (no `pg` dependency), so this wrapper starts
  * `eso/control-plane/src/common/http/server.ts` under Bun and forwards signals.

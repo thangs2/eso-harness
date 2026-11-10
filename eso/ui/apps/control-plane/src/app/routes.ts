@@ -1,4 +1,5 @@
 import type { Routes } from '@angular/router';
+import { authGuard } from './core/auth/auth.guard.js';
 
 export const APP_ROUTES: Routes = [
     {
@@ -13,10 +14,6 @@ export const APP_ROUTES: Routes = [
     {
         path: 'consumers',
         loadChildren: () => import('./features/consumers/consumers.routes.js').then((m) => m.CONSUMERS_ROUTES),
-    },
-    {
-        path: 'onboarding',
-        loadChildren: () => import('./features/onboarding/onboarding.routes.js').then((m) => m.ONBOARDING_ROUTES),
     },
     {
         path: 'work-overview',
@@ -37,5 +34,17 @@ export const APP_ROUTES: Routes = [
     {
         path: 'audit',
         loadChildren: () => import('./features/audit/audit.routes.js').then((m) => m.AUDIT_ROUTES),
+    },
+    {
+        path: 'onboarding',
+        loadChildren: () => import('./features/setup/setup.routes.js').then((m) => m.SETUP_ROUTES),
+    },
+    {
+        path: 'setup',
+        loadChildren: () => import('./features/setup/setup.routes.js').then((m) => m.SETUP_ROUTES),
+    },
+    {
+        path: '**',
+        redirectTo: 'consumers',
     },
 ];

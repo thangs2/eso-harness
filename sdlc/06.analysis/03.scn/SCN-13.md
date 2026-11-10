@@ -16,7 +16,7 @@ type: scenario-matrix
 | `SCN-13-1` | `AC-13-1` | failure | consumer không tồn tại | gọi `/c/<id>/...` | 404 `CONSUMER_NOT_FOUND` | yes | `planned` |
 | `SCN-13-2` | `AC-13-2` | failure | consumer `retired`/`deleted`,`purged` | gọi route | 404 như trên | yes | `planned` |
 | `SCN-13-3` | `AC-13-3` | failure | slug sai (`c_b`, `%2e%2e`) | gọi route | 400 `INVALID_CONSUMER_ID` | yes | `planned` |
-| `SCN-13-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — Bootstrap chỉ một operator |
+| `SCN-13-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — baseline chỉ một operator |
 | `SCN-13-TENANT-OUT` | — | tenant | — | — | — | — | `OUT` — consumer không phải tenant (`BR-14`) |
 
 ## Luật

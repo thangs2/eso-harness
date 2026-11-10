@@ -48,7 +48,7 @@ describe('L1.1 — platform registry', () => {
         assert.match(ddl, /CREATE SCHEMA IF NOT EXISTS platform/);
         assert.match(PLATFORM_DDL.join('\n'), /status in \('ready','retired','deleted','purged','error'\)/);
 
-        // The bootstrap has no version table (spelled indirectly so the guard stays vocabulary-free).
+        // The initialization has no version table (spelled indirectly so the guard stays vocabulary-free).
         const versionTable = ['schema', 'version'].join('_');
         assert.equal(ddl.includes(versionTable), false);
     });

@@ -16,7 +16,7 @@ type: scenario-matrix
 | `SCN-27-1` | `AC-27-1` | happy | actor có identity | hỏi | verdict theo role | yes | `planned` |
 | `SCN-27-2` | `AC-27-2` | failure | không identity | hỏi | `UNKNOWN_ACTOR` + nêu rõ | yes | `planned` |
 | `SCN-27-3` | `AC-27-3` | edge | 2 role khác nhau | hỏi cùng task | kết quả khác là đúng | yes | `planned` |
-| `SCN-27-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — Bootstrap chỉ một operator |
+| `SCN-27-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — baseline chỉ một operator |
 | `SCN-27-TENANT-OUT` | — | tenant | — | — | — | — | `OUT` — consumer không phải tenant (`BR-14`) |
 
 ## Luật

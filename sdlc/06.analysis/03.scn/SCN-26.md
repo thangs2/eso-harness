@@ -16,7 +16,7 @@ type: scenario-matrix
 | `SCN-26-1` | `AC-26-1` | happy | path trong allowed | kiểm | allowed | yes | `planned` |
 | `SCN-26-2` | `AC-26-2` | failure | path ngoài allowed | kiểm | denied + violation | yes | `planned` |
 | `SCN-26-3` | `AC-26-3` | failure | path sang consumer khác | kiểm | denied | yes | `planned` |
-| `SCN-26-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — Bootstrap chỉ một operator |
+| `SCN-26-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — baseline chỉ một operator |
 | `SCN-26-TENANT-OUT` | — | tenant | — | — | — | — | `OUT` — consumer không phải tenant (`BR-14`) |
 
 ## Luật

@@ -3,7 +3,7 @@
   "epic": "ESO-294",
   "bip": {
     "id": "FIP-L51",
-    "file": "sdlc/09.wbs/02.bootstrap-packets/02.fip/l5-1.fip.md"
+    "file": "sdlc/09.wbs/02.baseline-packets/02.fip/l5-1.fip.md"
   },
   "technical": false,
   "inv": [

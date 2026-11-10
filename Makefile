@@ -1,5 +1,5 @@
 # ESO harness — operator entry points.
-# Local defaults: ENV=dev. runtime env files are created by bootstrap/runtime scripts
+# Local defaults: ENV=dev. runtime env files are created by env-init/runtime scripts
 # and are gitignored; every recipe here is executed by the operator, never at parse time.
 SHELL := /bin/bash
 .SHELLFLAGS := -eu -o pipefail -c
@@ -16,13 +16,13 @@ COMPOSE_FILE := deploy/compose/compose.$(COMPOSE_SUFFIX).yml
 COMPOSE_CMD := $(COMPOSE) --env-file $(ENV_FILE) -f $(COMPOSE_FILE)
 CHECK_ENV_FILE := $(if $(filter e2e,$(ENV)),deploy/env/dev.env.example,$(ENV_FILE).example)
 
-.PHONY: help bootstrap build up down restart status logs e2e deploy rollback backup restore check
+.PHONY: help init build up down restart status logs e2e deploy rollback backup restore check
 
 help: ## Show available targets (ENV=dev)
 	@printf 'ESO harness deploy targets (ENV=%s)\n\n' '$(ENV)'
 	@awk 'BEGIN {FS = ":.*## "} /^[a-zA-Z0-9_-]+:.*## / {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-bootstrap: ## Seed deploy/env/<env>.env if missing and start the stack (dev)
+init: ## Seed deploy/env/<env>.env if missing and start the stack (dev)
 	@mkdir -p deploy/env deploy/.state deploy/backups deploy/logs
 	@test -f $(ENV_FILE) || cp $(ENV_FILE).example $(ENV_FILE)
 	$(COMPOSE_CMD) up -d --build

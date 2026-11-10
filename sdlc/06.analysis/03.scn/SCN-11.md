@@ -16,7 +16,7 @@ type: scenario-matrix
 | `SCN-11-1` | `AC-11-1` | happy | file khớp DB | check | `ok` | yes | `planned` |
 | `SCN-11-2` | `AC-11-2` | failure | sửa tay 1 trường | check | `drift` + hash mong đợi/thực tế | yes | `planned` |
 | `SCN-11-3` | `AC-11-3` | edge | xoá file | check | `missing` | yes | `planned` |
-| `SCN-11-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — Bootstrap chỉ một operator |
+| `SCN-11-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — baseline chỉ một operator |
 | `SCN-11-TENANT-OUT` | — | tenant | — | — | — | — | `OUT` — consumer không phải tenant (`BR-14`) |
 
 ## Luật

@@ -16,7 +16,7 @@ type: scenario-matrix
 | `SCN-08-1` | `AC-08-1` | happy | consumer `ready` | `POST .../delete` | 200, `deleted` | yes | `planned` |
 | `SCN-08-2` | `AC-08-2` | happy | consumer `deleted` | `POST .../restore` | 200, `ready` | yes | `planned` |
 | `SCN-08-3` | `AC-08-3` | failure | consumer `ready` | `POST .../restore` | 409 `INVALID_STATE` | yes | `planned` |
-| `SCN-08-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — Bootstrap chỉ một operator |
+| `SCN-08-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — baseline chỉ một operator |
 | `SCN-08-TENANT-OUT` | — | tenant | — | — | — | — | `OUT` — consumer không phải tenant (`BR-14`) |
 
 ## Luật

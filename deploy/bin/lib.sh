@@ -83,7 +83,7 @@ compose() {
         die "compose file not found: $COMPOSE_FILE"
     fi
     if [[ ! -f "$ENV_FILE" ]]; then
-        die "env file not found: $ENV_FILE (run deploy/bin/bootstrap.sh --env $ESO_ENV)"
+        die "env file not found: $ENV_FILE (run deploy/bin/env-init.sh --env $ESO_ENV)"
     fi
     docker compose --project-name "$ESO_PROJECT" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"
 }
@@ -93,7 +93,7 @@ load_env() {
         die "ENV_FILE is not set; call set_env first"
     fi
     if [[ ! -f "$ENV_FILE" ]]; then
-        die "env file not found: $ENV_FILE (run deploy/bin/bootstrap.sh --env $ESO_ENV)"
+        die "env file not found: $ENV_FILE (run deploy/bin/env-init.sh --env $ESO_ENV)"
     fi
 
     local requested_env="$ESO_ENV"

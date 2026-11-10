@@ -1,6 +1,6 @@
 ---
 sot_doc_version: "0.1.0"
-human_sot: "sdlc/08.ui-design/01.surfaces.md"
+human_sot: "sdlc/08.ui-design/10.ui-v2/01.surfaces.md"
 status: DRAFT
 phase: 6
 id: ESO-UI-DOMAIN
@@ -15,7 +15,7 @@ forbidden:
 verify:
   - "bun test qc/eso-ui-*"
 design_refs:
-  - "sdlc/08.ui-design/01.surfaces.md"
+  - "sdlc/08.ui-design/10.ui-v2/01.surfaces.md"
   - "sdlc/07.technical/03.api/00.index.md"
 ---
 # eso/ui — control plane UI

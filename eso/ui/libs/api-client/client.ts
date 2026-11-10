@@ -5,6 +5,7 @@ import type {
     ConsumerProfile,
     ConsumerListResponse,
     ConsumerPlan,
+    SetupConsumerPayload,
 } from './types.js';
 
 export class ControlPlaneApiClient {
@@ -104,6 +105,16 @@ export class ControlPlaneApiClient {
         });
         if (!res.ok) throw await this.problem(res);
         return (await res.json()) as ConsumerProfile;
+    }
+
+    async createConsumerSetup(payload: SetupConsumerPayload): Promise<{ id: string }> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers`, {
+            method: 'POST',
+            headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as { id: string };
     }
 
     async createConsumer(profile: ConsumerProfile): Promise<ConsumerProfile> {

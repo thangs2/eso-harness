@@ -16,7 +16,7 @@ type: scenario-matrix
 | `SCN-04-1` | `AC-04-1` | happy | có 2 consumer `ready` | `GET /api/v1/consumers` | 200, cả hai | yes | `planned` |
 | `SCN-04-2` | `AC-04-2` | edge | 1 `retired` | list mặc định | vẫn thấy consumer retired | yes | `planned` |
 | `SCN-04-3` | `AC-04-3` | edge | 1 `deleted` | list mặc định | không thấy; `?include_deleted=true` thấy | yes | `planned` |
-| `SCN-04-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — Bootstrap chỉ một operator |
+| `SCN-04-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — baseline chỉ một operator |
 | `SCN-04-TENANT-OUT` | — | tenant | — | — | — | — | `OUT` — consumer không phải tenant (`BR-14`) |
 
 ## Luật

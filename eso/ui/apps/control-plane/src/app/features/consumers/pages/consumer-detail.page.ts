@@ -17,7 +17,6 @@ import type { ConsumerProfile } from '../../../../../../../libs/api-client/types
                     <p class="subtitle"><code>{{ p.id }}</code> · {{ p.root }}</p>
                 </div>
                 <div class="actions-row">
-                    <a class="btn-ghost" [routerLink]="['/onboarding', p.id]">Sửa profile</a>
                     <a class="btn-primary" [routerLink]="['/work-overview']" [queryParams]="{ project: p.id }">Mở work overview</a>
                 </div>
             </header>
@@ -30,8 +29,8 @@ import type { ConsumerProfile } from '../../../../../../../libs/api-client/types
                 <section class="panel">
                     <h2>Profile</h2>
                     <dl class="kv">
-                        <dt>Recipe</dt><dd>{{ p.profile?.recipe }}</dd>
-                        <dt>Host profile</dt><dd>{{ p.profile?.hostProfile }}</dd>
+                        <dt>Host</dt><dd>{{ p.profile?.host || p.profile?.hostProfile || '—' }}</dd>
+                        <dt>Harness source</dt><dd>{{ p.profile?.source || p.profile?.recipe || '—' }}</dd>
                         <dt>Description</dt><dd>{{ p.profile?.description || '—' }}</dd>
                         <dt>Version</dt><dd>v{{ p.version }} · {{ p.status }}</dd>
                     </dl>
@@ -42,7 +41,7 @@ import type { ConsumerProfile } from '../../../../../../../libs/api-client/types
                         <dt>SDLC root</dt><dd>{{ p.sdlcRoot }}</dd>
                         <dt>Header profile</dt><dd>{{ p.headerProfile }}</dd>
                         <dt>Preset</dt><dd>{{ p.presetVersion || '—' }}</dd>
-                        @for (zone of p.zones; track zone.name) {
+                        @for (zone of p.zones || []; track zone.name) {
                             <dt>Zone {{ zone.name }}</dt><dd>{{ zone.path }} · {{ zone.headerProfile || '—' }}</dd>
                         }
                     </dl>
@@ -50,14 +49,14 @@ import type { ConsumerProfile } from '../../../../../../../libs/api-client/types
                 <section class="panel">
                     <h2>Team & gates</h2>
                     <dl class="kv">
-                        <dt>Roles</dt><dd>{{ p.team.roles.join(', ') }}</dd>
-                        <dt>Gates</dt><dd>{{ enabled(p.gates) }}</dd>
-                        <dt>Sources</dt><dd>{{ enabled(p.sources) }}</dd>
+                        <dt>Roles</dt><dd>{{ p.team?.roles?.join(', ') || '—' }}</dd>
+                        <dt>Gates</dt><dd>{{ enabled(p.gates || {}) }}</dd>
+                        <dt>Sources</dt><dd>{{ enabled(p.sources || {}) }}</dd>
                     </dl>
                 </section>
                 <section class="panel">
                     <h2>Protected paths</h2>
-                    @if (p.protectedPaths.length === 0) {
+                    @if (!((p.protectedPaths || []).length)) {
                         <p class="muted">Chưa khai path bảo vệ.</p>
                     } @else {
                         <ul class="path-list">

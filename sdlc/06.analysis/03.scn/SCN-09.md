@@ -16,7 +16,7 @@ type: scenario-matrix
 | `SCN-09-1` | `AC-09-1` | happy | consumer `deleted`, gõ đúng id | `POST .../purge` | 200, `purged` | yes | `planned` |
 | `SCN-09-2` | `AC-09-2` | failure | consumer `ready` | purge | 409 `INVALID_STATE` | yes | `planned` |
 | `SCN-09-3` | `AC-09-3` | failure | `confirm_id` sai | purge | 409 `PURGE_CONFIRM_MISMATCH` | yes | `planned` |
-| `SCN-09-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — Bootstrap chỉ một operator |
+| `SCN-09-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — baseline chỉ một operator |
 | `SCN-09-TENANT-OUT` | — | tenant | — | — | — | — | `OUT` — consumer không phải tenant (`BR-14`) |
 
 ## Luật

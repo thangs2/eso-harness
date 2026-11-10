@@ -16,7 +16,7 @@ type: scenario-matrix
 | `SCN-18-1` | `AC-18-1` | happy | verdict tồn tại | mở giải thích | có `why` + requirements | yes | `planned` |
 | `SCN-18-2` | `AC-18-2` | failure | verdict không tồn tại | mở giải thích | 404 | yes | `planned` |
 | `SCN-18-3` | `AC-18-3` | edge | không có gap | mở giải thích | `gaps[]` rỗng + lý do | yes | `planned` |
-| `SCN-18-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — Bootstrap chỉ một operator |
+| `SCN-18-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — baseline chỉ một operator |
 | `SCN-18-TENANT-OUT` | — | tenant | — | — | — | — | `OUT` — consumer không phải tenant (`BR-14`) |
 
 ## Luật

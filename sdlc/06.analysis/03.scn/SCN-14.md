@@ -16,7 +16,7 @@ type: scenario-matrix
 | `SCN-14-1` | `AC-14-1` | happy | tạo consumer | xem `/events` | có event `created` + actor + thời điểm | yes | `planned` |
 | `SCN-14-2` | `AC-14-2` | happy | retire/delete/purge | làm lần lượt | 4 event tương ứng | yes | `planned` |
 | `SCN-14-3` | `AC-14-3` | failure | gọi `DELETE /events/...` | thử xoá | 405/404 (không có endpoint) | yes | `planned` |
-| `SCN-14-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — Bootstrap chỉ một operator |
+| `SCN-14-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — baseline chỉ một operator |
 | `SCN-14-TENANT-OUT` | — | tenant | — | — | — | — | `OUT` — consumer không phải tenant (`BR-14`) |
 
 ## Luật
