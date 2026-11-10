@@ -67,10 +67,12 @@ export function parseAuthorization(header: string | undefined | null): { scheme:
     return { scheme: match[1].toLowerCase() as 'basic' | 'bearer', value: match[2].trim() };
 }
 
+export type HttpActor = Actor & { kind: 'operator' | 'machine' };
+
 export class AuthService {
     constructor(private readonly config: AuthConfig) {}
 
-    authenticate(header: string | undefined | null): Actor {
+    authenticate(header: string | undefined | null): HttpActor {
         const parsed = parseAuthorization(header);
         if (!parsed) fail('AUTH_REQUIRED');
         if (parsed.scheme === 'bearer') {
