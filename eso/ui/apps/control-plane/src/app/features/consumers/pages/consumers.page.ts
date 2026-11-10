@@ -44,7 +44,7 @@ import type { ConsumerSummary } from '../../../../../../../libs/api-client/types
                             <tr>
                                 <td class="col-work"><strong>{{ item.id }}</strong><br><small>{{ item.name }}</small></td>
                                 <td>{{ item.root }}</td>
-                                <td><span class="pill">{{ item.profile?.source || item.profile?.recipe }}</span><br><small>{{ item.profile?.host || item.profile?.hostProfile }}</small></td>
+                                <td><span class="pill">{{ item.profile?.canonical ? 'repo harness' : item.profile?.source || item.profile?.recipe }}</span><br><small>{{ item.profile?.canonical?.agents || item.profile?.host || item.profile?.hostProfile }}</small></td>
                                 <td>v{{ item.version }}</td>
                                 <td>{{ item.updatedAt | date: 'dd/MM/yyyy HH:mm' }}</td>
                                 <td class="col-actions">

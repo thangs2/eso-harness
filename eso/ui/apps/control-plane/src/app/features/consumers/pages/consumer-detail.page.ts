@@ -29,8 +29,8 @@ import type { ConsumerProfile } from '../../../../../../../libs/api-client/types
                 <section class="panel">
                     <h2>Profile</h2>
                     <dl class="kv">
-                        <dt>Host</dt><dd>{{ p.profile?.host || p.profile?.hostProfile || '—' }}</dd>
-                        <dt>Harness source</dt><dd>{{ p.profile?.source || p.profile?.recipe || '—' }}</dd>
+                        <dt>Canonical</dt><dd>{{ p.profile?.canonical ? (p.profile.canonical.agents + ' / ' + p.profile.canonical.harness) : (p.profile?.host || p.profile?.hostProfile || '—') }}</dd>
+                        <dt>Source policy</dt><dd>{{ p.profile?.source || 'per host chain' }}</dd>
                         <dt>Description</dt><dd>{{ p.profile?.description || '—' }}</dd>
                         <dt>Version</dt><dd>v{{ p.version }} · {{ p.status }}</dd>
                     </dl>

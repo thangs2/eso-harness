@@ -36,7 +36,8 @@ mạch, **không trùng số**, và **không mang nghĩa "stage"**.
 08.ui-design         thiết kế giao diện (Figma · Penpot · guideline)
 09.wbs               WBS — Feature → Epic → Story → Task · Jira bridge · packets
 10.test              phép thử nói "done" nghĩa là gì
-11.delivery          demo/release theo đợt · script stable · bằng chứng bàn giao
+98.delivery          demo/release theo đợt · script stable · bằng chứng bàn giao
+12.phases            workspace theo phase: charter · WBS/packets · go/no-go · decisions · records · acceptance
 ```
 
 **Vì sao `07.technical` là một nhóm, không phải ba folder:** C4 → data → API là **một chuỗi lập luận** — container tồn tại, nó lưu
@@ -46,8 +47,9 @@ một dòng, nó nhận dữ liệu qua một endpoint. Ba folder rời buộc n
 **Vì sao `08.ui-design` ngoài nhóm đó:** UI theo **chuẩn thiết kế riêng** và **không** trả lời "các phần gọi nhau thế nào".
 Gộp UI vào technical là trộn **hợp đồng** với **trình bày**.
 
-**`stage` không phải số folder.** Stage sống trong frontmatter `phase` của từng tài liệu. Folder là **thứ tự đọc**; stage là
-**thuộc tính của tài liệu** — nên `06.analysis` vẫn khai `phase: 2`.
+**Hai thứ khác nhau:** folder `01…98` là **thứ tự đọc/nguồn toàn cục**; folder `12.phases/NN.phase-N` là **workspace thực thi** của phase.
+`stage` vẫn là thuộc tính frontmatter `phase` của tài liệu. Phase workspace **không copy** requirement/AC — chỉ giữ WBS, packet,
+go/no-go, record và index tới nguồn toàn cục.
 
 ### API ≠ UI — hai tài liệu, hai người đọc
 
@@ -60,7 +62,7 @@ Gộp hai thứ này vào một folder là trộn **hợp đồng** với **trì
 
 ### Không tạo folder rỗng
 
-Thêm folder mới **khi có nội dung thật**; hiện tại cây dừng ở `11.delivery`.
+Thêm folder mới **khi có nội dung thật**; hiện tại cây dừng ở `98.delivery`.
 
 ## Luật đọc/ghi tài liệu
 

@@ -7,9 +7,9 @@
 
 | Folder | Giữ gì | Trạng thái |
 |---|---|---|
-| [`01.us/`](01.us/00.index.md) | **39 US** — một US cho mỗi `REQ` | ✅ baseline 16 · Expansion 23 |
-| [`02.ac/`](02.ac/00.index.md) | **AC** — mỗi US một file, bảng 8 cột | ✅ baseline 16 · Expansion 23 |
-| [`03.scn/`](03.scn/00.index.md) | `SCN` — scenario 1:1 với `AC`, status `planned` | ✅ 39 file |
+| [`01.us/`](01.us/00.index.md) | **41 US** — một US cho mỗi `REQ` | ✅ baseline 16 · capability 25 |
+| [`02.ac/`](02.ac/00.index.md) | **AC** — mỗi US một file, bảng 8 cột | ✅ baseline 16 · capability 25 |
+| [`03.scn/`](03.scn/00.index.md) | `SCN` — scenario 1:1 với `AC`, status `planned` | ✅ 41 file |
 
 ## 2. Chuỗi
 

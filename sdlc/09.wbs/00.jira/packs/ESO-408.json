@@ -46,7 +46,7 @@
     }
   ],
   "allowed_files": [
-    "sdlc/11.delivery/**",
+    "sdlc/98.delivery/**",
     "qc/acceptance/US-MEM-04/**"
   ],
   "forbidden": [
