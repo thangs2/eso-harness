@@ -22,6 +22,7 @@ export const BRD_ERROR_CODES: ReadonlySet<string> = new Set([
     'MATERIALIZE_FAILED',
     'MATERIAL_FAILED',
     'PROVISION_FAILED',
+    'SETUP_INFO_MISSING',
     'SCHEMA_MISMATCH',
     'PROFILE_INVALID',
     'INVALID_TASK',
