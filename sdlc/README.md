@@ -66,7 +66,8 @@ Thêm folder mới **khi có nội dung thật**; hiện tại cây dừng ở `
 
 ## Luật đọc/ghi tài liệu
 
-1. Pain point + vision là **nguồn** ([`03.inception`](03.inception/00.problem/00.index.md)); mọi tầng dưới phải trace được về chúng.
-2. Số liệu phải kèm **ngày + nguồn**; không dùng số của cây khác làm số hiện hành.
-3. Quyết định chỉ tồn tại trong [`decision log`](03.inception/02.decision-log/00.index.md) — miệng nói không tính.
-4. Không cite file không tồn tại (phép kiểm `X28` của chuẩn).
+1. Pain point + vision là **nguồn** ([`03.inception`](03.inception/00.problem/00.index.md)); mọi tầng dưới phải trace được về chúng theo **Intent Pipeline** ([`09`](02.governance/01.standard/09.pipeline-trace.md) + [`03.intent-pipeline`](02.governance/04.diagrams/03.intent-pipeline.md)).
+2. Pipeline chính là **SDLC Master Pipeline** `S1…S14` ([`10`](02.governance/01.standard/10.main-pipeline-rule.md) + [`01.main-pipeline`](02.governance/04.diagrams/01.main-pipeline.md)); Intent Pipeline là zoom `S1…S7`, không phải pipeline thứ hai.
+3. Số liệu phải kèm **ngày + nguồn**; không dùng số của cây khác làm số hiện hành.
+4. Quyết định chỉ tồn tại trong [`decision log`](03.inception/02.decision-log/00.index.md) — miệng nói không tính.
+5. Không cite file không tồn tại (phép kiểm `X28` của chuẩn).
