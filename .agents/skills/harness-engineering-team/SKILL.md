@@ -7,96 +7,101 @@ description: Runs one eso-harness ticket through SLP — scout, plan, disjoint s
 
 # harness-engineering-team
 
-**Bạn là Lead.** Skill này là **thứ tự**; **luật** là `agents/rules/core.slp.mdc` — trên host không nạp rule (DSH) thì các mục
-§1–§4 dưới đây là bản tối thiểu bắt buộc.
+**You are Lead.** This skill is the **order**; the **law** is `agents/rules/core.slp.mdc`. On a host that does not load rules
+(DSH), §1–§4 below are the minimum required behavior.
 
-Worker: `agents/subagents/*-runtime.md` (**7**) — mỗi host nhận bản generated ở `<tree>/agents/`. Blackboard DAG: worker chỉ nói
-với Lead (Antigravity: `invoke_subagent`).
+Operator shorthand: `impl <KEY> slp g` — implement the ticket through SLP with the guardrails in `core.slp.mdc` §4.1
+(scope · status · contract · evidence).
 
-## 0. Dùng khi
+Workers: `agents/subagents/*-runtime.md` (**7**) — each host receives the generated copy under `<tree>/agents/`. Blackboard DAG:
+workers speak only to the Lead (Antigravity: `invoke_subagent`).
 
-Task cần >1 file hoặc >1 tầng cấu hình agent (`agents/rules` · `skills` · `subagents` · `hooks` · `mcp`) hoặc sửa cả
-`scripts/`. **Không** dùng cho câu hỏi, typo, sửa một dòng (nhưng vẫn phải verify + audit).
+## 0. When to use
 
-## 1. Bốn lớp
+A task needs >1 file or >1 agent-config layer (`agents/rules` · `skills` · `subagents` · `hooks` · `mcp`), or edits
+`scripts/`. **Do not** use this for a question, typo, or one-line edit (but still run verify + audit).
 
-**S** = người (duyệt plan · xử escalation · ký `Done`) · **L** = bạn · **P** = `scout` `plan` `build` `fixbug` · **A** = `verify`
-`audit` `qc`. S **không bao giờ** là agent; gate **không** sửa `agents/` · `scripts/` · `tools/`.
+## 1. Four layers
 
-## 2. Hợp đồng prompt — luôn 4 phần
+**S** = human (approve plan · handle escalation · sign `Done`) · **L** = you · **P** = `scout` `plan` `build` `fixbug` · **A** =
+`verify` `audit` `qc`. S is **never** an agent; gates **do not** edit `agents/` · `scripts/` · `tools/`.
 
-`INV ids` · `AC rows in scope` · `allowed_files` · `verify command`. Thiếu ⇒ worker hỏi lại, **không đoán**.
+## 2. Prompt contract — always four parts
 
-## 3. Trả về — mỗi worker một JSON có kiểu
+`INV ids` · `AC rows in scope` · `allowed_files` · `verify command`. If missing, the worker asks again; it **does not guess**.
 
-| Worker | Trả về |
+## 3. Returns — one typed JSON per worker
+
+| Worker | Returns |
 |---|---|
-| `scout` | `domains[]` `inv[]` `touched_files[]` `open_gaps[]` `risks[]` (≤300 từ) |
+| `scout` | `domains[]` `inv[]` `touched_files[]` `open_gaps[]` `risks[]` (≤300 words) |
 | `plan` | `slices[]`: `id` `role` `ac[]` `inv[]` `allowed_files[]` `depends_on[]` `verify` |
 | `build` | `status` `DONE\|BLOCKED_SCOPE` · `files_changed[]` `tests_added[]` |
 | `verify` | `status` PASS/FAIL · `commands_run[]` · `failure_log` |
 | `audit` | `verdict` · `score` · `critical[]` · `findings[{file,line,rule,fix}]` · `ac_coverage{}` |
 | `qc` | `status` · `failed_gates[]` · `scenarios_run[]` · `residual_open[]` |
 
-JSON có kiểu là mấu chốt: bạn **ghép** được mà không đọc văn xuôi, và `findings[].file:line` cho `fixbug` việc **không cần hỏi lại**.
+Typed JSON is the point: you can assemble results without reading prose, and `findings[].file:line` gives `fixbug` work
+without asking again.
 
-## 4. Luật cứng
+## 4. Hard rules
 
-1. Slice `allowed_files` **rời nhau** — chồng = plan không hợp lệ, chia lại.
-2. Ghi ngoài slice ⇒ `BLOCKED_SCOPE`, dừng.
-3. Zero-crawl: peer nhận pack trong prompt, không đọc `sdlc/01…09`.
-4. Cùng lỗi gốc **3** lần ⇒ dừng, liệt kê `OPEN`, escalate **lên người**.
-5. Không `Done`, không commit/push/PR trừ khi S yêu cầu.
-6. Codegraph/docgraph thiếu ⇒ nói ra + fallback; **không** claim success.
-7. `.cursor/**`, `.agents/**`, `AGENTS.local.md` là **artifact sinh ra** — không worker nào ghi vào đó; Lead chạy generator.
+1. Slice `allowed_files` are **disjoint** — overlap = invalid plan; split again.
+2. Any write outside the slice ⇒ `BLOCKED_SCOPE`; stop.
+3. Zero-crawl: a peer receives the pack in the prompt and does not read `sdlc/01…09`.
+4. Same root error **3** times ⇒ stop, list `OPEN`, escalate **to the human**.
+5. No `Done`, no commit/push/PR unless S asks.
+6. If codegraph/docgraph is missing, say so and fall back; **never** claim success.
+7. `.cursor/**`, `.agents/**`, `AGENTS.local.md` are **generated artifacts** — no worker writes them; the Lead runs the generator.
+8. Guardrails from `core.slp.mdc` §4.1 apply: scope · status · contract · evidence.
 
-## 5. Thứ tự gate — đánh số, không nhảy
+## 5. Gate order — numbered, no skipping
 
-1. **Classify** — `agent-config` (`agents/*`, `scripts/*`) · `law/spec` (`sdlc/`) · `ticket`. Prompt lẫn lộn ⇒ **hỏi hoặc
-   REWORK**, không đoán AC.
-2. **Pack** — ticket + `sdlc/01.agent-manifests/` + AC + **một** verify command. Chưa đủ ⇒ spawn `scout` **trước**; chưa có pack
-   thì **không** spawn `build`.
-3. **Session** — `AGENTS.md` đã Read; MCP/brain theo `core.harness-tooling.mdc`. Thiếu công cụ ⇒ ghi rõ, không giả định.
-4. **Plan** — spawn `plan`. **S-GATE 1** khi >1 tầng hoặc scope mơ hồ: đưa bảng slice cho S duyệt.
-5. **Build × N** — spawn một `build` mỗi slice; song song khi `depends_on` rỗng.
-6. **Regenerate** — **Lead** chạy `node scripts/build-host-trees.mjs` (worker bị cấm ghi tree).
-7. **Verify** — spawn `verify` với **đúng** lệnh của Task: `node scripts/build-host-trees.mjs --check` và
-   `node scripts/check-dual-harness.mjs`. FAIL ⇒ sang 8.
-8. **Audit** — spawn `audit` trên diff. `AUDIT_FAIL` ⇒ `fixbug` ↺ về 6. **3** vòng ⇒ **S-GATE 2**.
-9. **Human In Review** — Lead ghi comment + nhãn + rollup. **Không** `Done`: quyền đó của S.
-10. **QC** — khi operator yêu cầu: spawn `qc` (scenario → trả trong response; log tạm `/tmp/slp/qc/`). **S-GATE 3**: S ký `Done`.
+1. **Classify** — `agent-config` (`agents/*`, `scripts/*`) · `law/spec` (`sdlc/`) · `ticket`. Mixed prompt ⇒ **ask or
+   REWORK**; never guess AC.
+2. **Pack** — ticket + `sdlc/01.agent-manifests/` + AC + **one** verify command. Incomplete ⇒ spawn `scout` **first**; without a
+   pack, **do not** spawn `build`.
+3. **Session** — `AGENTS.md` Read; MCP/brain per `core.harness-tooling.mdc`. Missing tool ⇒ state it; do not assume.
+4. **Plan** — spawn `plan`. **S-GATE 1** when >1 layer or ambiguous scope: show the slice table to S for approval.
+5. **Build × N** — one `build` per slice; parallel when `depends_on` is empty.
+6. **Regenerate** — **Lead** runs `node scripts/build-host-trees.mjs` (workers must not write trees).
+7. **Verify** — spawn `verify` with the **exact** Task commands: `node scripts/build-host-trees.mjs --check` and
+   `node scripts/check-dual-harness.mjs`. FAIL ⇒ step 8.
+8. **Audit** — spawn `audit` on the diff. `AUDIT_FAIL` ⇒ `fixbug` ↺ step 6. **3** rounds ⇒ **S-GATE 2**.
+9. **Human In Review** — Lead writes comment + label + rollup. **No** `Done`: that is S's signature.
+10. **QC** — when the operator asks: spawn `qc` (scenario results in response; temporary log `/tmp/slp/qc/`). **S-GATE 3**: S signs `Done`.
 
-## 6. Rubric `audit` (tóm tắt — chi tiết trong rule §6)
+## 6. `audit` rubric (summary — details in rule §6)
 
-`30` deterministic green (hai gate script xanh **trong phiên này**) · `30` bất biến (không tạo **nguồn sự thật thứ hai**: chỉ sửa
-`agents/`, không sửa tree provider; `D-108` điều 1–7) · `25` AC đủ + không hợp đồng tự chế · `15` kỷ luật biên. **CRITICAL**
-(INV · nguồn sự thật thứ hai · hợp đồng tự chế · fake green) ⇒ FAIL bất kể điểm.
+`30` deterministic green (both gate scripts green **in this session**) · `30` invariants (no **second source of truth**: edit only
+`agents/`, not provider trees; `D-108` rules 1–7) · `25` AC complete + no invented contract · `15` boundary discipline. **CRITICAL**
+(INV violation · second source of truth · invented contract · fake green) ⇒ FAIL regardless of score.
 
-## 7. Chọn slice (mặc định, theo tầng cấu hình)
+## 7. Slice selection (default, by config layer)
 
 `rules` (`agents/rules/`) → `skills` (`agents/skills/`) → `subagents` (`agents/subagents/`) → `hooks` (`agents/hooks/`) →
-`scripts` (`scripts/*.mjs`) · `law/sdlc` (**Lead/người**, không giao peer).
+`scripts` (`scripts/*.mjs`) · `law/sdlc` (**Lead/human**, not a peer).
 
-Slice chỉ **đọc** (scout/verify/audit) được chia theo cùng trục nhưng không giữ vùng ghi.
+Read-only slices (`scout`/`verify`/`audit`) use the same axis but hold no write scope.
 
-## 8. Bằng chứng cuối lượt
+## 8. End-of-turn evidence
 
-`class` · pack đã đọc · codegraph/docgraph status · lệnh verify + log · `audit` score/verdict · slice + file đã ghi ·
-`memory_save` nếu có quyết định. Thiếu ⇒ **không** nói "đã xong".
+`class` · pack read · codegraph/docgraph status · verify commands + log · `audit` score/verdict · slice + files written ·
+`memory_save` if a decision was made. Missing evidence ⇒ **do not** say "done".
 
-## 9. Một lượt, viết gọn
+## 9. One turn, briefly
 
 ```text
 Lead: pack ESO-… → plan → S1(agents/rules) ∥ S2(agents/skills) → regenerate → verify(PASS) → audit(91, 0 CRITICAL) → HIR
-      nếu audit fail: fixbug(findings) → regenerate → verify ↺ (loop 2/3)
+      if audit fails: fixbug(findings) → regenerate → verify ↺ (loop 2/3)
 ```
 
-## Jira — chuẩn ticket & rollup
+## Jira — ticket standard & rollup
 
-Ticket sinh từ **packet + AC**. Hierarchy: `Epic → (Story|Task|Bug) → Subtask`. **Story** chỉ khi map 1:1 `US-nn` + AC người dùng thấy; work package kỹ thuật/enabler = **Task**; không tạo Story và Task cho cùng việc.
-Mỗi ticket phải đủ 4 quan hệ: `subtask` · `relates` · `blocks` · `is blocked by` (ngoại lệ root phải có `why`).
-Điểm: **Fibonacci 1/2/3/5/8/13 chỉ trên Subtask**; parent = Σ subtask, Epic = Σ task; `jira-points-rollup.mjs` kiểm.
-Status rollup: chạy `jira-rollup.mjs` sau **mỗi** child transition; agent không ký `Done`.
-**Ngôn ngữ:** mọi nội dung ticket Jira (summary/description/comment/label/attachment) = **English**; docs ngoài Jira vẫn có thể tiếng Việt.
-Chi tiết: rule `delivery.jira-agent-execution`.
-
+Tickets come from **packet + AC**. Hierarchy: `Epic → (Story|Task|Bug) → Subtask`. Use **Story** only when it maps 1:1 to
+`US-nn` with user-visible AC; technical work packages/enablers = **Task**; do not create a Story and a Task for the same work.
+Every ticket needs four relations: `subtask` · `relates` · `blocks` · `is blocked by` (root exception needs `why`).
+Points: **Fibonacci 1/2/3/5/8/13 on Subtasks only**; parent = Σ subtasks, Epic = Σ tasks; `jira-points-rollup.mjs` checks.
+Status rollup: run `jira-rollup.mjs` after **every** child transition; the agent never signs `Done`.
+**Language:** all Jira content (summary/description/comment/label/attachment) = **English**; non-Jira docs may be Vietnamese.
+Details: rule `delivery.jira-agent-execution`.

@@ -66,17 +66,20 @@ MCP **không** thuộc generator: `.cursor/mcp.json` (Cursor) và `.agents/mcp_c
 mang path tuyệt đối và key. Danh sách server repo này cần nằm ở bảng MCP trong `agents/rules/core.harness-tooling.mdc` — đó là bản ghi
 duy nhất trong git.
 
-## SLP — chia việc khi chạm >1 tầng
+## SLP — work partitioning when touching >1 layer
 
-| Thành phần | Ở đâu |
+| Component | Location |
 |---|---|
-| Luật | [`agents/rules/core.slp.mdc`](agents/rules/core.slp.mdc) |
+| Law | [`agents/rules/core.slp.mdc`](agents/rules/core.slp.mdc) |
 | Procedure | skill `harness-engineering-team` |
-| 7 worker | [`agents/subagents/`](agents/subagents/) — `scout · plan · build · verify · audit · fixbug · qc` |
-| Evidence | trả trong **response** worker; bản tạm ở `/tmp/slp/` (ngoài repo) — **không cite** |
+| 7 workers | [`agents/subagents/`](agents/subagents/) — `scout · plan · build · verify · audit · fixbug · qc` |
+| Evidence | returned in the worker **response**; temporary copy in `/tmp/slp/` (outside the repo) — **never cite it** |
 
-**Thứ tự cứng:** build → verify PASS → audit (rubric ≥85, 0 CRITICAL) → `Human In Review`; QC chỉ khi operator yêu cầu. Cùng
-lỗi gốc **3 lần** ⇒ dừng, escalate **lên người**. **Không** agent nào tự ký `Done`; **không** commit/push/PR trừ khi user yêu cầu.
+**Operator shorthand:** `impl <KEY> slp g` = implement the ticket through SLP with guardrails
+(scope · status · contract · evidence). The shorthand is defined in `core.slp.mdc` §0/§4.1; do not paste guardrails into prompts.
+
+**Hard order:** build → verify PASS → audit (rubric ≥85, 0 CRITICAL) → `Human In Review`; QC only when the operator asks.
+Same root error **3 times** ⇒ stop, escalate **to the human**. **No** agent signs `Done`; **no** commit/push/PR unless the user asks.
 
 ## Layout
 
