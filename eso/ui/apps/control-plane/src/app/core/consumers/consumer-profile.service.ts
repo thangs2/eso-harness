@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { CONTROL_PLANE_API_CLIENT } from '../tokens.js';
-import type { ConsumerListResponse, ConsumerPlan, ConsumerProfile, FsBrowseResponse, SetupConsumerPayload } from '../../../../../../libs/api-client/types.js';
+import type { ConsumerListResponse, ConsumerPlan, ConsumerProfile, FsBrowseResponse, HostDiscoveryDto, McpDiscoveryDto, SetupConsumerPayload, StackVersionsDto } from '../../../../../../libs/api-client/types.js';
 
 @Injectable({ providedIn: 'root' })
 export class ConsumerProfileService {
@@ -19,6 +19,26 @@ export class ConsumerProfileService {
     plan(profile: ConsumerProfile): Promise<ConsumerPlan> {
         if (!this.client) throw new Error('API client is not configured');
         return this.client.planConsumer(profile);
+    }
+
+    getStackVersions(id: string): Promise<StackVersionsDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.getConsumerStackVersions(id);
+    }
+
+    saveStackVersions(id: string, versions: unknown[]): Promise<StackVersionsDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.saveConsumerStackVersions(id, versions);
+    }
+
+    getHosts(id: string): Promise<HostDiscoveryDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.getConsumerHosts(id);
+    }
+
+    getMcp(id: string): Promise<McpDiscoveryDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.getConsumerMcp(id);
     }
 
     listDirectories(path?: string): Promise<FsBrowseResponse> {

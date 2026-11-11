@@ -160,3 +160,44 @@ export interface FsBrowseResponse {
     parent: string | null;
     directories: FsDirectoryEntry[];
 }
+
+export interface McpProviderDto {
+    id: string;
+    label: string;
+    capabilities: string[];
+    source: string;
+    status: 'configured';
+}
+
+export interface McpDiscoveryDto {
+    consumerId: string;
+    root: string;
+    sources: string[];
+    providers: McpProviderDto[];
+    warnings: string[];
+}
+
+export interface DetectedHostDto {
+    hostPluginId: string;
+    label: string;
+    markers: string[];
+}
+
+export interface HostDiscoveryDto {
+    consumerId: string;
+    root: string;
+    detected: DetectedHostDto[];
+}
+
+export interface StackVersionDto {
+    version: number;
+    status: 'draft' | 'published' | 'retired';
+    layers: unknown[];
+    publishedAt?: string | null;
+    createdAt?: string;
+}
+
+export interface StackVersionsDto {
+    consumerId: string;
+    versions: StackVersionDto[];
+}

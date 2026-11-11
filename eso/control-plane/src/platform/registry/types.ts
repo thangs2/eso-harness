@@ -70,3 +70,14 @@ export const ACTOR_KINDS: ReadonlySet<string> = new Set([
     'machine',
     'system',
 ]);
+
+export type StackVersionStatus = 'draft' | 'published' | 'retired';
+
+export interface StackVersionRecord {
+    consumerId: string;
+    version: number;
+    status: StackVersionStatus;
+    layers: unknown[];
+    publishedAt: string | null;
+    createdAt: string;
+}

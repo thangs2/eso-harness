@@ -10,6 +10,9 @@ import type {
     ProvisionConsumerResponse,
     ConsumerSetupResponse,
     FsBrowseResponse,
+    McpDiscoveryDto,
+    HostDiscoveryDto,
+    StackVersionsDto,
 } from './types.js';
 
 export class ControlPlaneApiClient {
@@ -180,6 +183,40 @@ export class ControlPlaneApiClient {
         });
         if (!res.ok) throw await this.problem(res);
         return (await res.json()) as ProvisionConsumerResponse;
+    }
+
+    async getConsumerStackVersions(id: string): Promise<StackVersionsDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/stack-versions`, {
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as StackVersionsDto;
+    }
+
+    async saveConsumerStackVersions(id: string, versions: unknown[]): Promise<StackVersionsDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/stack-versions`, {
+            method: 'PUT',
+            headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ versions }),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as StackVersionsDto;
+    }
+
+    async getConsumerHosts(id: string): Promise<HostDiscoveryDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/hosts`, {
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as HostDiscoveryDto;
+    }
+
+    async getConsumerMcp(id: string): Promise<McpDiscoveryDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/mcp`, {
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as McpDiscoveryDto;
     }
 
     async browseDirectories(path?: string): Promise<FsBrowseResponse> {

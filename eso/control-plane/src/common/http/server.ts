@@ -19,6 +19,8 @@ import { PurgeService } from '../../modules/consumers/purge/purge.service.js';
 import { ProfileService } from '../../modules/profiles/profile.service.js';
 import { BunScopedDb, IsolationService } from '../db/isolation.js';
 import { FsBrowseService } from '../fs/fs-browse.service.js';
+import { McpDiscoveryService } from '../mcp/mcp-discovery.service.js';
+import { HostDiscoveryService } from '../hosts/host-discovery.service.js';
 import { SchemaProvisioningService } from '../../provisioning/schema/schema-provisioning.service.js';
 import { MaterialProvisioningService } from '../../provisioning/material/material-provisioning.service.js';
 import { ProvisioningStateService } from '../../provisioning/state/provisioning-state.service.js';
@@ -49,6 +51,8 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
     const scoped = options.scoped ?? null;
     const isolation = new IsolationService(store, scoped ?? undefined);
     const fsBrowse = new FsBrowseService();
+    const mcpDiscovery = new McpDiscoveryService();
+    const hostDiscovery = new HostDiscoveryService();
     const schemaProvisioning = new SchemaProvisioningService(store);
     const materialProvisioning = new MaterialProvisioningService(store);
     const stateProvisioning = new ProvisioningStateService(store);
@@ -186,6 +190,54 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
 
     app.get('/api/v1/consumers/:id/setup', { preHandler: requireAuth }, async (request) => {
         return stateProvisioning.readSetup((request.params as any).id);
+    });
+
+    app.get('/api/v1/consumers/:id/mcp', { preHandler: requireAuth }, async (request) => {
+        const id = (request.params as any).id;
+        const consumer = await store.getConsumer(id);
+        if (!consumer) {
+            throw new Error(`Consumer not found: ${id}`);
+        }
+        return mcpDiscovery.discover(consumer.id, consumer.root);
+    });
+
+    app.get('/api/v1/consumers/:id/hosts', { preHandler: requireAuth }, async (request) => {
+        const id = (request.params as any).id;
+        const consumer = await store.getConsumer(id);
+        if (!consumer) {
+            throw new Error(`Consumer not found: ${id}`);
+        }
+        return hostDiscovery.discover(consumer.id, consumer.root);
+    });
+
+    app.get('/api/v1/consumers/:id/stack-versions', { preHandler: requireAuth }, async (request) => {
+        const id = (request.params as any).id;
+        const consumer = await store.getConsumer(id);
+        if (!consumer) {
+            throw new Error(`Consumer not found: ${id}`);
+        }
+        return { consumerId: consumer.id, versions: await store.listStackVersions(consumer.id) };
+    });
+
+    app.put('/api/v1/consumers/:id/stack-versions', { preHandler: requireAuth }, async (request) => {
+        const id = (request.params as any).id;
+        const consumer = await store.getConsumer(id);
+        if (!consumer) {
+            throw new Error(`Consumer not found: ${id}`);
+        }
+        const body = request.body as any;
+        const versions = Array.isArray(body?.versions) ? body.versions : [];
+        const now = new Date().toISOString();
+        const normalized = versions.map((item: any) => ({
+            consumerId: consumer.id,
+            version: Number(item?.version),
+            status: item?.status === 'draft' || item?.status === 'retired' ? item.status : 'published',
+            layers: Array.isArray(item?.layers) ? item.layers : [],
+            publishedAt: item?.publishedAt ?? (item?.status === 'published' ? now : null),
+            createdAt: item?.createdAt ?? now,
+        }));
+        await store.replaceStackVersions(consumer.id, normalized);
+        return { consumerId: consumer.id, versions: await store.listStackVersions(consumer.id) };
     });
 
     app.put('/api/v1/consumers/:id', { preHandler: requireAuth }, async (request) => {

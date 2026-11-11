@@ -57,6 +57,69 @@ Dùng **Angular Material + CDK** (hoặc PrimeNG/Spartan nếu có decision khá
 
 Mỗi component có default/hover/focus-visible/disabled/loading/error; không dùng `outline: none` mà không thay thế.
 
+## 3.1 Row alignment — one horizontal line axis
+
+**Hard rule:** every cell in a configuration table/list must use the **same horizontal axis**. One cell must not
+use `align-items:flex-start` while another uses `align-items:center`.
+
+### Formula
+
+```css
+.row {
+  height: 100px;              /* fixed row height */
+  padding-block: 0;           /* symmetric: top = bottom = 0 */
+  align-items: center;        /* all cells center on row centerline */
+}
+
+.cell {
+  height: 100%;
+  display: flex;
+  align-items: center;        /* same axis for every cell */
+}
+
+.control {
+  height: 56px;               /* fixed control slot */
+}
+
+.hint {
+  position: absolute;
+  top: calc(50% + 30px);      /* below control; never changes row height */
+}
+```
+
+For a 100px row, the centerline is 50px. Every control, hint, and state must satisfy:
+
+```text
+control.top + control.height / 2 === row.top + row.height / 2
+```
+
+### Forbidden
+
+- Mixing `flex-start` static text with `center`-aligned selects.
+- Letting a hint appearing change row height or push elements below it.
+- Misaligning label and value baselines within one row.
+- Using `grid-template-columns: 1fr` for a responsive table when that stacks four columns vertically.
+- Repeating a column label in every row when the group header already has it.
+
+### Responsive
+
+Keep the 4-column table on desktop. Below the breakpoint, switch to an explicit **card layout with labels above
+controls**; do not keep overflowing columns and do not stack four cells into one column without changing semantics.
+
+### Verify with numbers, not eyes
+
+```js
+const r = el.getBoundingClientRect();
+const centerY = r.top + r.height / 2;
+```
+
+Compare centerY for source, provider, state pill, and toggle. More than 1px drift is a review failure.
+
+### Rubric
+
+Row alignment belongs to **Layout/grid/responsive (25)**. A row that misses the centerline, a hint that causes
+layout shift, or columns that do not line up between groups ⇒ deduct at least 10 points and record a defect.
+
 ## 4. Angular 22 quality
 
 - Standalone component, `ChangeDetectionStrategy.OnPush`, signals cho state.

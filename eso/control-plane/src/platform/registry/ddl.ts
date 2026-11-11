@@ -9,6 +9,7 @@
 export const PLATFORM_SCHEMA = 'platform';
 export const CONSUMER_TABLE = 'platform.consumer';
 export const CONSUMER_EVENT_TABLE = 'platform.consumer_event';
+export const STACK_VERSION_TABLE = 'platform.harness_stack_version';
 
 export const PLATFORM_DDL: readonly string[] = [
     `CREATE SCHEMA IF NOT EXISTS platform`,
@@ -36,6 +37,17 @@ export const PLATFORM_DDL: readonly string[] = [
     )`,
     `CREATE INDEX IF NOT EXISTS idx_consumer_event_consumer_at
         ON platform.consumer_event (consumer_id, at desc)`,
+    `CREATE TABLE IF NOT EXISTS platform.harness_stack_version (
+        consumer_id  text not null,
+        version      integer not null check (version > 0),
+        status       text not null check (status in ('draft','published','retired')),
+        layers       jsonb not null default '[]'::jsonb,
+        published_at timestamptz,
+        created_at   timestamptz not null default now(),
+        primary key (consumer_id, version)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_stack_version_consumer
+        ON platform.harness_stack_version (consumer_id, version desc)`,
 ];
 
 export const CONSUMER_ID_PATTERN = /^[a-z0-9][a-z0-9-]{1,31}$/;

@@ -12,6 +12,7 @@ import type {
     ConsumerRecord,
     ConsumerStatus,
     ListConsumersOptions,
+    StackVersionRecord,
 } from './types.js';
 
 /**
@@ -40,6 +41,8 @@ export interface PlatformStore {
     setMaterializedHash(id: string, hash: string | null): Promise<void>;
     appendEvent(event: ConsumerEvent): Promise<ConsumerEvent>;
     listEvents(consumerId: string, limit?: number): Promise<ConsumerEvent[]>;
+    listStackVersions(consumerId: string): Promise<StackVersionRecord[]>;
+    replaceStackVersions(consumerId: string, versions: StackVersionRecord[]): Promise<void>;
     withSearchPath<T>(consumerId: string, fn: (tx: PlatformStore) => Promise<T>): Promise<T>;
     getSearchPath(): string | null;
     /** Test-only fault hook (memory store). */
@@ -62,6 +65,7 @@ export class MemoryPlatformStore implements PlatformStore {
     private tables = new Set<string>();
     private consumers = new Map<string, ConsumerRecord>();
     private events: ConsumerEvent[] = [];
+    private stackVersions = new Map<string, StackVersionRecord[]>();
     private schemas = new Set<string>();
     private nextEventId = 1;
     private searchPath: string | null = null;
@@ -85,6 +89,7 @@ export class MemoryPlatformStore implements PlatformStore {
         const snapshot = {
             consumers: clone(this.consumers),
             events: clone(this.events),
+            stackVersions: new Map([...this.stackVersions].map(([key, value]) => [key, clone(value)])),
             schemas: new Set(this.schemas),
             nextEventId: this.nextEventId,
             searchPath: this.searchPath,
@@ -94,6 +99,7 @@ export class MemoryPlatformStore implements PlatformStore {
         } catch (error) {
             this.consumers = snapshot.consumers;
             this.events = snapshot.events;
+            this.stackVersions = snapshot.stackVersions;
             this.schemas = snapshot.schemas;
             this.nextEventId = snapshot.nextEventId;
             this.searchPath = snapshot.searchPath;
@@ -172,6 +178,14 @@ export class MemoryPlatformStore implements PlatformStore {
             .sort((a, b) => (b.at || '').localeCompare(a.at || '') || (b.id || 0) - (a.id || 0))
             .slice(0, limit)
             .map((event) => clone(event));
+    }
+
+    async listStackVersions(consumerId: string): Promise<StackVersionRecord[]> {
+        return clone(this.stackVersions.get(consumerId) || []).sort((a, b) => b.version - a.version);
+    }
+
+    async replaceStackVersions(consumerId: string, versions: StackVersionRecord[]): Promise<void> {
+        this.stackVersions.set(consumerId, clone(versions).sort((a, b) => a.version - b.version));
     }
 
     async withSearchPath<T>(consumerId: string, fn: (tx: PlatformStore) => Promise<T>): Promise<T> {
@@ -364,6 +378,35 @@ export class BunSqlPlatformStore implements PlatformStore {
             [consumerId]
         );
         return rows.map(mapEvent);
+    }
+
+    async listStackVersions(consumerId: string): Promise<StackVersionRecord[]> {
+        const rows = await this.sql.unsafe(
+            `SELECT * FROM platform.harness_stack_version WHERE consumer_id = $1 ORDER BY version DESC`,
+            [consumerId]
+        );
+        return rows.map((row: any) => ({
+            consumerId: row.consumer_id,
+            version: Number(row.version),
+            status: row.status,
+            layers: typeof row.layers === 'string' ? JSON.parse(row.layers) : (row.layers || []),
+            publishedAt: row.published_at ? toIso(row.published_at) : null,
+            createdAt: toIso(row.created_at),
+        }));
+    }
+
+    async replaceStackVersions(consumerId: string, versions: StackVersionRecord[]): Promise<void> {
+        await this.sql.begin(async (tx: any) => {
+            await tx.unsafe(`DELETE FROM platform.harness_stack_version WHERE consumer_id = $1`, [consumerId]);
+            for (const version of versions) {
+                await tx.unsafe(
+                    `INSERT INTO platform.harness_stack_version
+                     (consumer_id, version, status, layers, published_at, created_at)
+                     VALUES ($1,$2,$3,$4::jsonb,$5,$6)`,
+                    [consumerId, version.version, version.status, JSON.stringify(version.layers || []), version.publishedAt, version.createdAt]
+                );
+            }
+        });
     }
 
     async withSearchPath<T>(consumerId: string, fn: (tx: PlatformStore) => Promise<T>): Promise<T> {
