@@ -1,3 +1,4 @@
+# Container mode only: local host-native CP/UI is the default; see deploy/README.md.
 name: eso
 
 services:

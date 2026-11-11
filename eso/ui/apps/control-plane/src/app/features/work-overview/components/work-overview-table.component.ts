@@ -11,13 +11,13 @@ import type { WorkOverviewItem } from '../models/work-overview.model.js';
     standalone: true,
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
-        <table class="turns-table" role="table" aria-label="Danh sách lượt chạy">
+        <table class="turns-table" role="table" aria-label="Turn list">
             <thead>
                 <tr>
-                    <th scope="col">Việc</th>
-                    <th scope="col">Mức</th>
-                    <th scope="col">Thiếu</th>
-                    <th scope="col">Hành động</th>
+                    <th scope="col">Work</th>
+                    <th scope="col">Level</th>
+                    <th scope="col">Missing</th>
+                    <th scope="col">Action</th>
                 </tr>
             </thead>
             <tbody>
@@ -33,7 +33,7 @@ import type { WorkOverviewItem } from '../models/work-overview.model.js';
                                 [attr.data-turn-id]="item.turnId"
                                 (click)="whyTriggered.emit(item.turnId)"
                             >
-                                Vì sao
+                                Why
                             </button>
                         </td>
                     </tr>

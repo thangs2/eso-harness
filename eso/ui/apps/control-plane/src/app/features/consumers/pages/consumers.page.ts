@@ -14,7 +14,7 @@ import type { ConsumerSummary } from '../../../../../../../libs/api-client/types
             <div>
                 <p class="eyebrow">Control Plane</p>
                 <h1>Consumers</h1>
-                <p class="subtitle">Profile đã đăng ký; chọn một consumer để xử lý case-by-case.</p>
+                <p class="subtitle">Registered profiles; select a consumer to process cases.</p>
             </div>
         </header>
 
@@ -28,17 +28,17 @@ import type { ConsumerSummary } from '../../../../../../../libs/api-client/types
             <p class="form-error" role="alert">{{ message }}</p>
         }
         @if (loading()) {
-            <section class="panel"><p class="loading-label">Đang nạp consumers…</p></section>
+            <section class="panel"><p class="loading-label">Loading consumers…</p></section>
         } @else if (items().length === 0) {
             <section class="panel empty-panel">
-                <h2>Chưa có consumer</h2>
-                <p>Bắt đầu bằng việc khai báo host, harness source và repo consumer.</p>
-                <a class="btn-primary" routerLink="/onboarding">Khởi tạo consumer</a>
+                <h2>No consumers yet</h2>
+                <p>Start by declaring the consumer repo and harness settings.</p>
+                <a class="btn-primary" routerLink="/onboarding">Create consumer</a>
             </section>
         } @else {
             <section class="panel table-panel">
-                <table class="turns-table" aria-label="Danh sách consumer">
-                    <thead><tr><th>Consumer</th><th>Repo</th><th>Profile</th><th>Version</th><th>Cập nhật</th><th></th></tr></thead>
+                <table class="turns-table" aria-label="Consumer list">
+                    <thead><tr><th>Consumer</th><th>Repo</th><th>Profile</th><th>Version</th><th>Updated</th><th></th></tr></thead>
                     <tbody>
                         @for (item of items(); track item.id) {
                             <tr>
@@ -48,7 +48,7 @@ import type { ConsumerSummary } from '../../../../../../../libs/api-client/types
                                 <td>v{{ item.version }}</td>
                                 <td>{{ item.updatedAt | date: 'dd/MM/yyyy HH:mm' }}</td>
                                 <td class="col-actions">
-                                    <a class="btn-why" [routerLink]="['/consumers', item.id]">Chi tiết</a>
+                                    <a class="btn-why" [routerLink]="['/consumers', item.id]">Details</a>
                                     <a class="btn-why" [routerLink]="['/work-overview']" [queryParams]="{ project: item.id }">Work</a>
                                 </td>
                             </tr>
@@ -74,7 +74,7 @@ export class ConsumersPage implements OnInit {
         this.service
             .list()
             .then((res) => this.items.set(res.items || []))
-            .catch((err) => this.error.set(err?.detail || 'Không tải được consumers'))
+            .catch((err) => this.error.set(err?.detail || 'Unable to load consumers'))
             .finally(() => this.loading.set(false));
     }
 }

@@ -1,5 +1,8 @@
 # deploy/bin — runtime entrypoints
 
+> **`stack/*` and `shared/*` manage container mode only.** Local host-native CP/UI commands are in
+> [`deploy/README.md`](../README.md) — only PostgreSQL runs in Docker in that mode.
+
 | Script | Scope | Service |
 |---|---|---|
 | `env-init.sh` | env | stack |

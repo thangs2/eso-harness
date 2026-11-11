@@ -12,6 +12,12 @@ export interface HarnessManifest {
         agents: string;
         harness: string;
     };
+    materialVersion: number;
+    files: Array<{
+        path: string;
+        sha256: string;
+        role: string;
+    }>;
     projections: Record<string, unknown>;
 }
 

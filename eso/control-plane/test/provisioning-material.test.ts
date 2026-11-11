@@ -53,6 +53,8 @@ describe('L5.6 — Provision material bundle', () => {
             assert.ok(existsSync(join(agentsDir, 'rules')), 'agents/rules/ must exist');
             assert.ok(existsSync(join(agentsDir, 'skills')), 'agents/skills/ must exist');
             assert.ok(existsSync(join(agentsDir, 'subagents')), 'agents/subagents/ must exist');
+            assert.ok(existsSync(join(agentsDir, 'hooks')), 'agents/hooks/ must exist');
+            assert.ok(existsSync(join(agentsDir, 'mcp')), 'agents/mcp/ must exist');
 
             const agentsReadmePath = join(agentsDir, 'README.md');
             assert.ok(existsSync(agentsReadmePath), 'agents/README.md must exist');
@@ -81,6 +83,11 @@ describe('L5.6 — Provision material bundle', () => {
             assert.equal(manifest.version, 1);
             assert.deepEqual(manifest.paths, { agents: 'agents', harness: '.harness' });
             assert.deepEqual(manifest.projections, {});
+            assert.equal(manifest.materialVersion, 1);
+            assert.ok(Array.isArray(manifest.files) && manifest.files.length > 0, 'manifest must list material files');
+            assert.ok(manifest.files.some((file: any) => file.path === 'agents/rules/core.md'), 'manifest must include canonical rule');
+            assert.ok(manifest.files.some((file: any) => file.path === 'agents/hooks/README.md'), 'manifest must include hooks material');
+            assert.ok(manifest.files.some((file: any) => file.path === 'agents/mcp/README.md'), 'manifest must include MCP material');
 
             // Platform store has materialized hash updated
             const updatedConsumer = await store.getConsumer('c-clean-1');
@@ -118,7 +125,7 @@ describe('L5.6 — Provision material bundle', () => {
         }
     });
 
-    test('AC-40-2 (User Protection): Fails closed without overwriting unowned user files', async () => {
+    test('AC-40-2 (User Protection): merges an unowned AGENTS.md without destroying user content', async () => {
         const root = createTempRoot();
         try {
             const store = new MemoryPlatformStore();
@@ -137,19 +144,12 @@ describe('L5.6 — Provision material bundle', () => {
             writeFileSync(userAgentsMd, userContent, 'utf8');
 
             const service = new MaterialProvisioningService(store);
-            await assert.rejects(
-                async () => {
-                    await service.provision(consumer.id);
-                },
-                (err: any) => {
-                    return err.code === 'MATERIAL_FAILED';
-                },
-                'Provisioning must reject with MATERIAL_FAILED when user file has no marker'
-            );
+            await service.provision(consumer.id);
 
-            // Assert user file remains uncorrupted
-            const remaining = readFileSync(userAgentsMd, 'utf8');
-            assert.equal(remaining, userContent, 'User file must remain intact and not overwritten');
+            const merged = readFileSync(userAgentsMd, 'utf8');
+            assert.ok(merged.startsWith(userContent), 'User content must be preserved');
+            assert.ok(merged.includes('<!-- eso:canonical:start -->'), 'Canonical block must be appended');
+            assert.ok(merged.includes(GENERATED_MARKER), 'Canonical block must carry the ESO marker');
         } finally {
             rmSync(root, { recursive: true, force: true });
         }

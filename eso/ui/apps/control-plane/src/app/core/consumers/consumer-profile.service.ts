@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { CONTROL_PLANE_API_CLIENT } from '../tokens.js';
-import type { ConsumerListResponse, ConsumerPlan, ConsumerProfile, SetupConsumerPayload } from '../../../../../../libs/api-client/types.js';
+import type { ConsumerListResponse, ConsumerPlan, ConsumerProfile, FsBrowseResponse, SetupConsumerPayload } from '../../../../../../libs/api-client/types.js';
 
 @Injectable({ providedIn: 'root' })
 export class ConsumerProfileService {
@@ -12,27 +12,42 @@ export class ConsumerProfileService {
     }
 
     get(project: string): Promise<ConsumerProfile> {
-        if (!this.client) throw new Error('API client chưa được cấu hình');
+        if (!this.client) throw new Error('API client is not configured');
         return this.client.getConsumer(project);
     }
 
     plan(profile: ConsumerProfile): Promise<ConsumerPlan> {
-        if (!this.client) throw new Error('API client chưa được cấu hình');
+        if (!this.client) throw new Error('API client is not configured');
         return this.client.planConsumer(profile);
     }
 
+    listDirectories(path?: string): Promise<FsBrowseResponse> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.browseDirectories(path);
+    }
+
     createSetup(payload: SetupConsumerPayload): Promise<{ id: string }> {
-        if (!this.client) throw new Error('API client chưa được cấu hình');
+        if (!this.client) throw new Error('API client is not configured');
         return this.client.createConsumerSetup(payload);
     }
 
     create(profile: ConsumerProfile): Promise<ConsumerProfile> {
-        if (!this.client) throw new Error('API client chưa được cấu hình');
+        if (!this.client) throw new Error('API client is not configured');
         return this.client.createConsumer(profile);
     }
 
+    updateSettings(
+        id: string,
+        name: string,
+        profile: Record<string, unknown>,
+        expectedVersion: number
+    ): Promise<ConsumerProfile> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.updateConsumerProfile(id, { name, profile, expected_version: expectedVersion });
+    }
+
     update(project: string, profile: ConsumerProfile): Promise<ConsumerProfile> {
-        if (!this.client) throw new Error('API client chưa được cấu hình');
+        if (!this.client) throw new Error('API client is not configured');
         return this.client.updateConsumer(project, profile);
     }
 }

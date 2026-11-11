@@ -6,6 +6,10 @@ import type {
     ConsumerListResponse,
     ConsumerPlan,
     SetupConsumerPayload,
+    ProvisionConsumerOptions,
+    ProvisionConsumerResponse,
+    ConsumerSetupResponse,
+    FsBrowseResponse,
 } from './types.js';
 
 export class ControlPlaneApiClient {
@@ -127,6 +131,19 @@ export class ControlPlaneApiClient {
         return (await res.json()) as ConsumerProfile;
     }
 
+    async updateConsumerProfile(
+        id: string,
+        payload: { name?: string; profile: Record<string, unknown>; zones?: unknown[]; expected_version: number }
+    ): Promise<ConsumerProfile> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}`, {
+            method: 'PUT',
+            headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as ConsumerProfile;
+    }
+
     async updateConsumer(project: string, profile: ConsumerProfile): Promise<ConsumerProfile> {
         const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(project)}`, {
             method: 'PUT',
@@ -155,4 +172,30 @@ export class ControlPlaneApiClient {
         return (await res.json()) as ConsumerPlan;
     }
 
+    async provisionConsumer(id: string, options: ProvisionConsumerOptions = {}): Promise<ProvisionConsumerResponse> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/provision`, {
+            method: 'POST',
+            headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify(options),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as ProvisionConsumerResponse;
+    }
+
+    async browseDirectories(path?: string): Promise<FsBrowseResponse> {
+        const query = path ? `?path=${encodeURIComponent(path)}` : '';
+        const res = await fetch(`${this.baseUrl}/api/v1/fs/list${query}`, {
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as FsBrowseResponse;
+    }
+
+    async getConsumerSetup(id: string): Promise<ConsumerSetupResponse> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/setup`, {
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as ConsumerSetupResponse;
+    }
 }

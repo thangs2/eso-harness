@@ -18,6 +18,10 @@ import { LifecycleService } from '../../modules/consumers/lifecycle/lifecycle.se
 import { PurgeService } from '../../modules/consumers/purge/purge.service.js';
 import { ProfileService } from '../../modules/profiles/profile.service.js';
 import { BunScopedDb, IsolationService } from '../db/isolation.js';
+import { FsBrowseService } from '../fs/fs-browse.service.js';
+import { SchemaProvisioningService } from '../../provisioning/schema/schema-provisioning.service.js';
+import { MaterialProvisioningService } from '../../provisioning/material/material-provisioning.service.js';
+import { ProvisioningStateService } from '../../provisioning/state/provisioning-state.service.js';
 
 /**
  * L6.2 — the HTTP surface for Sprint 1.
@@ -44,6 +48,38 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
     const events = new EventReader(store);
     const scoped = options.scoped ?? null;
     const isolation = new IsolationService(store, scoped ?? undefined);
+    const fsBrowse = new FsBrowseService();
+    const schemaProvisioning = new SchemaProvisioningService(store);
+    const materialProvisioning = new MaterialProvisioningService(store);
+    const stateProvisioning = new ProvisioningStateService(store);
+
+    const provisionConsumer = async (id: string, body: any) => {
+        try {
+            const schema = await schemaProvisioning.provision(id);
+            await materialProvisioning.provision(id, {
+                profile: body?.profile,
+                zones: body?.zones,
+            });
+            const setup = await stateProvisioning.persistSetup(id, { expectReady: true, status: 'ready' });
+            return {
+                consumer: id,
+                status: 'provisioned',
+                schema: schema.schemaName,
+                material: {
+                    agents: true,
+                    harness: '.harness/config.json',
+                    manifest: '.harness/manifest.json',
+                },
+                setup: {
+                    ready: setup.setup.ready,
+                    updated_at: setup.setup.updatedAt,
+                },
+            };
+        } catch (error) {
+            await store.setStatus(id, 'error', new Date().toISOString());
+            throw error;
+        }
+    };
 
     const app = Fastify({ logger: false, bodyLimit: 2_000_000 });
 
@@ -75,6 +111,18 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
 
     app.get('/api/v1/auth/me', { preHandler: requireAuth }, async (request) => {
         return auth.me(request.headers.authorization);
+    });
+
+    app.get('/api/v1/fs/list', { preHandler: requireAuth }, async (request, reply) => {
+        try {
+            return await fsBrowse.list((request.query as { path?: string } | undefined)?.path);
+        } catch (error) {
+            const status = typeof (error as any)?.getStatus === 'function' ? (error as any).getStatus() : 500;
+            const body = typeof (error as any)?.getResponse === 'function'
+                ? (error as any).getResponse()
+                : { code: 'INTERNAL_ERROR', message: 'Filesystem browse failed' };
+            reply.code(status).send(body);
+        }
     });
 
     app.get('/api/v1/consumers', { preHandler: requireAuth }, async (request) => {
@@ -118,12 +166,26 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
             zones: body?.zones,
             actor,
         });
+        if (body?.profile?.canonical) {
+            await provisionConsumer(record.id, body);
+            reply.code(201);
+            return query.get(record.id);
+        }
         reply.code(201);
         return record;
     });
 
     app.get('/api/v1/consumers/:id', { preHandler: requireAuth }, async (request) => {
         return query.get((request.params as any).id);
+    });
+
+    app.post('/api/v1/consumers/:id/provision', { preHandler: requireAuth }, async (request) => {
+        const body = request.body as any;
+        return provisionConsumer((request.params as any).id, body);
+    });
+
+    app.get('/api/v1/consumers/:id/setup', { preHandler: requireAuth }, async (request) => {
+        return stateProvisioning.readSetup((request.params as any).id);
     });
 
     app.put('/api/v1/consumers/:id', { preHandler: requireAuth }, async (request) => {

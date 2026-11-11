@@ -10,12 +10,12 @@ import type { RiskItem } from '../models/risk.model.js';
     template: `
         <div class="s4-page-container">
             <header class="page-header">
-                <h1>Nợ kỹ thuật & Kiến trúc (S4 Debt)</h1>
+                <h1>Technical debt & architecture (S4 Debt)</h1>
             </header>
 
             <eso-state-frame
                 [state]="items().length === 0 ? 'ST1_EMPTY' : 'READY'"
-                emptyMessage="Không có nợ kỹ thuật nào được ghi nhận"
+                emptyMessage="No technical debt recorded"
             >
                 <ul class="debt-list">
                     @for (item of items(); track item.id) {

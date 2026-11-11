@@ -15,11 +15,11 @@ import { AppConfigService } from '../../core/config/app-config.service.js';
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <main class="login-shell">
-            <mat-card class="login-panel" aria-label="Đăng nhập control plane">
+            <mat-card class="login-panel" aria-label="Control plane sign in">
                 <p class="eyebrow login-eyebrow">ESO Control Plane</p>
                 <mat-card-header>
-                    <mat-card-title>Đăng nhập</mat-card-title>
-                    <mat-card-subtitle>Dùng credential trong <code>eso/.env</code> (HTTP Basic).</mat-card-subtitle>
+                    <mat-card-title>Sign in</mat-card-title>
+                    <mat-card-subtitle>Use the credential from <code>eso/.env</code> (HTTP Basic).</mat-card-subtitle>
                 </mat-card-header>
                 <mat-card-content>
                     @if (error()) {
@@ -27,15 +27,15 @@ import { AppConfigService } from '../../core/config/app-config.service.js';
                     }
                     <form (ngSubmit)="submit()" class="login-form">
                         <mat-form-field appearance="outline">
-                            <mat-label>Tài khoản</mat-label>
+                            <mat-label>Username</mat-label>
                             <input matInput name="user" [(ngModel)]="user" autocomplete="username" required>
                         </mat-form-field>
                         <mat-form-field appearance="outline">
-                            <mat-label>Mật khẩu</mat-label>
+                            <mat-label>Password</mat-label>
                             <input matInput name="password" type="password" [(ngModel)]="password" autocomplete="current-password" required>
                         </mat-form-field>
                         <button mat-flat-button color="primary" type="submit" [disabled]="loading()" class="login-submit">
-                            {{ loading() ? 'Đang đăng nhập…' : 'Đăng nhập' }}
+                            {{ loading() ? 'Signing in…' : 'Sign in' }}
                         </button>
                     </form>
                 </mat-card-content>
@@ -66,13 +66,13 @@ export class LoginPage {
             });
             const body = await res.json().catch(() => ({}));
             if (!res.ok) {
-                this.error.set(`${body.code || 'AUTH_INVALID'}: ${body.message || 'Đăng nhập thất bại'}`);
+                this.error.set(`${body.code || 'AUTH_INVALID'}: ${body.message || 'Sign in failed'}`);
                 return;
             }
             this.auth.setAuthorization(authorization);
             await this.router.navigateByUrl('/consumers');
         } catch {
-            this.error.set('AUTH_INVALID: Không kết nối được control plane');
+            this.error.set('AUTH_INVALID: Unable to reach control plane');
         } finally {
             this.loading.set(false);
         }

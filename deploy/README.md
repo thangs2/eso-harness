@@ -32,42 +32,65 @@ and `ui`; `compose.e2e.yml` adds a one-shot `smoke` service.
 - An env file copied from the matching template.
 - For staging/prod: images already published to `ESO_REGISTRY` with the selected `ESO_IMAGE_TAG`.
 
+## Runtime modes
+
+| Mode | PostgreSQL | Control plane | UI | Use when |
+|---|---|---|---|---|
+| **Local host-native (default)** | Docker | **host process** | **host process** | operator needs to browse and write a consumer repo on this machine |
+| **Container** | Docker | Docker | Docker | e2e/CI/prod parity; the CP cannot see host paths unless they are mounted |
+
+The control plane and UI must run on the host for local consumer provisioning: `fs("/Users/...")`
+must resolve against the operator's filesystem, not a container namespace. Do **not** use the
+container stack for `/setup` root browsing.
+
 The dev compose file builds locally. The prod compose file never builds; it only pulls registry images.
 The e2e compose file builds both application images and runs a disposable stack with no host ports.
 
-## Quickstart (dev)
+## Quickstart — local host-native (default)
 
 ```bash
 # 1. Init: create the ignored runtime env file and runtime directories.
 bash deploy/bin/env-init.sh --env dev
 
-# 2. Validate the rendered configuration.
-docker compose -f deploy/compose/compose.dev.yml --env-file deploy/env/dev.env config -q
+# 2. Start only PostgreSQL in Docker.
+ESO_DB_PORT=55432 COMPOSE_PROJECT_NAME=eso docker compose \
+  -f deploy/compose/compose.dev.yml --env-file deploy/env/dev.env up -d postgres
 
-# 3. Build the two local images.
+# 3. Control plane on the host (port 8787).
+cd eso/control-plane
+ESO_DB_URL='postgres://eso:eso-dev-only-password@127.0.0.1:55432/eso' \
+ESO_PORT=8787 ESO_AUTH_USER=operator ESO_AUTH_PASSWORD=eso-dev-only-token \
+ESO_API_TOKEN=eso-dev-only-token ESO_AUTH_PROJECT=eso ESO_FS_ROOT="$HOME" \
+bun src/common/http/server.ts
+
+# 4. UI on the host (port 4200), in another terminal.
+cd eso/ui
+bun run serve
+
+# 5. Check.
+curl -fsS http://127.0.0.1:8787/health
+curl -fsSI http://127.0.0.1:4200/
+```
+
+The host control plane uses the PostgreSQL host port, not the compose service name. Change
+`ESO_DB_PORT`/`ESO_DB_URL` together if the port differs.
+
+### Container mode (optional)
+
+```bash
+bash deploy/bin/env-init.sh --env dev
 bash deploy/bin/shared/build.sh --env dev
-
-# 4. Start the stack and wait for health.
 bash deploy/bin/stack/start.sh --env dev
-
-# 5. Check both health endpoints.
 curl -fsS http://127.0.0.1:8787/health
 curl -fsS http://127.0.0.1:4200/healthz
-
-# Stop; volumes are preserved.
 bash deploy/bin/stack/stop.sh --env dev
 ```
 
-The `Makefile` exposes the same operations as targets (`make init`, `make build`, `make up`,
+Container mode is for parity and CI. It has no host filesystem access; `/setup` root paths will fail
+unless the consumer root is mounted into the `control-plane` service.
+
+The `Makefile` exposes the container operations as targets (`make init`, `make build`, `make up`,
 `make status`, `make e2e`, `make backup`, and so on).
-
-Develop on the host instead of in containers when that is faster:
-
-```bash
-cd eso/control-plane && ESO_DB_URL=postgres://eso:eso-dev-only-password@127.0.0.1:5432/eso ESO_PORT=8787 \
-  ESO_AUTH_USER=operator ESO_AUTH_PASSWORD=operator-dev ESO_API_TOKEN=token-dev bun src/common/http/server.ts
-cd eso/ui && bun run serve
-```
 
 ## Environment variables
 
@@ -95,14 +118,17 @@ pattern; only `*.env.example` is committed.
 `CHANGE_ME` and must be edited before use. The only registry value committed is the example
 `ghcr.io/example-org`.
 
-The control-plane container receives `ESO_PORT=8788` for Bun and is published on 8787 through
-socat. For compatibility with the current server entrypoint, compose also maps `ESO_AUTH_TOKEN` to
-`ESO_API_TOKEN` and the Basic password; the Basic username defaults to `operator`. Keep one secret in
-the env file and rotate it there.
+In **container mode**, the control-plane container receives `ESO_PORT=8788` for Bun and is published
+on 8787 through socat. Compose maps `ESO_AUTH_TOKEN` to `ESO_API_TOKEN` and the Basic password; the
+Basic username defaults to `operator`. Keep one secret in the env file and rotate it there.
+
+In **host-native mode**, pass `ESO_DB_URL`, `ESO_PORT`, `ESO_AUTH_USER`, `ESO_AUTH_PASSWORD`,
+`ESO_API_TOKEN`, `ESO_AUTH_PROJECT`, and `ESO_FS_ROOT` directly to `bun src/common/http/server.ts`.
+`ESO_FS_ROOT` defaults to the host user home and bounds the `/api/v1/fs/list` directory browser.
 
 ## Script and command reference
 
-The runtime wrappers live in `deploy/bin/`. They create the state, backup, and log directories on
+The runtime wrappers in `deploy/bin/stack/` are for **container mode**. Host-native CP/UI commands are in the local quickstart above. They create the state, backup, and log directories on
 demand; building or validating the configuration does not create them. Run them as
 `bash deploy/bin/<group>/<script>` from the repository root (`env-init.sh` and `lib.sh` stay at the root).
 
@@ -132,7 +158,7 @@ docker compose -f deploy/compose/compose.e2e.yml --env-file deploy/env/dev.env.e
   --abort-on-container-exit --exit-code-from smoke
 ```
 
-## Compose matrix
+## Compose matrix — container mode only
 
 | File | Images | Host ports | Database persistence | Used for |
 |---|---|---|---|---|
@@ -209,8 +235,9 @@ product bind host, fix the container command instead. The healthcheck intentiona
 present and that `try_files $uri $uri/ /index.html` is in the served config. The nginx config is not
 baked into the image.
 
-**The UI loads but API calls fail with 502.** The upstream is the Compose service name
-`control-plane:8787`. Check that the API is healthy and that both services are on the `eso` network.
+**The UI loads but API calls fail with 502.** In container mode the upstream is the Compose service
+name `control-plane:8787`; check that both services are on the `eso` network. In host-native mode the
+UI calls `http://127.0.0.1:8787`; check the host control plane is running and CORS allows the UI origin.
 
 **`bind: address already in use`.** Change `ESO_API_PORT`, `ESO_UI_PORT`, or `ESO_DB_PORT` in the
 runtime env file. E2E publishes no ports, so it does not have this conflict.
@@ -222,5 +249,5 @@ add a default secret to a compose file.
 **A stale dev database hides a registry change.** `down -v` deletes the named volume and all data.
 Take a dump first, or use the disposable e2e stack when a clean database is acceptable.
 
-For a one-command view of container state and both HTTP endpoints, run
-`bash deploy/bin/stack/status.sh --env dev`.
+For a one-command view of **container-mode** state and both HTTP endpoints, run
+`bash deploy/bin/stack/status.sh --env dev`. It does not manage host-native CP/UI processes.

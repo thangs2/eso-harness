@@ -37,7 +37,7 @@ export const APP_ROUTES: Routes = [
     },
     {
         path: 'onboarding',
-        loadChildren: () => import('./features/setup/setup.routes.js').then((m) => m.SETUP_ROUTES),
+        loadChildren: () => import('./features/onboarding/onboarding.routes.js').then((m) => m.ONBOARDING_ROUTES),
     },
     {
         path: 'setup',

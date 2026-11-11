@@ -9,8 +9,23 @@ import { FlowModule } from './modules/flow/flow.module.js';
 import { DebtModule } from './modules/debt/debt.module.js';
 import { ScopeModule } from './modules/scope/scope.module.js';
 import { GraphModule } from './modules/graph/graph.module.js';
+import { ProvisioningApiModule } from './provisioning/api/provisioning-api.module.js';
+import { FsBrowseModule } from './common/fs/fs-browse.module.js';
 
 @Module({
-    imports: [DatabaseModule, AuthModule, HealthModule, ConfigModule, WorkOverviewModule, ConsumerModule, FlowModule, DebtModule, ScopeModule, GraphModule],
+    imports: [
+        DatabaseModule,
+        AuthModule,
+        HealthModule,
+        ConfigModule,
+        WorkOverviewModule,
+        ConsumerModule,
+        FlowModule,
+        DebtModule,
+        ScopeModule,
+        GraphModule,
+        ProvisioningApiModule,
+        FsBrowseModule,
+    ],
 })
 export class AppModule {}

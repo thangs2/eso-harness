@@ -21,15 +21,15 @@ import { WorkOverviewService } from '../data/work-overview.service.js';
                 <div>
                     <p class="eyebrow">ESO Control Plane</p>
                     <h1>Work overview</h1>
-                    <p class="subtitle">Dự án: {{ store.project() }} · {{ store.totalItems() }} turn</p>
+                    <p class="subtitle">Project: {{ store.project() }} · {{ store.totalItems() }} turn</p>
                 </div>
-                <span class="readonly-badge">Chỉ đọc</span>
+                <span class="readonly-badge">Read-only</span>
             </header>
 
             <eso-state-frame
                 [state]="store.state()"
                 [errorMessage]="store.errorMessage()"
-                emptyMessage="chưa có turn nào"
+                emptyMessage="No turns yet"
                 (retry)="onReload()"
                 (action)="onFrameAction($event)"
             >
@@ -63,7 +63,7 @@ export class WorkOverviewPage implements OnInit {
             if (errorObj?.status === 403 || errorObj?.status === 404) {
                 this.store.setDenied();
             } else {
-                this.store.setFailed(errorObj?.detail || errorObj?.message || 'Không thể nạp dữ liệu');
+                this.store.setFailed(errorObj?.detail || errorObj?.message || 'Unable to load data');
             }
         }
     }

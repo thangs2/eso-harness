@@ -28,26 +28,26 @@ export type UXState =
                 @case ('ST2_LOADING') {
                     <div class="frame-loading" role="status">
                         <div class="skeleton-block" aria-hidden="true"></div>
-                        <p class="loading-label">Đang nạp dữ liệu...</p>
+                        <p class="loading-label">Loading data...</p>
                     </div>
                 }
                 @case ('ST3_FAILED') {
                     <div class="frame-failed" role="alert">
-                        <h2 class="error-title">Đã xảy ra lỗi</h2>
-                        <p class="error-detail">{{ errorMessage() || 'Không thể tải dữ liệu từ máy chủ.' }}</p>
-                        <button type="button" class="btn-retry" (click)="retry.emit()">Thử lại</button>
+                        <h2 class="error-title">An error occurred</h2>
+                        <p class="error-detail">{{ errorMessage() || 'Unable to load data from the server.' }}</p>
+                        <button type="button" class="btn-retry" (click)="retry.emit()">Retry</button>
                     </div>
                 }
                 @case ('ST4_DENIED') {
                     <div class="frame-denied" role="alert">
-                        <p class="denied-message">Truy cập bị từ chối hoặc tài nguyên không tìm thấy.</p>
-                        <button type="button" class="btn-action" (click)="action.emit('CHANGE_PROJECT')">Đổi dự án</button>
+                        <p class="denied-message">Access denied or resource not found.</p>
+                        <button type="button" class="btn-action" (click)="action.emit('CHANGE_PROJECT')">Change project</button>
                     </div>
                 }
                 @case ('ST1_EMPTY') {
                     <div class="frame-empty" role="status">
                         <p class="empty-message">{{ emptyMessage() }}</p>
-                        <button type="button" class="btn-action" (click)="action.emit('CHANGE_PROJECT')">Đổi dự án</button>
+                        <button type="button" class="btn-action" (click)="action.emit('CHANGE_PROJECT')">Change project</button>
                     </div>
                 }
                 @case ('ST5_PARTIAL') {
@@ -64,7 +64,7 @@ export type UXState =
                         <div class="stale-banner" role="alert">
                             <span class="warning-icon" aria-hidden="true">⚠</span>
                             <span>{{ staleLabel() }}</span>
-                            <button type="button" class="btn-refresh" (click)="retry.emit()">Làm mới</button>
+                            <button type="button" class="btn-refresh" (click)="retry.emit()">Refresh</button>
                         </div>
                         <ng-content></ng-content>
                     </div>
@@ -82,7 +82,7 @@ export type UXState =
 export class StateFrameComponent {
     readonly state = input.required<UXState>();
     readonly errorMessage = input<string | null>(null);
-    readonly emptyMessage = input<string>('chưa có dữ liệu nào');
+    readonly emptyMessage = input<string>('No data yet');
 
     // AC-UI-01-05/06: counts and ratios are data. `null` means "not recorded",
     // and the frame then says nothing about it — a default 0 or 100% would be
@@ -102,14 +102,14 @@ export class StateFrameComponent {
     partialLabel(): string {
         const missing = this.missingCount();
         const coverage = this.coverageText();
-        const missingText = missing === null || missing === undefined ? 'Thiếu một phần dữ liệu' : `${missing} phần tử bị thiếu`;
-        return coverage === null ? missingText : `${missingText} (Độ phủ: ${coverage})`;
+        const missingText = missing === null || missing === undefined ? 'Partial data missing' : `${missing} missing elements`;
+        return coverage === null ? missingText : `${missingText} (Coverage: ${coverage})`;
     }
 
     staleLabel(): string {
         const coverage = this.coverageText();
         return coverage === null
-            ? 'Dữ liệu có thể đã cũ hoặc độ phủ thấp. Vui lòng làm mới.'
-            : `Graph phủ ${coverage} — phán quyết có thể sai.`;
+            ? 'Data may be stale or coverage is low. Please refresh.'
+            : `Graph coverage ${coverage} — decisions may be wrong.`;
     }
 }

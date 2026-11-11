@@ -14,15 +14,15 @@ import type { DiagnosisEvidence } from '../models/diagnosis.model.js';
     template: `
         <div class="s2-page-container">
             <header class="page-header">
-                <h1>Giải trình quyết định (S2 Why)</h1>
+                <h1>Decision rationale (S2 Why)</h1>
             </header>
 
-            <eso-state-frame [state]="evidence() ? 'READY' : 'ST1_EMPTY'" emptyMessage="Chưa có bằng chứng cho lượt chạy này">
+            <eso-state-frame [state]="evidence() ? 'READY' : 'ST1_EMPTY'" emptyMessage="No evidence for this run">
                 @if (evidence()) {
                     <article class="evidence-card">
-                        <h2>Quyết định: {{ evidence()?.decision }}</h2>
-                        <p class="actor">Tác nhân: {{ evidence()?.actor }}</p>
-                        <p class="rationale">Lý do: {{ evidence()?.rationale }}</p>
+                        <h2>Decision: {{ evidence()?.decision }}</h2>
+                        <p class="actor">Actor: {{ evidence()?.actor }}</p>
+                        <p class="rationale">Reason: {{ evidence()?.rationale }}</p>
                     </article>
                 }
             </eso-state-frame>

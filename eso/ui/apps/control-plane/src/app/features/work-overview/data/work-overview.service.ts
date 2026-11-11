@@ -28,9 +28,9 @@ export class WorkOverviewService {
             turnId: dto.turn_id,
             // The contract requires `work`; when a producer omits it the cell
             // says so instead of showing a fabricated work name.
-            work: dto.work || 'chưa ghi',
+            work: dto.work || 'not recorded',
             level: dto.level,
-            missingBadge: `${dto.missing_count || 0} thiếu`,
+            missingBadge: `${dto.missing_count || 0} missing`,
             distinctStyling: dto.distinct_styling || 'style-neutral',
         };
     }

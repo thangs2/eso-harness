@@ -108,3 +108,55 @@ export interface SetupConsumerPayload {
     sdlcRoot: string;
     profile: SetupProfilePayload;
 }
+
+export interface ProvisionConsumerOptions {
+    profile?: Record<string, unknown>;
+    zones?: unknown[];
+}
+
+export interface ProvisionConsumerResponse {
+    consumer: string;
+    status: 'provisioned';
+    schema: string;
+    material: {
+        agents: boolean;
+        harness: string;
+        manifest: string;
+    };
+    setup: {
+        ready: boolean;
+        updated_at: string;
+    };
+}
+
+export interface ConsumerSetupResponse {
+    consumerId: string;
+    status: string;
+    schema: {
+        name: string;
+        exists: boolean;
+    };
+    material: {
+        agents: boolean;
+        config: boolean;
+        manifest: boolean;
+        hash: string | null;
+        materialized: boolean;
+    };
+    setup: {
+        ready: boolean;
+        updatedAt: string;
+    };
+}
+
+
+export interface FsDirectoryEntry {
+    name: string;
+    path: string;
+}
+
+export interface FsBrowseResponse {
+    path: string;
+    parent: string | null;
+    directories: FsDirectoryEntry[];
+}

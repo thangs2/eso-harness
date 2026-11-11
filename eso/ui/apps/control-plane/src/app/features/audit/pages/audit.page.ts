@@ -14,12 +14,12 @@ import type { AuditItem } from '../models/audit.model.js';
     template: `
         <div class="s5-page-container">
             <header class="page-header">
-                <h1>Kho lưu trữ Hiện vật (S5 Artefact)</h1>
+                <h1>Artefact archive (S5 Artefact)</h1>
             </header>
 
             <eso-state-frame
                 [state]="items().length === 0 ? 'ST1_EMPTY' : 'READY'"
-                emptyMessage="Chưa có hiện vật nào được lưu trữ"
+                emptyMessage="No artefacts archived yet"
             >
                 <div class="artefact-grid">
                     @for (item of items(); track item.id) {

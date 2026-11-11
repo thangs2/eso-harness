@@ -17,33 +17,33 @@ import type { DeclarationPreview } from '../models/declaration.model.js';
     template: `
         <div class="s3-page-container">
             <header class="page-header">
-                <h1>Cấu hình hệ thống (S3 Config)</h1>
+                <h1>System configuration (S3 Config)</h1>
             </header>
 
             <eso-state-frame [state]="isSaving() ? 'ST2_LOADING' : 'READY'">
                 <div class="config-actions">
-                    <button type="button" class="btn-preview" (click)="generatePreview()">Xem trước</button>
+                    <button type="button" class="btn-preview" (click)="generatePreview()">Preview</button>
                     <button
                         type="button"
                         class="btn-save"
                         [disabled]="!canSave()"
                         (click)="saveConfiguration()"
                     >
-                        Lưu cấu hình
+                        Save configuration
                     </button>
                 </div>
 
                 @if (preview()) {
-                    <section class="preview-panel" aria-label="Bản xem trước cấu hình">
-                        <h2>Xem trước thay đổi (Hash: {{ preview()?.hash }})</h2>
-                        <p class="impact">{{ preview()?.impactSummary || 'Không có cảnh báo tác động' }}</p>
+                    <section class="preview-panel" aria-label="Configuration preview">
+                        <h2>Preview changes (Hash: {{ preview()?.hash }})</h2>
+                        <p class="impact">{{ preview()?.impactSummary || 'No impact warnings' }}</p>
                     </section>
                 }
 
                 @if (conflictError()) {
                     <div class="conflict-alert" role="alert">
-                        <p>Xung đột phiên bản (409): Cấu hình đã bị thay đổi bởi phiên khác. Vui lòng tải lại xem trước.</p>
-                        <button type="button" (click)="generatePreview()">Tải lại xem trước</button>
+                        <p>Version conflict (409): the configuration was changed by another session. Reload the preview.</p>
+                        <button type="button" (click)="generatePreview()">Reload preview</button>
                     </div>
                 }
             </eso-state-frame>
@@ -63,7 +63,7 @@ export class DeclarationPage {
         this.preview.set({
             hash: `cfg-${Date.now()}`,
             items: [],
-            impactSummary: 'Tác động dự án: An toàn',
+            impactSummary: 'Project impact: Safe',
         });
     }
 

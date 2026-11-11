@@ -17,12 +17,13 @@ import type { ConsumerProfile } from '../../../../../../../libs/api-client/types
                     <p class="subtitle"><code>{{ p.id }}</code> · {{ p.root }}</p>
                 </div>
                 <div class="actions-row">
-                    <a class="btn-primary" [routerLink]="['/work-overview']" [queryParams]="{ project: p.id }">Mở work overview</a>
+                    <a class="btn-ghost" [routerLink]="['/consumers', p.id, 'settings']">Settings</a>
+                    <a class="btn-primary" [routerLink]="['/work-overview']" [queryParams]="{ project: p.id }">Open work overview</a>
                 </div>
             </header>
 
             @if (created()) {
-                <p class="saved-banner">Đã lưu consumer. Bước thiết lập hoàn tất; giờ có thể xử lý case-by-case.</p>
+                <p class="saved-banner">Consumer saved. Setup is complete; you can now process cases.</p>
             }
 
             <div class="detail-grid">
@@ -57,7 +58,7 @@ import type { ConsumerProfile } from '../../../../../../../libs/api-client/types
                 <section class="panel">
                     <h2>Protected paths</h2>
                     @if (!((p.protectedPaths || []).length)) {
-                        <p class="muted">Chưa khai path bảo vệ.</p>
+                        <p class="muted">No protected paths configured.</p>
                     } @else {
                         <ul class="path-list">
                             @for (path of p.protectedPaths; track path) { <li><code>{{ path }}</code></li> }
@@ -68,7 +69,7 @@ import type { ConsumerProfile } from '../../../../../../../libs/api-client/types
         } @else if (error(); as message) {
             <p class="form-error" role="alert">{{ message }}</p>
         } @else {
-            <section class="panel"><p class="loading-label">Đang nạp consumer…</p></section>
+            <section class="panel"><p class="loading-label">Loading consumer…</p></section>
         }
     `,
 })
@@ -85,7 +86,7 @@ export class ConsumerDetailPage implements OnInit {
         this.service
             .get(id)
             .then((profile) => this.profile.set(profile))
-            .catch((err) => this.error.set(err?.detail || 'Không tải được consumer'));
+            .catch((err) => this.error.set(err?.detail || 'Unable to load consumer'));
     }
 
     enabled(map: Record<string, unknown>): string {

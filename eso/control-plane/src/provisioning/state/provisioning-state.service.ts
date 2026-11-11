@@ -150,7 +150,34 @@ export class ProvisioningStateService {
                             const manifestContent = readFileSync(manifestPath, 'utf8');
 
                             JSON.parse(configContent);
-                            JSON.parse(manifestContent);
+                            const manifest = JSON.parse(manifestContent) as {
+                                files?: unknown;
+                                materialVersion?: unknown;
+                            };
+                            if (!Array.isArray(manifest.files) || manifest.files.length === 0) {
+                                throw new Error('manifest has no files inventory');
+                            }
+                            if (manifest.materialVersion !== 1) {
+                                throw new Error('manifest materialVersion is missing or unsupported');
+                            }
+                            for (const entry of manifest.files) {
+                                if (!entry || typeof entry !== 'object') {
+                                    throw new Error('manifest contains an invalid file entry');
+                                }
+                                const path = (entry as { path?: unknown }).path;
+                                const sha256 = (entry as { sha256?: unknown }).sha256;
+                                if (typeof path !== 'string' || typeof sha256 !== 'string') {
+                                    throw new Error('manifest file entry is missing path or sha256');
+                                }
+                                const absolute = join(consumer.root, path);
+                                if (!existsSync(absolute)) {
+                                    throw new Error(`material file is missing: ${path}`);
+                                }
+                                const actual = createHash('sha256').update(readFileSync(absolute)).digest('hex');
+                                if (actual !== sha256) {
+                                    throw new Error(`material file hash mismatch: ${path}`);
+                                }
+                            }
 
                             computedFileHash = createHash('sha256')
                                 .update(agentsContent)
