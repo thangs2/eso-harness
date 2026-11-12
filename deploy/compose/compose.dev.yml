@@ -3,7 +3,7 @@ name: eso
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     environment:
       POSTGRES_DB: "${ESO_DB_NAME:-eso}"
       POSTGRES_USER: "${ESO_DB_USER:-eso}"
