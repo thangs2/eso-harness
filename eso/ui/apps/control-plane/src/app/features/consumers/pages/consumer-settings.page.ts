@@ -56,7 +56,7 @@ interface WorkerEntry {
     name: string;
     role: string;
     layer: WorkerLayer;
-    hostBindingId: string;
+    hostBindingIds: string[];
     scope: string;
     status: 'declared' | 'active' | 'paused';
 }
@@ -70,7 +70,8 @@ interface WorkerEdge {
 interface WorkerDraft {
     name: string;
     role: string;
-    hostBindingId: string;
+    layer: WorkerLayer;
+    hostBindingIds: string[];
     scope: string;
 }
 
@@ -86,13 +87,13 @@ interface PluginEntry {
 
 function defaultWorkers(): WorkerEntry[] {
     return [
-        { id: 'worker-scout', name: 'Scout', role: 'scout', layer: 'peer', hostBindingId: '', scope: 'read-only recon', status: 'declared' },
-        { id: 'worker-plan', name: 'Plan', role: 'plan', layer: 'peer', hostBindingId: '', scope: '/tmp/slp/plan/', status: 'declared' },
-        { id: 'worker-build', name: 'Build', role: 'build', layer: 'peer', hostBindingId: '', scope: 'slice.allowed_files', status: 'declared' },
-        { id: 'worker-fixbug', name: 'Fixbug', role: 'fixbug', layer: 'peer', hostBindingId: '', scope: 'failure files only', status: 'declared' },
-        { id: 'worker-verify', name: 'Verify', role: 'verify', layer: 'gate', hostBindingId: '', scope: '/tmp/slp/verify/', status: 'declared' },
-        { id: 'worker-audit', name: 'Audit', role: 'audit', layer: 'gate', hostBindingId: '', scope: '/tmp/slp/audit/', status: 'declared' },
-        { id: 'worker-qc', name: 'QC', role: 'qc', layer: 'gate', hostBindingId: '', scope: '/tmp/slp/qc/', status: 'declared' },
+        { id: 'worker-scout', name: 'Scout', role: 'scout', layer: 'peer', hostBindingIds: [], scope: 'read-only recon', status: 'declared' },
+        { id: 'worker-plan', name: 'Plan', role: 'plan', layer: 'peer', hostBindingIds: [], scope: '/tmp/slp/plan/', status: 'declared' },
+        { id: 'worker-build', name: 'Build', role: 'build', layer: 'peer', hostBindingIds: [], scope: 'slice.allowed_files', status: 'declared' },
+        { id: 'worker-fixbug', name: 'Fixbug', role: 'fixbug', layer: 'peer', hostBindingIds: [], scope: 'failure files only', status: 'declared' },
+        { id: 'worker-verify', name: 'Verify', role: 'verify', layer: 'gate', hostBindingIds: [], scope: '/tmp/slp/verify/', status: 'declared' },
+        { id: 'worker-audit', name: 'Audit', role: 'audit', layer: 'gate', hostBindingIds: [], scope: '/tmp/slp/audit/', status: 'declared' },
+        { id: 'worker-qc', name: 'QC', role: 'qc', layer: 'gate', hostBindingIds: [], scope: '/tmp/slp/qc/', status: 'declared' },
     ];
 }
 
@@ -576,7 +577,8 @@ function defaultPlugins(): PluginEntry[] {
                                 <div class="agent-stats worker-stats">
                                     <div><strong>{{ workers().length }}</strong><span>workers</span></div>
                                     <div><strong>{{ workerRoleCount() }}</strong><span>roles in use</span></div>
-                                    <div><strong>{{ workerHostCoverage() }}</strong><span>host bindings used</span></div>
+                                    <div><strong>{{ workerHostCoverage() }}</strong><span>host bindings</span></div>
+                                    <div><strong>{{ workerPlacementCount() }}</strong><span>host placements</span></div>
                                 </div>
 
                                 <section class="formation-panel">
@@ -593,6 +595,16 @@ function defaultPlugins(): PluginEntry[] {
                                         <span class="formation-flow-preview"><img src="assets/diagrams/that-tinh-tran-diagram.svg" alt="Thất Tinh Trận worker flow"></span>
                                         <span class="formation-flow-copy"><strong>View the worker flow</strong><small>Original Thất Tinh Trận diagram · click to open</small></span>
                                     </button>
+                                    <div class="formation-deploy">
+                                        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                                            <mat-label>Apply formation to host bindings</mat-label>
+                                            <mat-select multiple [ngModel]="formationHostIds()" (ngModelChange)="formationHostIds.set($event)">
+                                                @for (binding of hostProfiles(); track binding.id) { <mat-option [value]="binding.id">{{ bindingLabel(binding) }}</mat-option> }
+                                            </mat-select>
+                                        </mat-form-field>
+                                        <button mat-stroked-button type="button" [disabled]="formationHostIds().length === 0 || workers().length === 0" (click)="applyFormationHosts()">Apply to all workers</button>
+                                        <small>Define 7 roles once. One host selection creates {{ workers().length }} × {{ formationHostIds().length }} placements — no re-entry per host.</small>
+                                    </div>
                                 </section>
 
                                 <section class="workers-section">
@@ -600,19 +612,25 @@ function defaultPlugins(): PluginEntry[] {
                                     <div class="worker-form">
                                         <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Worker name</mat-label><input matInput [ngModel]="workerDraft().name" (ngModelChange)="setWorkerDraft('name', $event)" placeholder="quang-lead"></mat-form-field>
                                         <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Role</mat-label>
-                                            <mat-select [ngModel]="workerDraft().role" (ngModelChange)="setWorkerDraft('role', $event)">
+                                            <mat-select [ngModel]="workerDraft().role" (ngModelChange)="setWorkerRole($event)">
                                                 @for (role of workerRoles; track role) { <mat-option [value]="role">{{ role }}</mat-option> }
                                             </mat-select>
                                         </mat-form-field>
-                                        <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Host binding</mat-label>
-                                            <mat-select [ngModel]="workerDraft().hostBindingId" (ngModelChange)="setWorkerDraft('hostBindingId', $event)">
-                                                <mat-option value="">No binding yet</mat-option>
+                                        <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Layer</mat-label>
+                                            <mat-select [ngModel]="workerDraft().layer" (ngModelChange)="setWorkerDraft('layer', $event)">
+                                                <mat-option value="peer">peer — may write in scope</mat-option>
+                                                <mat-option value="gate">gate — verify or judge only</mat-option>
+                                            </mat-select>
+                                        </mat-form-field>
+                                        <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Host bindings</mat-label>
+                                            <mat-select multiple [ngModel]="workerDraft().hostBindingIds" (ngModelChange)="setWorkerDraft('hostBindingIds', $event)">
                                                 @for (binding of hostProfiles(); track binding.id) { <mat-option [value]="binding.id">{{ bindingLabel(binding) }}</mat-option> }
                                             </mat-select>
                                         </mat-form-field>
                                         <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Scope</mat-label><input matInput [ngModel]="workerDraft().scope" (ngModelChange)="setWorkerDraft('scope', $event)" placeholder="eso/ui/**"></mat-form-field>
                                         <button mat-flat-button color="primary" type="button" (click)="addWorker()">Add worker</button>
                                     </div>
+                                    <p class="knowledge-note">peer can write only inside its scope; gate verifies or judges and never implements. A worker may be placed on multiple host bindings.</p>
                                     @if (workers().length === 0) {
                                         <p class="muted worker-empty">No workers registered. Add one to bind an agent role to a host binding.</p>
                                     } @else {
@@ -625,7 +643,7 @@ function defaultPlugins(): PluginEntry[] {
                                                             <td><strong>{{ worker.name }}</strong><br><code>{{ worker.id }}</code></td>
                                                             <td>{{ worker.role }}</td>
                                                             <td><span class="badge" [class.badge-warn]="worker.layer === 'gate'">{{ worker.layer }}</span></td>
-                                                            <td>{{ workerBindingLabel(worker) }}</td>
+                                                            <td class="worker-bindings" [title]="workerBindingLabel(worker)">{{ worker.hostBindingIds.length > 1 ? worker.hostBindingIds.length + ' host bindings' : workerBindingLabel(worker) }}</td>
                                                             <td><code>{{ worker.scope || 'not declared' }}</code></td>
                                                             <td><span class="badge" [class.badge-warn]="worker.status === 'paused'">{{ worker.status }}</span></td>
                                                             <td><button mat-stroked-button type="button" (click)="removeWorker(worker.id)">Remove</button></td>
@@ -1188,6 +1206,7 @@ export class ConsumerSettingsPage implements OnInit {
             developers: this.developers(),
             workers: this.workers(),
             workerEdges: this.workerEdges(),
+            formationHostIds: this.formationHostIds(),
             jiraEnabled: this.jiraEnabled(),
             jiraProject: this.jiraProject(),
             jiraSyncMode: this.jiraSyncMode(),
@@ -1242,7 +1261,8 @@ export class ConsumerSettingsPage implements OnInit {
     readonly developers = signal<string[]>([]);
     readonly workers = signal<WorkerEntry[]>(defaultWorkers());
     readonly workerEdges = signal<WorkerEdge[]>(defaultWorkerEdges());
-    readonly workerDraft = signal<WorkerDraft>({ name: '', role: 'dev', hostBindingId: '', scope: '' });
+    readonly formationHostIds = signal<string[]>([]);
+    readonly workerDraft = signal<WorkerDraft>({ name: '', role: 'dev', layer: 'peer', hostBindingIds: [], scope: '' });
     readonly workerRoles = ['scout', 'plan', 'build', 'fixbug', 'verify', 'audit', 'qc', 'lead', 'ba', 'dev', 'fe', 'be', 'qa', 'pm', 'review'];
     readonly newDeveloperId = signal('');
     readonly bindingDeveloper = signal('');
@@ -1504,8 +1524,31 @@ export class ConsumerSettingsPage implements OnInit {
     }
     hostLabel(pluginId: string): string { return this.plugins().find((plugin) => plugin.id === pluginId)?.label || pluginId; }
 
+    normalizeWorker(worker: any): WorkerEntry {
+        const hostBindingIds = Array.isArray(worker?.hostBindingIds)
+            ? worker.hostBindingIds.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
+            : worker?.hostBindingId ? [String(worker.hostBindingId)] : [];
+        return {
+            id: String(worker?.id || `worker-${Date.now().toString(36)}`),
+            name: String(worker?.name || 'Unnamed worker'),
+            role: String(worker?.role || 'dev'),
+            layer: worker?.layer === 'gate' ? 'gate' : 'peer',
+            hostBindingIds,
+            scope: String(worker?.scope || ''),
+            status: worker?.status === 'active' || worker?.status === 'paused' ? worker.status : 'declared',
+        };
+    }
+
     setWorkerDraft<K extends keyof WorkerDraft>(key: K, value: WorkerDraft[K]): void {
         this.workerDraft.update((draft) => ({ ...draft, [key]: value }));
+    }
+
+    setWorkerRole(role: string): void {
+        this.workerDraft.update((draft) => ({
+            ...draft,
+            role,
+            layer: ['verify', 'audit', 'qc'].includes(role) ? 'gate' : 'peer',
+        }));
     }
 
     bindingLabel(binding: HostProfile): string {
@@ -1513,8 +1556,11 @@ export class ConsumerSettingsPage implements OnInit {
     }
 
     workerBindingLabel(worker: WorkerEntry): string {
-        const binding = this.hostProfiles().find((item) => item.id === worker.hostBindingId);
-        return binding ? this.bindingLabel(binding) : 'No binding yet';
+        const labels = worker.hostBindingIds
+            .map((id) => this.hostProfiles().find((item) => item.id === id))
+            .filter((binding): binding is HostProfile => Boolean(binding))
+            .map((binding) => this.bindingLabel(binding));
+        return labels.length > 0 ? labels.join(' · ') : 'No binding yet';
     }
 
     workerRoleCount(): number {
@@ -1522,7 +1568,17 @@ export class ConsumerSettingsPage implements OnInit {
     }
 
     workerHostCoverage(): number {
-        return new Set(this.workers().map((worker) => worker.hostBindingId).filter(Boolean)).size;
+        return new Set(this.workers().flatMap((worker) => worker.hostBindingIds)).size;
+    }
+
+    workerPlacementCount(): number {
+        return this.workers().reduce((sum, worker) => sum + worker.hostBindingIds.length, 0);
+    }
+
+    applyFormationHosts(): void {
+        const hostBindingIds = [...this.formationHostIds()];
+        if (hostBindingIds.length === 0) return;
+        this.workers.update((workers) => workers.map((worker) => ({ ...worker, hostBindingIds: [...hostBindingIds] })));
     }
 
     addWorker(): void {
@@ -1533,13 +1589,13 @@ export class ConsumerSettingsPage implements OnInit {
             id: `worker-${Date.now().toString(36)}`,
             name,
             role: draft.role,
-            layer: ['verify', 'audit', 'qc'].includes(draft.role) ? 'gate' : 'peer',
-            hostBindingId: draft.hostBindingId,
+            layer: draft.layer,
+            hostBindingIds: [...draft.hostBindingIds],
             scope: draft.scope.trim(),
             status: 'declared',
         };
         this.workers.update((workers) => [...workers, worker]);
-        this.workerDraft.set({ name: '', role: 'dev', hostBindingId: '', scope: '' });
+        this.workerDraft.set({ name: '', role: 'dev', layer: 'peer', hostBindingIds: [], scope: '' });
     }
 
     removeWorker(id: string): void {
@@ -1550,7 +1606,8 @@ export class ConsumerSettingsPage implements OnInit {
     resetWorkers(): void {
         this.workers.set(defaultWorkers());
         this.workerEdges.set(defaultWorkerEdges());
-        this.workerDraft.set({ name: '', role: 'dev', hostBindingId: '', scope: '' });
+        this.formationHostIds.set([]);
+        this.workerDraft.set({ name: '', role: 'dev', layer: 'peer', hostBindingIds: [], scope: '' });
     }
 
     workerName(id: string): string {
@@ -2188,7 +2245,7 @@ export class ConsumerSettingsPage implements OnInit {
             observation: { consent: this.consent(), events: this.events() },
             settings: {
                 general: { owner: this.owner().trim(), locale: this.locale().trim(), tags: this.tags().split(',').map((tag) => tag.trim()).filter(Boolean), description: this.description().trim() },
-                harness: { stack: { version: this.activeStackVersion(), status: this.stackStatus(), layers: this.stackLayers(), versions: this.stackVersions() }, hostProfiles: this.hostProfiles(), developers: this.developers(), workers: this.workers(), workerEdges: this.workerEdges(), plugins: this.plugins() },
+                harness: { stack: { version: this.activeStackVersion(), status: this.stackStatus(), layers: this.stackLayers(), versions: this.stackVersions() }, hostProfiles: this.hostProfiles(), developers: this.developers(), workers: this.workers(), workerEdges: this.workerEdges(), formationHostIds: this.formationHostIds(), plugins: this.plugins() },
                 jira: { enabled: this.jiraEnabled(), projectKey: this.jiraProject().trim(), syncMode: this.jiraSyncMode() },
                 knowledge: {
                     sdlc: { enabled: this.sdlcEnabled(), pipeline: this.sdlcPipeline(), crProcess: this.crProcess() },
@@ -2392,7 +2449,8 @@ export class ConsumerSettingsPage implements OnInit {
             if (Array.isArray(draft.manifestFacets)) this.manifestFacets.set(draft.manifestFacets);
             if (Array.isArray(draft.manifestRelations)) this.manifestRelations.set(draft.manifestRelations);
             if (Array.isArray(draft.manifestChecks)) this.manifestChecks.set(draft.manifestChecks);
-            if (Array.isArray(draft.workers)) this.workers.set(draft.workers);
+            if (Array.isArray(draft.workers)) this.workers.set(draft.workers.map((worker: any) => this.normalizeWorker(worker)));
+            if (Array.isArray(draft.formationHostIds)) this.formationHostIds.set(draft.formationHostIds);
             if (Array.isArray(draft.workerEdges)) this.workerEdges.set(draft.workerEdges);
             if (typeof draft.consent === 'boolean') this.consent.set(draft.consent);
             if (Array.isArray(draft.events)) this.events.set(draft.events);
