@@ -49,6 +49,31 @@ interface HostProfile {
     detected?: boolean;
 }
 
+type WorkerLayer = 'peer' | 'gate';
+
+interface WorkerEntry {
+    id: string;
+    name: string;
+    role: string;
+    layer: WorkerLayer;
+    hostBindingId: string;
+    scope: string;
+    status: 'declared' | 'active' | 'paused';
+}
+
+interface WorkerEdge {
+    from: string;
+    to: string;
+    on: string;
+}
+
+interface WorkerDraft {
+    name: string;
+    role: string;
+    hostBindingId: string;
+    scope: string;
+}
+
 interface PluginEntry {
     id: string;
     label: string;
@@ -57,6 +82,31 @@ interface PluginEntry {
     capabilities: string[];
     mcpSource?: string;
     status: 'installed' | 'available' | 'error';
+}
+
+function defaultWorkers(): WorkerEntry[] {
+    return [
+        { id: 'worker-scout', name: 'Scout', role: 'scout', layer: 'peer', hostBindingId: '', scope: 'read-only recon', status: 'declared' },
+        { id: 'worker-plan', name: 'Plan', role: 'plan', layer: 'peer', hostBindingId: '', scope: '/tmp/slp/plan/', status: 'declared' },
+        { id: 'worker-build', name: 'Build', role: 'build', layer: 'peer', hostBindingId: '', scope: 'slice.allowed_files', status: 'declared' },
+        { id: 'worker-fixbug', name: 'Fixbug', role: 'fixbug', layer: 'peer', hostBindingId: '', scope: 'failure files only', status: 'declared' },
+        { id: 'worker-verify', name: 'Verify', role: 'verify', layer: 'gate', hostBindingId: '', scope: '/tmp/slp/verify/', status: 'declared' },
+        { id: 'worker-audit', name: 'Audit', role: 'audit', layer: 'gate', hostBindingId: '', scope: '/tmp/slp/audit/', status: 'declared' },
+        { id: 'worker-qc', name: 'QC', role: 'qc', layer: 'gate', hostBindingId: '', scope: '/tmp/slp/qc/', status: 'declared' },
+    ];
+}
+
+function defaultWorkerEdges(): WorkerEdge[] {
+    return [
+        { from: 'worker-scout', to: 'worker-plan', on: 'context ready' },
+        { from: 'worker-plan', to: 'worker-build', on: 'slice ready' },
+        { from: 'worker-build', to: 'worker-verify', on: 'implemented' },
+        { from: 'worker-verify', to: 'worker-audit', on: 'PASS' },
+        { from: 'worker-verify', to: 'worker-fixbug', on: 'FAIL' },
+        { from: 'worker-audit', to: 'worker-fixbug', on: 'findings' },
+        { from: 'worker-fixbug', to: 'worker-verify', on: 'fixed' },
+        { from: 'worker-audit', to: 'worker-qc', on: 'PASS · operator asks' },
+    ];
 }
 
 function defaultStackLayers(): StackLayer[] {
@@ -108,8 +158,9 @@ function defaultPlugins(): PluginEntry[] {
             } @else {
                 <nav class="settings-tabs" role="tablist" aria-label="Consumer settings sections">
                     @for (tab of tabs; track tab.id) {
-                        <button type="button" role="tab" class="settings-tab" [class.active]="activeTab() === tab.id" [attr.aria-selected]="activeTab() === tab.id" (click)="selectTab(tab.id)">
-                            <span class="settings-step-no">{{ tab.n }}</span><span>{{ tab.label }}</span>
+                        <button type="button" role="tab" class="settings-tab" [class.active]="activeTab() === tab.id" [attr.aria-selected]="activeTab() === tab.id" [title]="tab.label + ' — ' + tab.hint" (click)="selectTab(tab.id)">
+                            <span class="settings-step-no">{{ tab.n }}</span>
+                            <span class="settings-tab-copy"><strong>{{ tab.label }}</strong><small>{{ tab.hint }}</small></span>
                         </button>
                     }
                 </nav>
@@ -514,19 +565,473 @@ function defaultPlugins(): PluginEntry[] {
                             </section>
                         }
 
-                        @case ('jira') {
+                        @case ('workers') {
                             <section class="tab-panel" role="tabpanel">
-                                <p class="section-hint">Jira is optional and independent from document graph configuration.</p>
-                                <div class="toggle-row"><mat-slide-toggle [ngModel]="jiraEnabled()" (ngModelChange)="jiraEnabled.set($event)">Enable Jira</mat-slide-toggle></div>
-                                <div class="form-grid">
-                                    <mat-form-field appearance="outline"><mat-label>Project key</mat-label><input matInput [ngModel]="jiraProject()" (ngModelChange)="jiraProject.set($event)" placeholder="FIN"></mat-form-field>
-                                    <mat-form-field appearance="outline"><mat-label>Sync mode</mat-label>
-                                        <mat-select [ngModel]="jiraSyncMode()" (ngModelChange)="jiraSyncMode.set($event)">
-                                            @for (mode of jiraModes; track mode) { <mat-option [value]="mode">{{ mode }}</mat-option> }
-                                        </mat-select>
-                                    </mat-form-field>
+                                <header class="tab-intro">
+                                    <p class="eyebrow">Multi-Agent (Workers)</p>
+                                    <h2>Agent identities with a role and a host binding</h2>
+                                    <p>A worker is an agent identity, not a model. Its role says what it may do; its host binding says where it runs. Credentials are never stored here.</p>
+                                </header>
+
+                                <div class="agent-stats worker-stats">
+                                    <div><strong>{{ workers().length }}</strong><span>workers</span></div>
+                                    <div><strong>{{ workerRoleCount() }}</strong><span>roles in use</span></div>
+                                    <div><strong>{{ workerHostCoverage() }}</strong><span>host bindings used</span></div>
                                 </div>
 
+                                <section class="formation-panel">
+                                    <div class="formation-head">
+                                        <div><span class="scope-badge">DEFAULT</span><strong>Seven-Star Formation</strong><small>Seven positions, not seven names. Edges are the formation.</small></div>
+                                        <button mat-stroked-button type="button" (click)="resetWorkers()">Reset to default</button>
+                                    </div>
+                                    <div class="formation-chain">
+                                        @for (edge of workerEdges(); track edge.from + edge.to + edge.on) {
+                                            <span class="formation-edge"><b>{{ workerName(edge.from) }}</b> → <b>{{ workerName(edge.to) }}</b><em>{{ edge.on }}</em></span>
+                                        }
+                                    </div>
+                                    <button type="button" class="formation-flow" (click)="openDiagram.set('workers')">
+                                        <span class="formation-flow-preview"><img src="assets/diagrams/that-tinh-tran-diagram.svg" alt="Thất Tinh Trận worker flow"></span>
+                                        <span class="formation-flow-copy"><strong>View the worker flow</strong><small>Original Thất Tinh Trận diagram · click to open</small></span>
+                                    </button>
+                                </section>
+
+                                <section class="workers-section">
+                                    <h3>Register worker</h3>
+                                    <div class="worker-form">
+                                        <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Worker name</mat-label><input matInput [ngModel]="workerDraft().name" (ngModelChange)="setWorkerDraft('name', $event)" placeholder="quang-lead"></mat-form-field>
+                                        <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Role</mat-label>
+                                            <mat-select [ngModel]="workerDraft().role" (ngModelChange)="setWorkerDraft('role', $event)">
+                                                @for (role of workerRoles; track role) { <mat-option [value]="role">{{ role }}</mat-option> }
+                                            </mat-select>
+                                        </mat-form-field>
+                                        <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Host binding</mat-label>
+                                            <mat-select [ngModel]="workerDraft().hostBindingId" (ngModelChange)="setWorkerDraft('hostBindingId', $event)">
+                                                <mat-option value="">No binding yet</mat-option>
+                                                @for (binding of hostProfiles(); track binding.id) { <mat-option [value]="binding.id">{{ bindingLabel(binding) }}</mat-option> }
+                                            </mat-select>
+                                        </mat-form-field>
+                                        <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Scope</mat-label><input matInput [ngModel]="workerDraft().scope" (ngModelChange)="setWorkerDraft('scope', $event)" placeholder="eso/ui/**"></mat-form-field>
+                                        <button mat-flat-button color="primary" type="button" (click)="addWorker()">Add worker</button>
+                                    </div>
+                                    @if (workers().length === 0) {
+                                        <p class="muted worker-empty">No workers registered. Add one to bind an agent role to a host binding.</p>
+                                    } @else {
+                                        <div class="worker-table-wrap">
+                                            <table class="worker-table">
+                                                <thead><tr><th>Worker</th><th>Role</th><th>Layer</th><th>Host binding</th><th>Scope</th><th>Status</th><th></th></tr></thead>
+                                                <tbody>
+                                                    @for (worker of workers(); track worker.id) {
+                                                        <tr>
+                                                            <td><strong>{{ worker.name }}</strong><br><code>{{ worker.id }}</code></td>
+                                                            <td>{{ worker.role }}</td>
+                                                            <td><span class="badge" [class.badge-warn]="worker.layer === 'gate'">{{ worker.layer }}</span></td>
+                                                            <td>{{ workerBindingLabel(worker) }}</td>
+                                                            <td><code>{{ worker.scope || 'not declared' }}</code></td>
+                                                            <td><span class="badge" [class.badge-warn]="worker.status === 'paused'">{{ worker.status }}</span></td>
+                                                            <td><button mat-stroked-button type="button" (click)="removeWorker(worker.id)">Remove</button></td>
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    }
+                                </section>
+
+                                <section class="workers-section">
+                                    <h3>What a worker does not own</h3>
+                                    <p class="muted">A worker does not own the Stack, the host runtime, or the knowledge base. Those stay with the consumer, the host, and the artifact owner. The worker only carries a role and scope into a turn.</p>
+                                </section>
+
+                                @if (openDiagram(); as diagram) {
+                                    <div class="diagram-lightbox" role="dialog" aria-modal="true" (click)="openDiagram.set(null)">
+                                        <div class="diagram-lightbox-panel" (click)="$event.stopPropagation()">
+                                            <header><strong>{{ diagramTitle() }}</strong><button mat-stroked-button type="button" (click)="openDiagram.set(null)">Close</button></header>
+                                            <div class="diagram-lightbox-body"><img [src]="diagramSrc()" [alt]="diagramTitle()"></div>
+                                        </div>
+                                    </div>
+                                }
+                            </section>
+                        }
+
+                        @case ('knowledge') {
+                            <section class="tab-panel knowledge-page" role="tabpanel">
+                                <header class="tab-intro">
+                                    <p class="eyebrow">Knowledge &amp; Artifact Governance</p>
+                                    <h2>How project knowledge is governed</h2>
+                                    <p>SDLC is optional. Knowledge base holds artifacts; document graph indexes their relationships; providers such as Jira, Notion, or Confluence are optional sources of truth — never required.</p>
+                                    <div class="actor-grid">
+                                        <div><span>Who acts</span><strong>Operator / project owner</strong></div>
+                                        <div><span>Decision</span><strong>SDLC mode · artifacts · providers</strong></div>
+                                        <div><span>For whom</span><strong>Developers, auditors, hosts, and future readers</strong></div>
+                                        <div><span>Result</span><strong>Knowledge is owned, classified, and traceable</strong></div>
+                                    </div>
+                                </header>
+
+                                <div class="knowledge-layout">
+                                    <div class="knowledge-main">
+                                        <section class="knowledge-section knowledge-selectable" [class.active]="selectedKnowledgeTopic() === 'pipeline'" (click)="selectKnowledgeTopic('pipeline')">
+                                            <header class="knowledge-section-head"><div><h3>Project mode</h3><p>Choose whether this consumer follows an SDLC artifact contract.</p></div><span class="scope-badge" [class.muted-badge]="!sdlcEnabled()">{{ sdlcEnabled() ? 'SDLC' : 'Lightweight' }}</span></header>
+                                            <div class="project-mode-grid">
+                                                <div class="project-mode-item">
+                                                    <span class="control-label">Standard</span>
+                                                    <mat-slide-toggle [ngModel]="sdlcEnabled()" (ngModelChange)="sdlcEnabled.set($event)">Apply SDLC</mat-slide-toggle>
+                                                    <small>{{ sdlcEnabled() ? 'Artifact contract enforced' : 'Lightweight project' }}</small>
+                                                </div>
+                                                <div class="project-mode-item" [class.item-disabled]="!sdlcEnabled()">
+                                                    <span class="control-label">Pipeline</span>
+                                                    <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Preset</mat-label>
+                                                        <mat-select [ngModel]="sdlcPipeline()" [disabled]="!sdlcEnabled()" (ngModelChange)="sdlcPipeline.set($event)">
+                                                            @for (pipeline of pipelineOptions; track pipeline.id) { <mat-option [value]="pipeline.id">{{ pipeline.label }}</mat-option> }
+                                                        </mat-select>
+                                                    </mat-form-field>
+                                                    <small>{{ pipelineHint() }}</small>
+                                                </div>
+                                                <div class="project-mode-item" [class.item-disabled]="!sdlcEnabled()">
+                                                    <span class="control-label">Change management</span>
+                                                    <mat-checkbox [checked]="crProcess()" [disabled]="!sdlcEnabled()" (change)="crProcess.set($event.checked)">CR process</mat-checkbox>
+                                                    <small>Reopen the affected stage with version+1.</small>
+                                                </div>
+                                            </div>
+                                            <p class="knowledge-note">{{ sdlcEnabled() ? 'SDLC artifact contract applies. Root: sdlc/ (managed artifacts).' : 'No sdlc/ folder. Knowledge base still indexes README, docs, and decisions.' }}</p>
+                                        </section>
+
+                                        <section class="knowledge-section knowledge-selectable" [class.active]="selectedKnowledgeTopic() === 'document-status' || selectedKnowledgeTopic() === 'open-register' || selectedKnowledgeTopic() === 'cross-check' || selectedKnowledgeTopic() === 'build-enforcement' || selectedKnowledgeTopic() === 'preflight' || selectedKnowledgeTopic() === 'go-no-go' || selectedKnowledgeTopic() === 'pipeline-contract'">
+                                            <header class="knowledge-section-head"><div><h3>Governance</h3><p>What must be true before work moves forward.</p></div><span class="scope-badge" [class.muted-badge]="!sdlcEnabled()">{{ sdlcEnabled() ? 'enforced' : 'off' }}</span></header>
+                                            <div class="governance-controls">
+                                                <div class="governance-row" [class.active]="selectedKnowledgeTopic() === 'document-status'" (click)="selectKnowledgeTopic('document-status')">
+                                                    <mat-checkbox [checked]="documentStatusRequired()" [disabled]="!sdlcEnabled()" (change)="documentStatusRequired.set($event.checked)">Document status register</mat-checkbox>
+                                                    <small>exists · conforms · connected</small>
+                                                </div>
+                                                <div class="governance-row" [class.active]="selectedKnowledgeTopic() === 'open-register'" (click)="selectKnowledgeTopic('open-register')">
+                                                    <mat-checkbox [checked]="openRegisterRequired()" [disabled]="!sdlcEnabled()" (change)="openRegisterRequired.set($event.checked)">OPEN register</mat-checkbox>
+                                                    <small>question · owner · unblock</small>
+                                                </div>
+                                                <div class="governance-row" [class.active]="selectedKnowledgeTopic() === 'cross-check'" (click)="selectKnowledgeTopic('cross-check')">
+                                                    <mat-checkbox [checked]="crossCheckRequired()" [disabled]="!sdlcEnabled()" (change)="crossCheckRequired.set($event.checked)">Cross-check catalogue</mat-checkbox>
+                                                    <small>47 checks · X1…X42</small>
+                                                </div>
+                                                <div class="governance-row" [class.active]="selectedKnowledgeTopic() === 'build-enforcement'" (click)="selectKnowledgeTopic('build-enforcement')">
+                                                    <mat-checkbox [checked]="buildEnforcementRequired()" [disabled]="!sdlcEnabled()" (change)="buildEnforcementRequired.set($event.checked)">Build enforcement</mat-checkbox>
+                                                    <small>E1–E10 · READY only</small>
+                                                </div>
+                                                <div class="governance-row" [class.active]="selectedKnowledgeTopic() === 'preflight'" (click)="selectKnowledgeTopic('preflight')">
+                                                    <mat-checkbox [checked]="preflightRequired()" [disabled]="!sdlcEnabled()" (change)="preflightRequired.set($event.checked)">Preflight before slice</mat-checkbox>
+                                                    <small>one work package</small>
+                                                </div>
+                                                <div class="governance-row" [class.active]="selectedKnowledgeTopic() === 'go-no-go'" (click)="selectKnowledgeTopic('go-no-go')">
+                                                    <mat-checkbox [checked]="goNoGoRequired()" [disabled]="!sdlcEnabled()" (change)="goNoGoRequired.set($event.checked)">Go / No-Go before increment</mat-checkbox>
+                                                    <small>whole increment · marks OK/P/OUT/—</small>
+                                                </div>
+                                                <div class="governance-row" [class.active]="selectedKnowledgeTopic() === 'pipeline-contract'" (click)="selectKnowledgeTopic('pipeline-contract')">
+                                                    <mat-checkbox [checked]="pipelineContractRequired()" [disabled]="!sdlcEnabled()" (change)="pipelineContractRequired.set($event.checked)">Pipeline contract gates</mat-checkbox>
+                                                    <small>S1–S14 · G1–G13 · CR loop</small>
+                                                </div>
+                                            </div>
+                                            <p class="knowledge-note">Lifecycle: <code>raw → proposed → approved → retired</code>. Catalogue index says 47 checks; the file title says 29 — title is stale and must be fixed.</p>
+                                        </section>
+
+                                        <section class="knowledge-section knowledge-selectable" [class.active]="selectedKnowledgeTopic() === 'quartet'" (click)="selectKnowledgeTopic('quartet')">
+                                            <header class="knowledge-section-head"><div><h3>Task quartet</h3><p>Task decomposition for work management. Provider-independent.</p></div></header>
+                                            <mat-form-field appearance="outline"><mat-label>Quartet profile</mat-label>
+                                                <mat-select [ngModel]="quartetProfile()" (ngModelChange)="quartetProfile.set($event)">
+                                                    <mat-option value="standard">Standard · unit · impl · coverage · qc</mat-option>
+                                                    <mat-option value="extended">Extended · add load · stress</mat-option>
+                                                </mat-select>
+                                            </mat-form-field>
+                                            <div class="quartet-list">
+                                                @for (type of quartetTypes(); track type.id) {
+                                                    <div class="quartet-row" [class.quartet-out]="!type.included">
+                                                        <code>{{ type.id }}</code>
+                                                        <span>{{ type.note }}</span>
+                                                        <em>{{ type.included ? 'included' : 'out' }}</em>
+                                                    </div>
+                                                }
+                                            </div>
+                                            <p class="knowledge-note">BA is OUT when acceptance criteria are clear. Jira is optional; tasks can live in the repo.</p>
+                                        </section>
+
+                                        <section class="knowledge-section knowledge-selectable" [class.active]="selectedKnowledgeTopic() === 'knowledge-base'" (click)="selectKnowledgeTopic('knowledge-base')">
+                                            <header class="knowledge-section-head"><div><h3>Knowledge base</h3><p>Artifacts held for this consumer, by kind and reader.</p></div></header>
+                                            <div class="knowledge-block">
+                                                <span class="control-label">Artifact kinds</span>
+                                                <div class="knowledge-chips">
+                                                    @for (kind of artifactKindOptions; track kind) {
+                                                        <button type="button" class="source-pill" [class.active]="artifactKinds().includes(kind)" (click)="toggleArtifactKind(kind); $event.stopPropagation()">{{ kind }}</button>
+                                                    }
+                                                </div>
+                                            </div>
+                                            <div class="knowledge-block">
+                                                <span class="control-label">Representations</span>
+                                                <div class="knowledge-chips">
+                                                    @for (representation of representationOptions; track representation) {
+                                                        <button type="button" class="source-pill" [class.active]="representations().includes(representation)" (click)="toggleRepresentation(representation); $event.stopPropagation()">{{ representation }}</button>
+                                                    }
+                                                </div>
+                                                <p class="knowledge-note">human-readable · agent-readable · machine manifest. Derived representations must reference a source.</p>
+                                            </div>
+                                        </section>
+
+                                        <section class="knowledge-section knowledge-selectable" [class.active]="selectedKnowledgeTopic() === 'agent-manifests'" (click)="selectKnowledgeTopic('agent-manifests')">
+                                            <header class="knowledge-section-head"><div><h3>Agent manifest</h3><p>Machine-readable contract for this consumer's document structure.</p></div><span class="scope-badge">AI zone</span></header>
+                                            <div class="agent-stats">
+                                                <div><strong>7</strong><span>facets</span></div>
+                                                <div><strong>6</strong><span>relations</span></div>
+                                                <div><strong>6</strong><span>shared keys</span></div>
+                                                <div><strong>5</strong><span>checks</span></div>
+                                            </div>
+                                            <div class="manifest-controls">
+                                                <mat-slide-toggle [ngModel]="manifestEnabled()" (ngModelChange)="manifestEnabled.set($event)">Emit manifest</mat-slide-toggle>
+                                                <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Manifest path</mat-label><input matInput [ngModel]="manifestPath()" (ngModelChange)="manifestPath.set($event)" placeholder=".harness/manifest.json"></mat-form-field>
+                                            </div>
+                                            <div class="knowledge-block">
+                                                <span class="control-label">HUMAN header</span>
+                                                <div class="knowledge-chips">
+                                                    @for (key of manifestHumanHeaderOptions; track key) {
+                                                        <button type="button" class="source-pill" [class.active]="manifestHumanHeaderKeys().includes(key)" (click)="toggleManifestHumanHeader(key); $event.stopPropagation()">{{ key }}</button>
+                                                    }
+                                                </div>
+                                            </div>
+                                            <div class="knowledge-block">
+                                                <span class="control-label">AI header</span>
+                                                <div class="knowledge-chips">
+                                                    @for (key of manifestAiHeaderOptions; track key) {
+                                                        <button type="button" class="source-pill" [class.active]="manifestAiHeaderKeys().includes(key)" (click)="toggleManifestAiHeader(key); $event.stopPropagation()">{{ key }}</button>
+                                                    }
+                                                </div>
+                                            </div>
+                                            <div class="knowledge-block">
+                                                <span class="control-label">Facets</span>
+                                                <div class="knowledge-chips">
+                                                    @for (facet of manifestFacetOptions; track facet) {
+                                                        <button type="button" class="source-pill" [class.active]="manifestFacets().includes(facet)" (click)="toggleManifestFacet(facet); $event.stopPropagation()">{{ facet }}</button>
+                                                    }
+                                                </div>
+                                            </div>
+                                            <div class="knowledge-block">
+                                                <span class="control-label">Relations</span>
+                                                <div class="knowledge-chips">
+                                                    @for (relation of manifestRelationOptions; track relation) {
+                                                        <button type="button" class="source-pill" [class.active]="manifestRelations().includes(relation)" (click)="toggleManifestRelation(relation); $event.stopPropagation()">{{ relation }}</button>
+                                                    }
+                                                </div>
+                                            </div>
+                                            <div class="knowledge-block">
+                                                <span class="control-label">Checks</span>
+                                                <div class="knowledge-chips">
+                                                    @for (check of manifestCheckOptions; track check) {
+                                                        <button type="button" class="source-pill" [class.active]="manifestChecks().includes(check)" (click)="toggleManifestCheck(check); $event.stopPropagation()">{{ check }}</button>
+                                                    }
+                                                </div>
+                                            </div>
+                                            <p class="knowledge-note">Configured for this consumer. <code>sdlc/01.agent-manifests</code> is a study sample, not testeso data.</p>
+                                        </section>
+
+                                        <section class="knowledge-section knowledge-selectable" [class.active]="selectedKnowledgeTopic() === 'docgraph'" (click)="selectKnowledgeTopic('docgraph')">
+                                            <header class="knowledge-section-head"><div><h3>Document graph</h3><p>Derived index of document relationships. Never the source of content.</p></div><mat-slide-toggle [ngModel]="docgraphIndex()" (ngModelChange)="docgraphIndex.set($event)">Index</mat-slide-toggle></header>
+                                            <mat-form-field appearance="outline" class="full-width"><mat-label>Index scope</mat-label><input matInput [ngModel]="docgraphScope()" (ngModelChange)="docgraphScope.set($event)" placeholder="docs/**, sdlc/**, agents/**"></mat-form-field>
+                                            <p class="knowledge-note">Generated files and provider copies are excluded by default.</p>
+                                        </section>
+
+                                        <section class="knowledge-section knowledge-selectable" [class.active]="selectedKnowledgeTopic() === 'providers'" (click)="selectKnowledgeTopic('providers')">
+                                            <header class="knowledge-section-head"><div><h3>Providers</h3><p>Optional sources of truth. Each artifact kind has at most one provider.</p></div><span class="scope-badge muted-badge">optional</span></header>
+                                            <div class="provider-list">
+                                                <article class="provider-row">
+                                                    <div><strong>Jira</strong><small>Task · story · bug</small></div>
+                                                    <span class="provider-kind">task</span>
+                                                    <mat-slide-toggle [ngModel]="jiraEnabled()" (ngModelChange)="jiraEnabled.set($event)">{{ jiraEnabled() ? 'connected' : 'not connected' }}</mat-slide-toggle>
+                                                </article>
+                                                @if (jiraEnabled()) {
+                                                    <div class="provider-config">
+                                                        <mat-form-field appearance="outline"><mat-label>Project key</mat-label><input matInput [ngModel]="jiraProject()" (ngModelChange)="jiraProject.set($event)" placeholder="FIN"></mat-form-field>
+                                                        <mat-form-field appearance="outline"><mat-label>Sync mode</mat-label>
+                                                            <mat-select [ngModel]="jiraSyncMode()" (ngModelChange)="jiraSyncMode.set($event)">
+                                                                @for (mode of jiraModes; track mode) { <mat-option [value]="mode">{{ mode }}</mat-option> }
+                                                            </mat-select>
+                                                        </mat-form-field>
+                                                    </div>
+                                                }
+                                                <article class="provider-row"><div><strong>Notion</strong><small>Knowledge · documents</small></div><span class="provider-kind">document</span><span class="provider-status">not connected</span></article>
+                                                <article class="provider-row"><div><strong>Confluence</strong><small>Knowledge · documents</small></div><span class="provider-kind">document</span><span class="provider-status">not connected</span></article>
+                                                <article class="provider-row"><div><strong>Figma</strong><small>Design · artifacts</small></div><span class="provider-kind">design</span><span class="provider-status">not connected</span></article>
+                                            </div>
+                                        </section>
+                                    </div>
+
+                                    <aside class="knowledge-detail" aria-live="polite">
+                                        @if (knowledgeDetail(); as detail) {
+                                            <p class="eyebrow">{{ detail.eyebrow }}</p>
+                                            <h3>{{ detail.title }}</h3>
+                                            <p class="knowledge-detail-desc">{{ detail.description }}</p>
+
+                                            <section class="detail-section">
+                                                <h4>Trace</h4>
+                                                <dl class="trace-list">
+                                                    @for (trace of knowledgeTrace(); track trace.label) {
+                                                        <div><dt>{{ trace.label }}</dt><dd>{{ trace.value }}</dd></div>
+                                                    }
+                                                </dl>
+                                            </section>
+
+                                            @if (selectedKnowledgeTopic() === 'pipeline') {
+                                                <section class="detail-section">
+                                                    <h4>Pipeline flow · S1…S14</h4>
+                                                    <div class="pipeline-flow">
+                                                        @for (group of pipelineGroups(); track group.id) {
+                                                            <div class="pipeline-group">
+                                                                <div class="pipeline-group-title"><span>{{ group.id }}</span><strong>{{ group.title }}</strong></div>
+                                                                <div class="pipeline-stages">
+                                                                    @for (stage of group.stages; track stage.id) {
+                                                                        <div class="pipeline-stage"><b>{{ stage.id }}</b><span>{{ stage.label }}</span><em>{{ stage.gate }}</em></div>
+                                                                    }
+                                                                </div>
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                    <p class="detail-note">Dashed CR edges reopen S6 / S7 / S8 / S11; gates G1–G13 are document conditions.</p>
+                                                </section>
+
+                                                <section class="detail-section">
+                                                    <h4>Definition of Ready / Done</h4>
+                                                    <div class="definition-grid">
+                                                        <div class="definition-card">
+                                                            <strong>DoR</strong>
+                                                            <small>Allowed to start?</small>
+                                                            <ul>
+                                                                @for (condition of dorConditions; track condition) { <li>{{ condition }}</li> }
+                                                            </ul>
+                                                            <em>Fail → Backlog + needs-dor</em>
+                                                        </div>
+                                                        <div class="definition-card">
+                                                            <strong>DoD</strong>
+                                                            <small>Done?</small>
+                                                            <ul>
+                                                                @for (condition of dodConditions; track condition) { <li>{{ condition }}</li> }
+                                                            </ul>
+                                                            <em>Fail → remains In Progress</em>
+                                                        </div>
+                                                    </div>
+                                                    <p class="detail-note">DoR applies to Story and Task only. Epic is a container; Subtask inherits from parent; Bug must be reproducible. DoR is a gate, not a Jira status.</p>
+                                                </section>
+
+                                                <section class="detail-section">
+                                                    <h4>Diagrams</h4>
+                                                    <div class="diagram-grid">
+                                                        <button type="button" class="diagram-card" (click)="openDiagram.set('main')">
+                                                            <img src="assets/diagrams/01.main-pipeline.png" alt="Main SDLC pipeline">
+                                                            <strong>Main pipeline</strong>
+                                                            <small>14 stages · 13 gates</small>
+                                                        </button>
+                                                        <button type="button" class="diagram-card" (click)="openDiagram.set('cr')">
+                                                            <img src="assets/diagrams/02.cr-pipeline.png" alt="CR pipeline">
+                                                            <strong>CR pipeline</strong>
+                                                            <small>change request flow</small>
+                                                        </button>
+                                                        <button type="button" class="diagram-card" (click)="openDiagram.set('intent')">
+                                                            <img src="assets/diagrams/03.intent-pipeline.png" alt="Intent pipeline">
+                                                            <strong>Intent pipeline</strong>
+                                                            <small>P → G → BRD/PRD</small>
+                                                        </button>
+                                                    </div>
+                                                </section>
+                                            }
+
+                                            @if (selectedKnowledgeTopic() === 'cross-check') {
+                                                <section class="detail-section">
+                                                    <h4>Catalogue groups</h4>
+                                                    <div class="check-groups">
+                                                        @for (group of crossCheckGroups(); track group.label) {
+                                                            <div><strong>{{ group.label }}</strong><span>{{ group.ids }}</span></div>
+                                                        }
+                                                    </div>
+                                                </section>
+                                            }
+
+                                            @if (selectedKnowledgeTopic() === 'quartet') {
+                                                <section class="detail-section">
+                                                    <h4>Work hierarchy</h4>
+                                                    <div class="hierarchy-list">
+                                                        @for (row of taskHierarchy(); track row.model) {
+                                                            <div><strong>{{ row.model }}</strong><span>{{ row.detail }}</span></div>
+                                                        }
+                                                    </div>
+                                                </section>
+                                            }
+
+                                            @if (selectedKnowledgeTopic() === 'knowledge-base') {
+                                                <section class="detail-section">
+                                                    <h4>WBS artifacts</h4>
+                                                    <div class="hierarchy-list">
+                                                        <div><strong>WBS</strong><span>deliverable tree · 100% rule</span></div>
+                                                        <div><strong>WBS dictionary</strong><span>scope · owner · acceptance per node</span></div>
+                                                        <div><strong>Atomic WBS</strong><span>leaf work package; leaf owns AC</span></div>
+                                                    </div>
+                                                </section>
+                                            }
+
+                                            @if (selectedKnowledgeTopic() === 'knowledge-base') {
+                                                <section class="detail-section">
+                                                    <h4>Artifact model</h4>
+                                                    <div class="hierarchy-list">
+                                                        @for (row of artifactModelRows(); track row.label) {
+                                                            <div><strong>{{ row.label }}</strong><span>{{ row.value }}</span></div>
+                                                        }
+                                                    </div>
+                                                </section>
+                                            }
+
+                                            @if (selectedKnowledgeTopic() === 'agent-manifests') {
+                                                <section class="detail-section">
+                                                    <h4>Manifest contract</h4>
+                                                    <div class="hierarchy-list">
+                                                        <div><strong>Identity</strong><span>consumer_id · root · manifest_version</span></div>
+                                                        <div><strong>Documents</strong><span>path · id · kind · status · owner · representation</span></div>
+                                                        <div><strong>Kinds</strong><span>required header keys · required sections · owner</span></div>
+                                                        <div><strong>Relations</strong><span>derived_from · source_of_truth · human_sot · blocks · owns_kinds · references</span></div>
+                                                        <div><strong>Paths</strong><span>relative locators; path is not identity</span></div>
+                                                        <div><strong>Checks</strong><span>links resolve · header shape · derived ⊆ source · no orphan · kind has owner</span></div>
+                                                    </div>
+                                                </section>
+                                                <section class="detail-section">
+                                                    <h4>HUMAN header</h4>
+                                                    <div class="knowledge-chips">
+                                                        @for (key of manifestHumanHeaderKeys(); track key) { <span class="source-pill active">{{ key }}</span> }
+                                                    </div>
+                                                </section>
+                                                <section class="detail-section">
+                                                    <h4>AI header</h4>
+                                                    <div class="knowledge-chips">
+                                                        @for (key of manifestAiHeaderKeys(); track key) { <span class="source-pill active">{{ key }}</span> }
+                                                    </div>
+                                                </section>
+                                                <section class="detail-section">
+                                                    <h4>Study reference</h4>
+                                                    <div class="manifest-note">
+                                                        <strong>Do not copy sample data</strong>
+                                                        <span><code>sdlc/01.agent-manifests</code> shows the shape of domain/capability specs in eso-harness. For testeso this section defines the manifest contract; it does not import that inventory.</span>
+                                                    </div>
+                                                    <p class="detail-note">A manifest lets an AI find the right document and understand its structure without crawling the whole repo.</p>
+                                                </section>
+                                            }
+
+                                            @if (selectedKnowledgeTopic() !== 'pipeline') {
+                                                <dl class="knowledge-detail-list">
+                                                    @for (item of detail.items; track item.label) {
+                                                        <div><dt>{{ item.label }}</dt><dd>{{ item.value }}</dd></div>
+                                                    }
+                                                </dl>
+                                            }
+                                        }
+                                    </aside>
+                                </div>
+
+                                @if (openDiagram(); as diagram) {
+                                    <div class="diagram-lightbox" role="dialog" aria-modal="true" (click)="openDiagram.set(null)">
+                                        <div class="diagram-lightbox-panel" (click)="$event.stopPropagation()">
+                                            <header><strong>{{ diagramTitle() }}</strong><button mat-stroked-button type="button" (click)="openDiagram.set(null)">Close</button></header>
+                                            <div class="diagram-lightbox-body"><img [src]="diagramSrc()" [alt]="diagramTitle()"></div>
+                                        </div>
+                                    </div>
+                                }
                             </section>
                         }
 
@@ -566,8 +1071,12 @@ function defaultPlugins(): PluginEntry[] {
         .page-header h1 { margin: 0 0 var(--space-1); }
         .eyebrow { color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-size: var(--text-xs); margin: 0 0 var(--space-1); }
         .subtitle { color: var(--muted); margin: 0; }
-        .settings-tabs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 2px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); overflow: hidden; }
-        .settings-tab { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3); border: 0; border-right: 1px solid var(--line); background: transparent; color: var(--muted); font: inherit; text-align: left; cursor: pointer; }
+        .settings-tabs { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); overflow: hidden; }
+        .settings-tab { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border: 0; border-right: 1px solid var(--line); background: transparent; color: var(--muted); font: inherit; text-align: left; cursor: pointer; }
+        .settings-tab-copy { display: grid; gap: 2px; min-width: 0; }
+        .settings-tab-copy strong { color: var(--ink); font-size: var(--text-sm); font-weight: 650; line-height: 1.2; }
+        .settings-tab-copy small { color: var(--muted); font-size: 10px; line-height: 1.2; white-space: normal; }
+        .settings-tab.active .settings-tab-copy strong, .settings-tab.active .settings-tab-copy small { color: var(--brand-ink); }
         .settings-tab:last-child { border-right: 0; }
         .settings-tab.active { background: var(--brand); color: var(--brand-ink); }
         .settings-tab:hover:not(.active) { background: color-mix(in srgb, var(--surface) 88%, var(--brand)); color: var(--ink); }
@@ -652,12 +1161,13 @@ export class ConsumerSettingsPage implements OnInit {
     readonly activeTab = signal('profile');
     readonly lastTab = 'observation';
     readonly tabs = [
-        { id: 'profile', n: 1, label: 'Profile' },
-        { id: 'stack', n: 2, label: 'Stack' },
-        { id: 'hosts', n: 3, label: 'Host bindings' },
-        { id: 'plugins', n: 4, label: 'Plugins' },
-        { id: 'jira', n: 5, label: 'Jira' },
-        { id: 'observation', n: 6, label: 'Observation' },
+        { id: 'profile', n: 1, label: 'Profile', hint: 'Identity & metadata' },
+        { id: 'stack', n: 2, label: 'Stack', hint: 'Policy & versions' },
+        { id: 'hosts', n: 3, label: 'Host bindings', hint: 'Developer × host runtime' },
+        { id: 'workers', n: 4, label: 'Multi-Agent (Workers)', hint: 'Agent identities & roles' },
+        { id: 'knowledge', n: 5, label: 'Knowledge', hint: 'Knowledge & Artifact Governance' },
+        { id: 'plugins', n: 6, label: 'Plugins', hint: 'Registry & adapters' },
+        { id: 'observation', n: 7, label: 'Observatory', hint: 'Evidence capture' },
     ];
 
     private readonly consumerId = this.route.snapshot.paramMap.get('id') || 'unknown';
@@ -676,9 +1186,33 @@ export class ConsumerSettingsPage implements OnInit {
             newStackVersion: this.newStackVersion(),
             hostProfiles: this.hostProfiles(),
             developers: this.developers(),
+            workers: this.workers(),
+            workerEdges: this.workerEdges(),
             jiraEnabled: this.jiraEnabled(),
             jiraProject: this.jiraProject(),
             jiraSyncMode: this.jiraSyncMode(),
+            sdlcEnabled: this.sdlcEnabled(),
+            sdlcPipeline: this.sdlcPipeline(),
+            crProcess: this.crProcess(),
+            artifactKinds: this.artifactKinds(),
+            representations: this.representations(),
+            docgraphIndex: this.docgraphIndex(),
+            docgraphScope: this.docgraphScope(),
+            documentStatusRequired: this.documentStatusRequired(),
+            preflightRequired: this.preflightRequired(),
+            goNoGoRequired: this.goNoGoRequired(),
+            crossCheckRequired: this.crossCheckRequired(),
+            pipelineContractRequired: this.pipelineContractRequired(),
+            openRegisterRequired: this.openRegisterRequired(),
+            buildEnforcementRequired: this.buildEnforcementRequired(),
+            quartetProfile: this.quartetProfile(),
+            manifestEnabled: this.manifestEnabled(),
+            manifestPath: this.manifestPath(),
+            manifestHumanHeaderKeys: this.manifestHumanHeaderKeys(),
+            manifestAiHeaderKeys: this.manifestAiHeaderKeys(),
+            manifestFacets: this.manifestFacets(),
+            manifestRelations: this.manifestRelations(),
+            manifestChecks: this.manifestChecks(),
             consent: this.consent(),
             events: this.events(),
         };
@@ -706,6 +1240,10 @@ export class ConsumerSettingsPage implements OnInit {
     readonly mcpWarnings = signal<string[]>([]);
     readonly detectedHosts = signal<Array<{ hostPluginId: string; label: string; markers: string[] }>>([]);
     readonly developers = signal<string[]>([]);
+    readonly workers = signal<WorkerEntry[]>(defaultWorkers());
+    readonly workerEdges = signal<WorkerEdge[]>(defaultWorkerEdges());
+    readonly workerDraft = signal<WorkerDraft>({ name: '', role: 'dev', hostBindingId: '', scope: '' });
+    readonly workerRoles = ['scout', 'plan', 'build', 'fixbug', 'verify', 'audit', 'qc', 'lead', 'ba', 'dev', 'fe', 'be', 'qa', 'pm', 'review'];
     readonly newDeveloperId = signal('');
     readonly bindingDeveloper = signal('');
     readonly addingHostFor = signal<string | null>(null);
@@ -723,11 +1261,62 @@ export class ConsumerSettingsPage implements OnInit {
     readonly jiraEnabled = signal(false);
     readonly jiraProject = signal('');
     readonly jiraSyncMode = signal('off');
+    readonly sdlcEnabled = signal(false);
+    readonly sdlcPipeline = signal('full');
+    readonly crProcess = signal(false);
+    readonly artifactKinds = signal<string[]>(['BRD', 'PRD', 'ADR']);
+    readonly representations = signal<string[]>(['human', 'agent', 'machine']);
+    readonly docgraphIndex = signal(true);
+    readonly docgraphScope = signal('docs/**, sdlc/**, agents/**');
+    readonly documentStatusRequired = signal(true);
+    readonly preflightRequired = signal(true);
+    readonly goNoGoRequired = signal(true);
+    readonly crossCheckRequired = signal(true);
+    readonly pipelineContractRequired = signal(true);
+    readonly openRegisterRequired = signal(true);
+    readonly buildEnforcementRequired = signal(true);
+    readonly quartetProfile = signal<'standard' | 'extended'>('standard');
+    readonly manifestEnabled = signal(true);
+    readonly manifestPath = signal('.harness/manifest.json');
+    readonly manifestHumanHeaderKeys = signal<string[]>(['id', 'type', 'status', 'owner', 'sot_doc_version', 'representation', 'source_of_truth', 'phase']);
+    readonly manifestAiHeaderKeys = signal<string[]>(['id', 'type', 'status', 'owner', 'sot_doc_version', 'representation', 'human_sot', 'refs']);
+    readonly manifestFacets = signal<string[]>(['kind', 'origin', 'custodian', 'liveness', 'kt-state', 'owner', 'representation']);
+    readonly manifestRelations = signal<string[]>(['derived_from', 'source_of_truth', 'human_sot', 'blocks', 'owns_kinds', 'references']);
+    readonly manifestChecks = signal<string[]>(['links resolve', 'header shape', 'derived ⊆ source', 'no orphan document', 'kind has owner']);
+    readonly selectedKnowledgeTopic = signal('pipeline');
+    readonly openDiagram = signal<'main' | 'cr' | 'intent' | 'workers' | null>(null);
     readonly consent = signal(true);
     readonly events = signal<string[]>(['prompt.submitted', 'turn.completed', 'tool.called']);
     readonly sourceOptions = ['eso-native', 'host-native', 'market', 'none'];
     readonly policySources = ['host-native', 'eso-native', 'market'];
     readonly jiraModes = ['off', 'push', 'two-way'];
+    readonly artifactKindOptions = ['BRD', 'PRD', 'FRD', 'SRS', 'ADR', 'Spec', 'Runbook', 'Manifest', 'WBS', 'WBS dictionary', 'Atomic WBS', 'Decision', 'Open register'];
+    readonly representationOptions = ['human', 'agent', 'machine'];
+    readonly manifestFacetOptions = ['kind', 'origin', 'custodian', 'liveness', 'kt-state', 'owner', 'representation'];
+    readonly manifestRelationOptions = ['derived_from', 'source_of_truth', 'human_sot', 'blocks', 'owns_kinds', 'references'];
+    readonly manifestHumanHeaderOptions = ['id', 'type', 'status', 'owner', 'sot_doc_version', 'representation', 'source_of_truth', 'phase'];
+    readonly manifestAiHeaderOptions = ['id', 'type', 'status', 'owner', 'sot_doc_version', 'representation', 'human_sot', 'refs'];
+    readonly manifestCheckOptions = ['links resolve', 'header shape', 'derived ⊆ source', 'no orphan document', 'kind has owner'];
+    readonly dorConditions = [
+        '4 relations declared: subtasks · relates · blocks · blockedBy',
+        'Packet §9 = READY',
+        'Work package has all 7 fields',
+        'AC cited from the source of truth',
+        'One verify line: how QC proves the AC',
+        'Named dependencies',
+    ];
+    readonly dodConditions = [
+        'SCN run and evidence recorded',
+        'DoD evidence complete',
+        'Human signs Done',
+        'Agent is forbidden to sign Done',
+    ];
+    readonly pipelineOptions = [
+        { id: 'full', label: 'Full pipeline' },
+        { id: 'ba-dev', label: 'BA → DEV' },
+        { id: 'dev-qc', label: 'DEV → QC' },
+        { id: 'qc', label: 'QC only' },
+    ];
     readonly eventKinds = [
         { id: 'prompt.submitted', label: 'Prompt request', description: 'Request sent by the user to the host.' },
         { id: 'turn.completed', label: 'Turn result', description: 'Turn result and status.' },
@@ -738,7 +1327,8 @@ export class ConsumerSettingsPage implements OnInit {
     ngOnInit(): void {
         const id = this.route.snapshot.paramMap.get('id')!;
         const requestedTab = this.route.snapshot.queryParamMap.get('tab');
-        if (requestedTab && this.tabs.some((tab) => tab.id === requestedTab)) this.activeTab.set(requestedTab);
+        const tab = requestedTab === 'jira' ? 'knowledge' : requestedTab;
+        if (tab && this.tabs.some((item) => item.id === tab)) this.activeTab.set(tab);
         Promise.all([
             this.service.get(id),
             this.service.getMcp(id).catch(() => ({ consumerId: id, root: '', sources: [], providers: [], warnings: [] })),
@@ -913,6 +1503,59 @@ export class ConsumerSettingsPage implements OnInit {
         return this.plugins().find((plugin) => plugin.id === providerId)?.mcpSource || 'host MCP config';
     }
     hostLabel(pluginId: string): string { return this.plugins().find((plugin) => plugin.id === pluginId)?.label || pluginId; }
+
+    setWorkerDraft<K extends keyof WorkerDraft>(key: K, value: WorkerDraft[K]): void {
+        this.workerDraft.update((draft) => ({ ...draft, [key]: value }));
+    }
+
+    bindingLabel(binding: HostProfile): string {
+        return `${binding.userId} · ${this.hostLabel(binding.hostPluginId)} · v${binding.stackVersion}`;
+    }
+
+    workerBindingLabel(worker: WorkerEntry): string {
+        const binding = this.hostProfiles().find((item) => item.id === worker.hostBindingId);
+        return binding ? this.bindingLabel(binding) : 'No binding yet';
+    }
+
+    workerRoleCount(): number {
+        return new Set(this.workers().map((worker) => worker.role)).size;
+    }
+
+    workerHostCoverage(): number {
+        return new Set(this.workers().map((worker) => worker.hostBindingId).filter(Boolean)).size;
+    }
+
+    addWorker(): void {
+        const draft = this.workerDraft();
+        const name = draft.name.trim();
+        if (!name) return;
+        const worker: WorkerEntry = {
+            id: `worker-${Date.now().toString(36)}`,
+            name,
+            role: draft.role,
+            layer: ['verify', 'audit', 'qc'].includes(draft.role) ? 'gate' : 'peer',
+            hostBindingId: draft.hostBindingId,
+            scope: draft.scope.trim(),
+            status: 'declared',
+        };
+        this.workers.update((workers) => [...workers, worker]);
+        this.workerDraft.set({ name: '', role: 'dev', hostBindingId: '', scope: '' });
+    }
+
+    removeWorker(id: string): void {
+        this.workers.update((workers) => workers.filter((worker) => worker.id !== id));
+        this.workerEdges.update((edges) => edges.filter((edge) => edge.from !== id && edge.to !== id));
+    }
+
+    resetWorkers(): void {
+        this.workers.set(defaultWorkers());
+        this.workerEdges.set(defaultWorkerEdges());
+        this.workerDraft.set({ name: '', role: 'dev', hostBindingId: '', scope: '' });
+    }
+
+    workerName(id: string): string {
+        return this.workers().find((worker) => worker.id === id)?.name || id;
+    }
 
     updateLayer(id: LayerId, field: 'enabled' | 'required' | 'allowedSources', value: unknown): void {
         if (!this.isStackEditable()) return;
@@ -1159,6 +1802,380 @@ export class ConsumerSettingsPage implements OnInit {
     }
 
     back(): void { const id = this.route.snapshot.paramMap.get('id'); this.router.navigate(['/consumers', id]); }
+    pipelineGroups(): Array<{ id: string; title: string; stages: Array<{ id: string; label: string; gate: string }> }> {
+        return [
+            { id: 'A', title: 'Requirements', stages: [
+                { id: 'S1', label: 'Pain / vision', gate: 'G1' },
+                { id: 'S2', label: 'BRD', gate: 'G2' },
+                { id: 'S3', label: 'PRD', gate: 'G3' },
+                { id: 'S4', label: 'FRD', gate: 'G4' },
+                { id: 'S5', label: 'SRS', gate: 'G5' },
+            ] },
+            { id: 'B', title: 'Criteria', stages: [
+                { id: 'S6', label: 'US / AC', gate: 'G6' },
+                { id: 'S7', label: 'Planes B/C/D + UI', gate: 'G7' },
+            ] },
+            { id: 'C', title: 'Breakdown', stages: [
+                { id: 'S8', label: 'WBS', gate: 'G8' },
+                { id: 'S9', label: 'BIP / FIP', gate: 'G9' },
+                { id: 'S10', label: 'SCN', gate: 'G10' },
+            ] },
+            { id: 'D', title: 'Delivery', stages: [
+                { id: 'S11', label: 'Code', gate: 'G11' },
+                { id: 'S12', label: 'Run SCN', gate: 'G12' },
+                { id: 'S13', label: 'DoD', gate: 'G13' },
+                { id: 'S14', label: 'Done', gate: '—' },
+            ] },
+        ];
+    }
+
+    crossCheckGroups(): Array<{ label: string; ids: string }> {
+        return [
+            { label: 'Links & provenance', ids: 'X1 · X28 · X40' },
+            { label: 'Shape & identity', ids: 'X2 · X6 · X7 · X21 · X25 · X26 · X32' },
+            { label: 'Traceability', ids: 'X3 · X3b · X4 · X11–X20 · X30 · X31 · X41' },
+            { label: 'Packets & delivery', ids: 'X8 · X8a · X22 · X33–X39 · X42' },
+            { label: 'Records & metrics', ids: 'X23 · X24 · X27 · X35 · X37' },
+            { label: 'Engineering', ids: 'X5 · X9 · X9b · X10' },
+            { label: 'UI', ids: 'X14 · X15' },
+        ];
+    }
+
+    taskHierarchy(): Array<{ model: string; detail: string }> {
+        return [
+            { model: 'Epic / Feature → Story → Subtask', detail: 'subtask types: fe · be · qa · qc · pm' },
+            { model: 'Epic / Feature → Task → Subtask', detail: 'task decomposition for implementation work' },
+            { model: 'Epic → Bug', detail: 'defect track; no quartet required' },
+        ];
+    }
+
+    toggleManifestHumanHeader(key: string): void {
+        this.manifestHumanHeaderKeys.update((items) => items.includes(key) ? items.filter((item) => item !== key) : [...items, key]);
+    }
+
+    toggleManifestAiHeader(key: string): void {
+        this.manifestAiHeaderKeys.update((items) => items.includes(key) ? items.filter((item) => item !== key) : [...items, key]);
+    }
+
+    toggleManifestFacet(facet: string): void {
+        this.manifestFacets.update((items) => items.includes(facet) ? items.filter((item) => item !== facet) : [...items, facet]);
+    }
+
+    toggleManifestRelation(relation: string): void {
+        this.manifestRelations.update((items) => items.includes(relation) ? items.filter((item) => item !== relation) : [...items, relation]);
+    }
+
+    toggleManifestCheck(check: string): void {
+        this.manifestChecks.update((items) => items.includes(check) ? items.filter((item) => item !== check) : [...items, check]);
+    }
+
+    artifactModelRows(): Array<{ label: string; value: string }> {
+        return [
+            { label: 'Facets', value: 'kind · origin · custodian · liveness · kt-state · owner' },
+            { label: 'Relations', value: 'derived_from · owns-kinds · blocks' },
+            { label: 'Authority', value: 'derived if derived_from; source if human or approved; else derived' },
+            { label: 'Tiers', value: 'standard · template · instance · ledger · render' },
+            { label: 'Owner rule', value: 'if missing/wrong, who is asked — not who writes' },
+        ];
+    }
+
+    knowledgeTrace(): Array<{ label: string; value: string }> {
+        switch (this.selectedKnowledgeTopic()) {
+            case 'pipeline':
+            case 'preflight':
+            case 'go-no-go':
+            case 'pipeline-contract':
+            case 'build-enforcement':
+                return [
+                    { label: 'Pain', value: 'P4 — decision before execution' },
+                    { label: 'Goal', value: 'G-K — verdict before write' },
+                    { label: 'Objective', value: 'No objective registered — gap to close' },
+                    { label: 'BRD', value: 'BR-10 · BR-11 · BR-12' },
+                    { label: 'PRD', value: 'F-09 · F-10 · F-11' },
+                ];
+            case 'document-status':
+            case 'cross-check':
+                return [
+                    { label: 'Pain', value: 'P7 — knowledge sufficiency' },
+                    { label: 'Goal', value: 'G-G artifacts · G-H sufficiency · G-Q HUMAN/AI' },
+                    { label: 'Objective', value: 'No dedicated objective yet — gap to close' },
+                    { label: 'BRD', value: 'BR-14 · BR-15 · BR-16 · BR-17' },
+                    { label: 'PRD', value: 'F-14 · F-15 · F-27' },
+                ];
+            case 'quartet':
+                return [
+                    { label: 'Pain', value: 'No direct product pain registered' },
+                    { label: 'Goal', value: 'No direct goal; task taxonomy is provider-facing' },
+                    { label: 'Objective', value: 'Not registered' },
+                    { label: 'BRD', value: 'BR-05 · BR-15' },
+                    { label: 'PRD', value: 'F-33 provider sync' },
+                ];
+            case 'agent-manifests':
+                return [
+                    { label: 'Pain', value: 'P7 — artifact sufficiency · P8 HUMAN/AI docs' },
+                    { label: 'Goal', value: 'G-G visible artifacts · G-H content · G-Q HUMAN/AI' },
+                    { label: 'Objective', value: 'No dedicated objective yet — gap to close' },
+                    { label: 'BRD', value: 'BR-14 · BR-16 · BR-17' },
+                    { label: 'PRD', value: 'F-14 · F-15 · F-27' },
+                ];
+            case 'knowledge-base':
+                return [
+                    { label: 'Pain', value: 'P7 — artifact sufficiency' },
+                    { label: 'Goal', value: 'G-G visible · G-H content · G-I transfer · G-N freshness' },
+                    { label: 'Objective', value: 'No dedicated objective yet — gap to close' },
+                    { label: 'BRD', value: 'BR-14 · BR-16 · BR-17 · BR-18' },
+                    { label: 'PRD', value: 'F-14 · F-15 · F-17 · F-27' },
+                ];
+            case 'docgraph':
+                return [
+                    { label: 'Pain', value: 'P2 architecture · P7 knowledge' },
+                    { label: 'Goal', value: 'G-B1/G-B2 · G-H' },
+                    { label: 'Objective', value: 'No dedicated objective yet — gap to close' },
+                    { label: 'BRD', value: 'BR-17 · BR-18' },
+                    { label: 'PRD', value: 'F-20 · F-21' },
+                ];
+            case 'providers':
+                return [
+                    { label: 'Pain', value: 'P1 host portability · P7 knowledge' },
+                    { label: 'Goal', value: 'G-C additive · G-G ownership' },
+                    { label: 'Objective', value: 'O-8 stack/host · provider binding pending' },
+                    { label: 'BRD', value: 'BR-18 · BR-31' },
+                    { label: 'PRD', value: 'F-22 · F-33' },
+                ];
+            default:
+                return [];
+        }
+    }
+
+    diagramSrc(): string {
+        if (this.openDiagram() === 'cr') return 'assets/diagrams/02.cr-pipeline.png';
+        if (this.openDiagram() === 'intent') return 'assets/diagrams/03.intent-pipeline.png';
+        if (this.openDiagram() === 'workers') return 'assets/diagrams/that-tinh-tran-diagram.svg';
+        return 'assets/diagrams/01.main-pipeline.png';
+    }
+
+    diagramTitle(): string {
+        if (this.openDiagram() === 'cr') return 'CR pipeline';
+        if (this.openDiagram() === 'intent') return 'Intent pipeline';
+        if (this.openDiagram() === 'workers') return 'Seven-Star Formation';
+        return 'Main SDLC pipeline';
+    }
+
+    selectedPipelineLabel(): string {
+        return this.pipelineOptions.find((pipeline) => pipeline.id === this.sdlcPipeline())?.label || 'Custom pipeline';
+    }
+
+    pipelineHint(): string {
+        switch (this.sdlcPipeline()) {
+            case 'ba-dev': return 'Requirements → implementation';
+            case 'dev-qc': return 'Implementation → verification';
+            case 'qc': return 'Verification only';
+            default: return '14 stages · 13 gates';
+        }
+    }
+
+    selectKnowledgeTopic(topic: string): void {
+        this.selectedKnowledgeTopic.set(topic);
+    }
+
+    knowledgeDetail(): { eyebrow: string; title: string; description: string; items: Array<{ label: string; value: string }> } {
+        switch (this.selectedKnowledgeTopic()) {
+            case 'document-status':
+                return {
+                    eyebrow: 'Governance · document status',
+                    title: 'Document status register',
+                    description: 'The register is a precondition, not a report. Without it, "documented" is an opinion.',
+                    items: [
+                        { label: 'Levels', value: 'exists · conforms · connected' },
+                        { label: 'Lifecycle', value: 'raw → proposed → approved → retired' },
+                        { label: 'Marks', value: 'OK · P (gap named) · OUT (reason) · — (nothing)' },
+                        { label: 'Why', value: 'Every downstream gate reads the register.' },
+                    ],
+                };
+            case 'open-register':
+                return {
+                    eyebrow: 'Governance · open register',
+                    title: 'OPEN register',
+                    description: 'The single place for questions that are not decided. A missing register means unknowns become opinions.',
+                    items: [
+                        { label: 'Contains', value: 'open id · question · owner · what unblocks · decision link' },
+                        { label: 'Rule', value: 'No OPEN item without an owner and a decision path.' },
+                        { label: 'Close', value: 'A decision closes it; the decision must cite the open id.' },
+                        { label: 'Status', value: 'OPEN · DECIDED · DROPPED (reason)' },
+                    ],
+                };
+            case 'build-enforcement':
+                return {
+                    eyebrow: 'Governance · build enforcement',
+                    title: 'Build enforcement',
+                    description: 'A standard without enforcement is advice. E1–E10 make the gates bite before code.',
+                    items: [
+                        { label: 'E-series', value: 'E1…E10: packet, test-first, gate machine, verify, audit, human Done' },
+                        { label: 'Ready', value: 'Only READY packets build; READY-SPLIT/DRAFT/OPEN do not.' },
+                        { label: 'Fail', value: 'Build stops with a named OPEN id and owner.' },
+                        { label: 'Evidence', value: 'Independent verify + audit; agent never signs Done.' },
+                    ],
+                };
+            case 'cross-check':
+                return {
+                    eyebrow: 'Governance · cross-check',
+                    title: 'Cross-check catalogue',
+                    description: 'A status claim is invalid unless the catalogue passes. The current source title says 29; the table contains 47 checks — that discrepancy must be reconciled.',
+                    items: [
+                        { label: 'Catalogue', value: 'X1…X42 · 47 checks' },
+                        { label: 'Links', value: 'X1 · X28 · X40' },
+                        { label: 'Trace & shape', value: 'X3 · X4 · X7 · X8a · X11–X20' },
+                        { label: 'Delivery', value: 'X8 · X22 · X33–X39 · X42' },
+                        { label: 'UI', value: 'X14 prototype · X15 reachable flow' },
+                        { label: 'Rule', value: 'Missing check = no status claim.' },
+                    ],
+                };
+            case 'preflight':
+                return {
+                    eyebrow: 'Governance · preflight',
+                    title: 'Preflight before a slice',
+                    description: 'Checks one slice before execution. It is narrower than Go/No-Go, which covers the whole increment.',
+                    items: [
+                        { label: 'Scope', value: 'one slice / one work package' },
+                        { label: 'Reads', value: 'document status · BIP/FIP · SCN · marks' },
+                        { label: 'Pass', value: 'all required slots OK or P with an open id' },
+                        { label: 'Fail', value: 'no execution; gap must be named' },
+                    ],
+                };
+            case 'go-no-go':
+                return {
+                    eyebrow: 'Governance · go / no-go',
+                    title: 'Go / No-Go for an increment',
+                    description: 'Dashboard over the whole increment. It answers what blocks the epic — not what blocks one slice.',
+                    items: [
+                        { label: 'Scope', value: 'increment / epic' },
+                        { label: 'Requires', value: 'register exists + X checks run with a date' },
+                        { label: 'Marks', value: 'OK · P with open_id · OUT with reason · — blocks' },
+                        { label: 'Docs Ready', value: 'REQ ∩ US/AC ∩ SCN ∩ IF ∩ DATA' },
+                        { label: 'Packets', value: 'BIP for be · FIP for fe · mixed needs both' },
+                    ],
+                };
+            case 'pipeline-contract':
+                return {
+                    eyebrow: 'Governance · pipeline contract',
+                    title: 'Pipeline contract',
+                    description: 'The contract makes each stage consume the previous stage by reference. Gates are document conditions, not task-tool statuses.',
+                    items: [
+                        { label: 'Stages', value: 'S1 Requirements → S14 Done' },
+                        { label: 'Gates', value: 'G1…G13' },
+                        { label: 'Authority', value: 'REQ → US/AC → WBS → BIP/FIP → SCN → code' },
+                        { label: 'Change', value: 'CR reopens the affected earlier stage; it never reverses authority' },
+                        { label: 'Done', value: 'human signs; agent never signs Done' },
+                    ],
+                };
+            case 'quartet':
+                return {
+                    eyebrow: 'Task management · quartet',
+                    title: 'Task quartet',
+                    description: 'Decomposition of a task into test-first work. It is a work structure, not a provider feature.',
+                    items: [
+                        { label: 'Standard', value: 'tdd-unit · tdd-impl · tdd-coverage · tdd-qc' },
+                        { label: 'Extended', value: 'add tdd-load · tdd-stress for runtime slices' },
+                        { label: 'BA', value: 'OUT when acceptance criteria are already clear' },
+                        { label: 'Provider', value: 'Jira · repo · another task tool — optional' },
+                        { label: 'Rule', value: 'Quartet does not depend on task provider.' },
+                    ],
+                };
+            case 'agent-manifests':
+                return {
+                    eyebrow: 'Knowledge · agent manifest',
+                    title: 'Agent manifest standard',
+                    description: 'A machine-readable map of this consumer\'s documents: identity, header shape, facets, relations, paths, and checks. The agent reads the manifest instead of crawling the tree.',
+                    items: [
+                        { label: 'Identity', value: 'consumer · root · manifest_version' },
+                        { label: 'Documents', value: 'path · id · kind · status · owner · representation' },
+                        { label: 'Kinds', value: 'HUMAN 8 keys · AI 8 keys · required sections · owner' },
+                        { label: 'Relations', value: 'derived_from · source_of_truth · human_sot · blocks · owns_kinds · references' },
+                        { label: 'Paths', value: 'relative locators, never identity' },
+                        { label: 'Checks', value: 'links resolve · header shape · derived ⊆ source · no orphan · owner exists' },
+                        { label: 'Study reference', value: 'sdlc/01.agent-manifests is an eso-harness sample, not testeso data' },
+                    ],
+                };
+            case 'knowledge-base':
+                return {
+                    eyebrow: 'Knowledge · base',
+                    title: 'Knowledge base',
+                    description: 'Artifacts held for the consumer, classified by kind and representation.',
+                    items: [
+                        { label: 'Facets', value: 'kind · origin · custodian · liveness · kt-state · owner' },
+                        { label: 'Add', value: 'representation: human / agent / machine' },
+                        { label: 'WBS', value: 'WBS tree · WBS dictionary · atomic work package' },
+                        { label: 'Rule', value: '100% rule; leaf owns AC; no orphan work' },
+                        { label: 'No copy', value: 'derived ⊆ source' },
+                    ],
+                };
+            case 'docgraph':
+                return {
+                    eyebrow: 'Knowledge · document graph',
+                    title: 'Document graph',
+                    description: 'A derived index of relationships. It never owns document content.',
+                    items: [
+                        { label: 'Indexes', value: 'docs · sdlc · agents · external refs' },
+                        { label: 'Owns', value: 'edges + provenance, not content' },
+                        { label: 'Scope', value: 'docs/**, sdlc/**, agents/**' },
+                        { label: 'Excludes', value: 'generated files and provider copies by default' },
+                    ],
+                };
+            case 'providers':
+                return {
+                    eyebrow: 'Knowledge · providers',
+                    title: 'Optional providers',
+                    description: 'Jira, Notion, Confluence, Figma are sources of truth only for the kinds they declare.',
+                    items: [
+                        { label: 'Jira', value: 'task · story · bug' },
+                        { label: 'Notion / Confluence', value: 'knowledge · documents' },
+                        { label: 'Figma', value: 'design · artifacts' },
+                        { label: 'Rule', value: 'one SoT per kind; sync one-way; no two-way' },
+                    ],
+                };
+            default:
+                return {
+                    eyebrow: 'Project mode · pipeline',
+                    title: 'SDLC pipeline',
+                    description: 'Fourteen stages and thirteen gates. Apply the full pipeline or a subset; CR reopens the affected stage.',
+                    items: [
+                        { label: 'Intent', value: 'P1–P8 → mission/vision → goals → BRD/PRD → FRD/SRS → US/AC' },
+                        { label: 'Stages', value: 'S1…S14 · 14 stages' },
+                        { label: 'Phase folders', value: '12.phases/phase-1…n · global vs phase' },
+                        { label: 'A · requirements', value: 'S1 pain/vision · S2 BRD · S3 PRD · S4 FRD · S5 SRS' },
+                        { label: 'B · criteria', value: 'S6 US/AC · S7 planes B/C/D + UI' },
+                        { label: 'C · breakdown', value: 'S8 WBS · S9 BIP/FIP · S10 SCN' },
+                        { label: 'D · delivery', value: 'S11 code · S12 run SCN · S13 DoD · S14 Done' },
+                        { label: 'Gates', value: 'G1…G13 · document conditions, not task status' },
+                        { label: 'Preconditions', value: 'P0.1 SDLC root · P0.3 document status · P0.6 gate instruments' },
+                        { label: 'CR', value: 'reopens S6 / S7 / S8 / S11; authority never reverses' },
+                        { label: 'Done', value: 'human signs; agent is forbidden' },
+                    ],
+                };
+        }
+    }
+
+    quartetTypes(): Array<{ id: string; label: string; note: string; included: boolean }> {
+        const extended = this.quartetProfile() === 'extended';
+        return [
+            { id: 'tdd-unit', label: 'unit', note: 'test first', included: true },
+            { id: 'tdd-impl', label: 'impl', note: 'DEV', included: true },
+            { id: 'tdd-coverage', label: 'coverage', note: 'gate', included: true },
+            { id: 'tdd-qc', label: 'qc', note: 'SCN + evidence', included: true },
+            { id: 'tdd-load', label: 'load', note: 'extended', included: extended },
+            { id: 'tdd-stress', label: 'stress', note: 'extended', included: extended },
+            { id: 'tdd-ba', label: 'ba', note: 'OUT when AC clear', included: false },
+        ];
+    }
+
+    toggleArtifactKind(kind: string): void {
+        this.artifactKinds.update((kinds) => kinds.includes(kind) ? kinds.filter((item) => item !== kind) : [...kinds, kind]);
+    }
+
+    toggleRepresentation(representation: string): void {
+        this.representations.update((items) => items.includes(representation) ? items.filter((item) => item !== representation) : [...items, representation]);
+    }
+
     toggleEvent(id: string): void { this.events.set(this.events().includes(id) ? this.events().filter((event) => event !== id) : [...this.events(), id]); }
 
     save(navigateAfter = false): void {
@@ -1171,8 +2188,34 @@ export class ConsumerSettingsPage implements OnInit {
             observation: { consent: this.consent(), events: this.events() },
             settings: {
                 general: { owner: this.owner().trim(), locale: this.locale().trim(), tags: this.tags().split(',').map((tag) => tag.trim()).filter(Boolean), description: this.description().trim() },
-                harness: { stack: { version: this.activeStackVersion(), status: this.stackStatus(), layers: this.stackLayers(), versions: this.stackVersions() }, hostProfiles: this.hostProfiles(), developers: this.developers(), plugins: this.plugins() },
+                harness: { stack: { version: this.activeStackVersion(), status: this.stackStatus(), layers: this.stackLayers(), versions: this.stackVersions() }, hostProfiles: this.hostProfiles(), developers: this.developers(), workers: this.workers(), workerEdges: this.workerEdges(), plugins: this.plugins() },
                 jira: { enabled: this.jiraEnabled(), projectKey: this.jiraProject().trim(), syncMode: this.jiraSyncMode() },
+                knowledge: {
+                    sdlc: { enabled: this.sdlcEnabled(), pipeline: this.sdlcPipeline(), crProcess: this.crProcess() },
+                    artifactKinds: this.artifactKinds(),
+                    representations: this.representations(),
+                    docgraph: { enabled: this.docgraphIndex(), scope: this.docgraphScope().trim() },
+                    governance: {
+                        documentStatus: this.documentStatusRequired(),
+                        preflight: this.preflightRequired(),
+                        goNoGo: this.goNoGoRequired(),
+                        crossCheck: this.crossCheckRequired(),
+                        openRegister: this.openRegisterRequired(),
+                        buildEnforcement: this.buildEnforcementRequired(),
+                        pipelineContract: this.pipelineContractRequired(),
+                    },
+                    taskQuartet: this.quartetProfile(),
+                    manifest: {
+                        enabled: this.manifestEnabled(),
+                        path: this.manifestPath().trim(),
+                        humanHeaderKeys: this.manifestHumanHeaderKeys(),
+                        aiHeaderKeys: this.manifestAiHeaderKeys(),
+                        facets: this.manifestFacets(),
+                        relations: this.manifestRelations(),
+                        checks: this.manifestChecks(),
+                    },
+                    providers: { jira: { enabled: this.jiraEnabled(), projectKey: this.jiraProject().trim(), syncMode: this.jiraSyncMode() } },
+                },
             },
         };
         this.service.updateSettings(profile.id, this.name().trim() || profile.name, nextProfile, profile.version || 1)
@@ -1213,6 +2256,29 @@ export class ConsumerSettingsPage implements OnInit {
         this.jiraEnabled.set(settings.jira?.enabled ?? false);
         this.jiraProject.set(settings.jira?.projectKey || '');
         this.jiraSyncMode.set(settings.jira?.syncMode || 'off');
+        const knowledge = settings.knowledge || {};
+        this.sdlcEnabled.set(knowledge.sdlc?.enabled ?? false);
+        this.sdlcPipeline.set(knowledge.sdlc?.pipeline || 'full');
+        this.crProcess.set(knowledge.sdlc?.crProcess ?? false);
+        this.artifactKinds.set(Array.isArray(knowledge.artifactKinds) ? knowledge.artifactKinds : ['BRD', 'PRD', 'ADR']);
+        this.representations.set(Array.isArray(knowledge.representations) ? knowledge.representations : ['human', 'agent', 'machine']);
+        this.docgraphIndex.set(knowledge.docgraph?.enabled ?? true);
+        this.docgraphScope.set(knowledge.docgraph?.scope || 'docs/**, sdlc/**, agents/**');
+        this.documentStatusRequired.set(knowledge.governance?.documentStatus ?? true);
+        this.preflightRequired.set(knowledge.governance?.preflight ?? true);
+        this.goNoGoRequired.set(knowledge.governance?.goNoGo ?? true);
+        this.crossCheckRequired.set(knowledge.governance?.crossCheck ?? true);
+        this.pipelineContractRequired.set(knowledge.governance?.pipelineContract ?? true);
+        this.openRegisterRequired.set(knowledge.governance?.openRegister ?? true);
+        this.buildEnforcementRequired.set(knowledge.governance?.buildEnforcement ?? true);
+        this.quartetProfile.set(knowledge.taskQuartet === 'extended' ? 'extended' : 'standard');
+        this.manifestEnabled.set(knowledge.manifest?.enabled ?? true);
+        this.manifestPath.set(knowledge.manifest?.path || '.harness/manifest.json');
+        this.manifestHumanHeaderKeys.set(Array.isArray(knowledge.manifest?.humanHeaderKeys) ? knowledge.manifest.humanHeaderKeys : this.manifestHumanHeaderOptions);
+        this.manifestAiHeaderKeys.set(Array.isArray(knowledge.manifest?.aiHeaderKeys) ? knowledge.manifest.aiHeaderKeys : this.manifestAiHeaderOptions);
+        this.manifestFacets.set(Array.isArray(knowledge.manifest?.facets) ? knowledge.manifest.facets : this.manifestFacetOptions);
+        this.manifestRelations.set(Array.isArray(knowledge.manifest?.relations) ? knowledge.manifest.relations : this.manifestRelationOptions);
+        this.manifestChecks.set(Array.isArray(knowledge.manifest?.checks) ? knowledge.manifest.checks : this.manifestCheckOptions);
         this.consent.set(prof.observation?.consent ?? true);
         this.events.set(prof.observation?.events || ['prompt.submitted', 'turn.completed', 'tool.called']);
         const remoteVersions = this.remoteStackVersions();
@@ -1304,6 +2370,30 @@ export class ConsumerSettingsPage implements OnInit {
             if (typeof draft.jiraEnabled === 'boolean') this.jiraEnabled.set(draft.jiraEnabled);
             if (typeof draft.jiraProject === 'string') this.jiraProject.set(draft.jiraProject);
             if (typeof draft.jiraSyncMode === 'string') this.jiraSyncMode.set(draft.jiraSyncMode);
+            if (typeof draft.sdlcEnabled === 'boolean') this.sdlcEnabled.set(draft.sdlcEnabled);
+            if (typeof draft.sdlcPipeline === 'string') this.sdlcPipeline.set(draft.sdlcPipeline);
+            if (typeof draft.crProcess === 'boolean') this.crProcess.set(draft.crProcess);
+            if (Array.isArray(draft.artifactKinds)) this.artifactKinds.set(draft.artifactKinds);
+            if (Array.isArray(draft.representations)) this.representations.set(draft.representations);
+            if (typeof draft.docgraphIndex === 'boolean') this.docgraphIndex.set(draft.docgraphIndex);
+            if (typeof draft.docgraphScope === 'string') this.docgraphScope.set(draft.docgraphScope);
+            if (typeof draft.documentStatusRequired === 'boolean') this.documentStatusRequired.set(draft.documentStatusRequired);
+            if (typeof draft.preflightRequired === 'boolean') this.preflightRequired.set(draft.preflightRequired);
+            if (typeof draft.goNoGoRequired === 'boolean') this.goNoGoRequired.set(draft.goNoGoRequired);
+            if (typeof draft.crossCheckRequired === 'boolean') this.crossCheckRequired.set(draft.crossCheckRequired);
+            if (typeof draft.pipelineContractRequired === 'boolean') this.pipelineContractRequired.set(draft.pipelineContractRequired);
+            if (typeof draft.openRegisterRequired === 'boolean') this.openRegisterRequired.set(draft.openRegisterRequired);
+            if (typeof draft.buildEnforcementRequired === 'boolean') this.buildEnforcementRequired.set(draft.buildEnforcementRequired);
+            if (draft.quartetProfile === 'extended' || draft.quartetProfile === 'standard') this.quartetProfile.set(draft.quartetProfile);
+            if (typeof draft.manifestEnabled === 'boolean') this.manifestEnabled.set(draft.manifestEnabled);
+            if (typeof draft.manifestPath === 'string') this.manifestPath.set(draft.manifestPath);
+            if (Array.isArray(draft.manifestHumanHeaderKeys)) this.manifestHumanHeaderKeys.set(draft.manifestHumanHeaderKeys);
+            if (Array.isArray(draft.manifestAiHeaderKeys)) this.manifestAiHeaderKeys.set(draft.manifestAiHeaderKeys);
+            if (Array.isArray(draft.manifestFacets)) this.manifestFacets.set(draft.manifestFacets);
+            if (Array.isArray(draft.manifestRelations)) this.manifestRelations.set(draft.manifestRelations);
+            if (Array.isArray(draft.manifestChecks)) this.manifestChecks.set(draft.manifestChecks);
+            if (Array.isArray(draft.workers)) this.workers.set(draft.workers);
+            if (Array.isArray(draft.workerEdges)) this.workerEdges.set(draft.workerEdges);
             if (typeof draft.consent === 'boolean') this.consent.set(draft.consent);
             if (Array.isArray(draft.events)) this.events.set(draft.events);
         } catch {

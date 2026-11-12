@@ -17,7 +17,13 @@
               "@angular/material/prebuilt-themes/azure-blue.css",
               "src/styles.css"
             ],
-            "assets": []
+            "assets": [
+              {
+                "glob": "**/*",
+                "input": "public",
+                "output": "assets"
+              }
+            ]
           },
           "configurations": {
             "production": {

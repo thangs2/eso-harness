@@ -1,0 +1,157 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1057.856708333333 1601.5" width="1057.856708333333" height="1601.5" style="--bg:#FFFFFF;--fg:#3B3B3B;--line:#3B3B3B;--accent:#005FB8;--muted:#3B3B3BCC;--surface:#F8F8F8;--border:#3B3B3B;background:var(--bg)">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap');
+  text { font-family: 'Inter', system-ui, sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 85%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="arrowhead" markerWidth="8" markerHeight="5" refX="7" refY="2.5" orient="auto">
+    <polygon points="0 0, 8 2.5, 0 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+  <marker id="arrowhead-start" markerWidth="8" markerHeight="5" refX="1" refY="2.5" orient="auto-start-reverse">
+    <polygon points="8 0, 0 2.5, 8 5" fill="var(--_arrow)" stroke="var(--_arrow)" stroke-width="0.75" stroke-linejoin="round" />
+  </marker>
+</defs>
+<g class="subgraph" data-id="PLAN_PHASE" data-label="PHA 1: KHẢO SÁT &amp; CHIA CẮT CÔNG VIỆC (Khi Task phức tạp / Đa tầng)">
+  <rect x="382.5182083333332" y="58" width="406.9559999999999" height="283.20000000000005" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="382.5182083333332" y="58" width="406.9559999999999" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="394.5182083333332" y="72" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">PHA 1: KHẢO SÁT &amp; CHIA CẮT CÔNG VIỆC (Khi Task phức tạp / Đa tầng)</text>
+</g>
+<g class="subgraph" data-id="BUILD_PHASE" data-label="PHA 2: THỰC THI SONG SONG / ĐỘC LẬP (invoke_subagent: build-runtime)">
+  <rect x="40" y="690" width="948.9219999999998" height="96.9" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="40" y="690" width="948.9219999999998" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="52" y="704" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">PHA 2: THỰC THI SONG SONG / ĐỘC LẬP (invoke_subagent: build-runtime)</text>
+</g>
+<g class="subgraph" data-id="EVAL_PHASE" data-label="PHA 3: KIỂM CHỨNG TẤT ĐỊNH &amp; ĐÁNH GIÁ ĐỘC LẬP (2 Tầng Gác Cổng)">
+  <rect x="159.12483333333319" y="846.9" width="609.7102499999999" height="538.5" rx="0" ry="0" fill="var(--_group-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <rect x="159.12483333333319" y="846.9" width="609.7102499999999" height="28" rx="0" ry="0" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+  <text x="171.12483333333319" y="860.9" font-size="12" font-weight="600" fill="var(--_text-sec)" dy="4.199999999999999">PHA 3: KIỂM CHỨNG TẤT ĐỊNH &amp; ĐÁNH GIÁ ĐỘC LẬP (2 Tầng Gác Cổng)</text>
+</g>
+<polyline class="edge" data-from="SUP" data-to="LEAD" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="847.5702083333331,449.00000000000006 847.5702083333331,485.00000000000006 598.563375,485.00000000000006 598.563375,497.00000000000006" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="LEAD" data-to="PLAN" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="1. Yêu cầu chia cắt việc" points="443.83787499999994,497.00000000000006 443.83787499999994,485.00000000000006 297.23020833333317,485.00000000000006 297.23020833333317,40 654.9842083333331,40 654.9842083333331,184.7 650.0698749999998,184.7 650.0698749999998,220.7" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="PLAN" data-to="LEAD" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Trả về Blackboard DAG" points="588.3677083333332,325.20000000000005 588.3677083333332,485.00000000000006 521.200625,485.00000000000006 521.200625,497.00000000000006" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="LEAD" data-to="B1" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="2. Giao Slice 1" points="443.83787499999994,567.7 443.83787499999994,603.7 314.61974999999995,603.7 314.61974999999995,672 197.3875,672 197.3875,734" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="LEAD" data-to="B2" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="2. Giao Slice 2" points="521.200625,567.7 521.200625,603.7 516.684,603.7 516.684,734" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="LEAD" data-to="B3" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="2. Giao Slice 3" points="598.563375,567.7 598.563375,603.7 762.4238333333332,603.7 762.4238333333332,672 833.7574999999998,672 833.7574999999998,734" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="B1" data-to="VERIFY" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="197.3875,770.9 197.3875,830.9 559.5775833333331,830.9 559.5775833333331,890.9" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="B2" data-to="VERIFY" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="516.684,770.9 516.684,830.9 559.5775833333331,830.9 559.5775833333331,890.9" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="B3" data-to="VERIFY" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="833.7574999999998,770.9 833.7574999999998,830.9 559.5775833333331,830.9 559.5775833333331,890.9" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="AUDIT" data-to="QC_LANE" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Score ≥ 85/100 (PASS)" points="288.4021666666665,1199.3 288.4021666666665,1507.6999999999998" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="SCOUT" data-to="PLAN" data-style="dotted" data-arrow-start="false" data-arrow-end="true" points="521.7512083333331,172.7 521.7512083333331,184.7 526.6655416666665,184.7 526.6655416666665,220.7" fill="none" stroke="var(--_line)" stroke-width="1" stroke-dasharray="4 4" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="VERIFY" data-to="AUDIT" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Build/Test PASS" points="462.9488333333332,944.7 462.9488333333332,956.7 345.0408333333331,956.7 345.0408333333331,1061" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="VERIFY" data-to="FIX" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Build/Test FAIL" points="559.5775833333332,944.7 559.5775833333332,956.7 584.9568333333332,956.7 584.9568333333332,1279.6 559.5775833333332,1279.6 559.5775833333332,1315.6" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="AUDIT" data-to="FIX" data-style="solid" data-arrow-start="false" data-arrow-end="true" data-label="Score &lt; 85 (Bắt lỗi kiến trúc/INV)" points="401.67949999999985,1199.3 401.67949999999985,1279.6 488.32808333333315,1279.6 488.32808333333315,1315.6" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<polyline class="edge" data-from="FIX" data-to="VERIFY" data-style="solid" data-arrow-start="false" data-arrow-end="true" points="630.8270833333331,1315.6 630.8270833333331,1279.6 658.9242083333331,1279.6 658.9242083333331,956.7 656.2063333333331,956.7 656.2063333333331,944.7" fill="none" stroke="var(--_line)" stroke-width="1" marker-end="url(#arrowhead)" />
+<g class="edge-label" data-from="LEAD" data-to="PLAN" data-label="1. Yêu cầu chia cắt việc">
+  <rect x="235.73020833333317" y="447.70000000000005" width="122.78800000000004" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="297.1242083333332" y="462.85" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">1. Yêu cầu chia cắt việc</text>
+</g>
+<g class="edge-label" data-from="PLAN" data-to="LEAD" data-label="Trả về Blackboard DAG">
+  <rect x="523.3677083333332" y="423.70000000000005" width="129.916" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="588.3257083333332" y="438.85" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Trả về Blackboard DAG</text>
+</g>
+<g class="edge-label" data-from="LEAD" data-to="B1" data-label="2. Giao Slice 1">
+  <rect x="275.11974999999995" y="610.7" width="78.83200000000002" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="314.53574999999995" y="625.85" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">2. Giao Slice 1</text>
+</g>
+<g class="edge-label" data-from="LEAD" data-to="B2" data-label="2. Giao Slice 2">
+  <rect x="475.18399999999997" y="610.7" width="82.39600000000002" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="516.382" y="625.85" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">2. Giao Slice 2</text>
+</g>
+<g class="edge-label" data-from="LEAD" data-to="B3" data-label="2. Giao Slice 3">
+  <rect x="720.9238333333332" y="610.7" width="82.39600000000002" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="762.1218333333331" y="625.85" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">2. Giao Slice 3</text>
+</g>
+<g class="edge-label" data-from="AUDIT" data-to="QC_LANE" data-label="Score ≥ 85/100 (PASS)">
+  <rect x="226.90216666666652" y="1434.4" width="122.19399999999999" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="287.9991666666665" y="1449.5500000000002" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Score ≥ 85/100 (PASS)</text>
+</g>
+<g class="edge-label" data-from="VERIFY" data-to="AUDIT" data-label="Build/Test PASS">
+  <rect x="296.5408333333331" y="987.7" width="96.05799999999999" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="344.5698333333331" y="1002.85" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Build/Test PASS</text>
+</g>
+<g class="edge-label" data-from="VERIFY" data-to="FIX" data-label="Build/Test FAIL">
+  <rect x="538.9568333333332" y="1115" width="91.306" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="584.6098333333332" y="1130.15" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Build/Test FAIL</text>
+</g>
+<g class="edge-label" data-from="AUDIT" data-to="FIX" data-label="Score &lt; 85 (Bắt lỗi kiến trúc/INV)">
+  <rect x="318.1794999999998" y="1242.3" width="166.74400000000003" height="30.3" rx="2" ry="2" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="1" />
+  <text x="401.5514999999998" y="1257.45" text-anchor="middle" font-size="11" font-weight="400" fill="var(--_text-sec)" dy="3.8499999999999996">Score &lt; 85 (Bắt lỗi kiến trúc/INV)</text>
+</g>
+<g class="node" data-id="SUP" data-label="👑 SUPERVISOR (Bạn — TPM / PO)
+Ra đề bài (Story / Ticket / Feature) &amp; Nghiệm thu cuối" data-shape="rectangle">
+  <rect x="677.2837083333332" y="395.20000000000005" width="340.5729999999999" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="847.5702083333331" y="422.1" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="847.5702083333331" dy="-3.9000000000000012">👑 SUPERVISOR (Bạn — TPM / PO)</tspan><tspan x="847.5702083333331" dy="16.900000000000002">Ra đề bài (Story / Ticket / Feature) &amp; Nghiệm thu cuối</tspan></text>
+</g>
+<g class="node" data-id="LEAD" data-label="🧭 LEAD ORCHESTRATOR (Main Chat Agent)
+• Chạy scripts/jira-impl.sh (Zero-SDLC-Crawl)
+• Điều phối toàn bộ chu trình SLP" data-shape="rectangle">
+  <rect x="366.47512499999993" y="497.00000000000006" width="309.45099999999996" height="70.7" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="521.200625" y="532.35" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="521.200625" dy="-12.350000000000001">🧭 LEAD ORCHESTRATOR (Main Chat Agent)</tspan><tspan x="521.200625" dy="16.900000000000002">• Chạy scripts/jira-impl.sh (Zero-SDLC-Crawl)</tspan><tspan x="521.200625" dy="16.900000000000002">• Điều phối toàn bộ chu trình SLP</tspan></text>
+</g>
+<g class="node" data-id="QC_LANE" data-label="7. qc-runtime (QC Scenario Matrix — Plane B')
++ Jira Transition -&gt; Human In Review (31) &amp; Story Rollup" data-shape="rectangle">
+  <rect x="109.96466666666659" y="1507.6999999999998" width="356.8749999999999" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="288.4021666666665" y="1534.6" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="288.4021666666665" dy="-3.9000000000000012">7. qc-runtime (QC Scenario Matrix — Plane B&#39;)</tspan><tspan x="288.4021666666665" dy="16.900000000000002">+ Jira Transition -&gt; Human In Review (31) &amp; Story Rollup</tspan></text>
+</g>
+<g class="node" data-id="SCOUT" data-label="1. scout-runtime (Recon Worker)
+Dò codegraph + 00.agent-manifests
+khi ticket chưa Enrich / liên module" data-shape="rectangle">
+  <rect x="398.5182083333332" y="102" width="246.46599999999995" height="70.7" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="521.7512083333331" y="137.35" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="521.7512083333331" dy="-12.350000000000001">1. scout-runtime (Recon Worker)</tspan><tspan x="521.7512083333331" dy="16.900000000000002">Dò codegraph + 00.agent-manifests</tspan><tspan x="521.7512083333331" dy="16.900000000000002">khi ticket chưa Enrich / liên module</tspan></text>
+</g>
+<g class="node" data-id="PLAN" data-label="2. plan-runtime (Lead Architect &amp; Work Slicer)
+Chia cắt Story thành các Work Slices độc lập (DAG):
+• Slice 1 (Domain + UT) — Khóa danh sách file A
+• Slice 2 (AppService + EF + API) — Khóa danh sách file B
+• Slice 3 (React 19 UI apps/web) — Khóa danh sách file C" data-shape="rectangle">
+  <rect x="403.26120833333323" y="220.7" width="370.2129999999999" height="104.50000000000001" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="588.3677083333332" y="272.95" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="588.3677083333332" dy="-29.250000000000004">2. plan-runtime (Lead Architect &amp; Work Slicer)</tspan><tspan x="588.3677083333332" dy="16.900000000000002">Chia cắt Story thành các Work Slices độc lập (DAG):</tspan><tspan x="588.3677083333332" dy="16.900000000000002">• Slice 1 (Domain + UT) — Khóa danh sách file A</tspan><tspan x="588.3677083333332" dy="16.900000000000002">• Slice 2 (AppService + EF + API) — Khóa danh sách file B</tspan><tspan x="588.3677083333332" dy="16.900000000000002">• Slice 3 (React 19 UI apps/web) — Khóa danh sách file C</tspan></text>
+</g>
+<g class="node" data-id="B1" data-label="3a. build-runtime (Role: Peer Domain &amp; UT)" data-shape="rectangle">
+  <rect x="56" y="734" width="282.775" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="197.3875" y="752.45" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">3a. build-runtime (Role: Peer Domain &amp; UT)</text>
+</g>
+<g class="node" data-id="B2" data-label="3b. build-runtime (Role: Peer BE App/EF/API)" data-shape="rectangle">
+  <rect x="366.775" y="734" width="299.8179999999999" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="516.684" y="752.45" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">3b. build-runtime (Role: Peer BE App/EF/API)</text>
+</g>
+<g class="node" data-id="B3" data-label="3c. build-runtime (Role: Peer FE React UI)" data-shape="rectangle">
+  <rect x="694.5929999999998" y="734" width="278.32899999999995" height="36.900000000000006" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="833.7574999999998" y="752.45" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)" dy="4.55">3c. build-runtime (Role: Peer FE React UI)</text>
+</g>
+<g class="node" data-id="VERIFY" data-label="4. verify-runtime (Deterministic Test Runner)
+Chạy thật: dotnet build, dotnet test, pnpm test, coverage ≥80%" data-shape="rectangle">
+  <rect x="366.32008333333323" y="890.9" width="386.5149999999998" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="559.5775833333331" y="917.8" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="559.5775833333331" dy="-3.9000000000000012">4. verify-runtime (Deterministic Test Runner)</tspan><tspan x="559.5775833333331" dy="16.900000000000002">Chạy thật: dotnet build, dotnet test, pnpm test, coverage ≥80%</tspan></text>
+</g>
+<g class="node" data-id="AUDIT" data-label="5. audit-runtime (NEW! Independent Work Evaluator)
+Đọc git diff + chấm điểm Rubric Gate (0–100):
+• Tuân thủ INV-* của Domain (30đ)
+• Không vi phạm core.ap-platform.mdc (30đ)
+• Khớp 100% bảng AC của Jira (25đ)
+• Kỷ luật phạm vi file &amp; không chế DTO (15đ)
+=&gt; Bắt buộc Score ≥ 85/100 mới được PASS!" data-shape="rectangle">
+  <rect x="175.12483333333319" y="1061" width="339.83199999999994" height="138.3" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="345.0408333333331" y="1130.15" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="345.0408333333331" dy="-46.150000000000006">5. audit-runtime (NEW! Independent Work Evaluator)</tspan><tspan x="345.0408333333331" dy="16.900000000000002">Đọc git diff + chấm điểm Rubric Gate (0–100):</tspan><tspan x="345.0408333333331" dy="16.900000000000002">• Tuân thủ INV-* của Domain (30đ)</tspan><tspan x="345.0408333333331" dy="16.900000000000002">• Không vi phạm core.ap-platform.mdc (30đ)</tspan><tspan x="345.0408333333331" dy="16.900000000000002">• Khớp 100% bảng AC của Jira (25đ)</tspan><tspan x="345.0408333333331" dy="16.900000000000002">• Kỷ luật phạm vi file &amp; không chế DTO (15đ)</tspan><tspan x="345.0408333333331" dy="16.900000000000002">=&gt; Bắt buộc Score ≥ 85/100 mới được PASS!</tspan></text>
+</g>
+<g class="node" data-id="FIX" data-label="6. fixbug-runtime (Surgical Fixer)
+Chỉ chạy khi Verify FAIL hoặc Audit &lt; 85đ" data-shape="rectangle">
+  <rect x="417.0785833333332" y="1315.6" width="284.99799999999993" height="53.800000000000004" rx="0" ry="0" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+  <text x="559.5775833333332" y="1342.5" text-anchor="middle" font-size="13" font-weight="500" fill="var(--_text)"><tspan x="559.5775833333332" dy="-3.9000000000000012">6. fixbug-runtime (Surgical Fixer)</tspan><tspan x="559.5775833333332" dy="16.900000000000002">Chỉ chạy khi Verify FAIL hoặc Audit &lt; 85đ</tspan></text>
+</g>
+</svg>
