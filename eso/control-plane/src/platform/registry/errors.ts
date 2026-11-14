@@ -25,6 +25,8 @@ export const ERROR_STATUS: Readonly<Record<string, number>> = {
     SCHEMA_MISMATCH: 409,
     PROFILE_DRIFT: 409,
     DATABASE_UNAVAILABLE: 503,
+    WORKER_INVALID: 422,
+    WORKER_WRITE_FAILED: 500,
 };
 
 export const ERROR_MESSAGE: Readonly<Record<string, string>> = {
@@ -46,6 +48,8 @@ export const ERROR_MESSAGE: Readonly<Record<string, string>> = {
     SCHEMA_MISMATCH: 'Schema does not match consumer id',
     PROFILE_DRIFT: 'Profile artifact differs from the registry',
     DATABASE_UNAVAILABLE: 'Database is unavailable',
+    WORKER_INVALID: 'Worker definition is invalid',
+    WORKER_WRITE_FAILED: 'Could not write worker files',
 };
 
 export class PlatformError extends Error {

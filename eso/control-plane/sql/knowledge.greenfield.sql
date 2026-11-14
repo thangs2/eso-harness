@@ -19,8 +19,11 @@ CREATE SCHEMA :"schema";
 SET search_path TO :"schema", public;
 
 CREATE TABLE knowledge_meta (
-  schema_version integer NOT NULL,
-  updated_at     timestamptz NOT NULL DEFAULT now()
+  schema_version    integer NOT NULL,
+  updated_at        timestamptz NOT NULL DEFAULT now(),
+  manifest_path     text,
+  manifest_version  integer,
+  generator_version text
 );
 
 CREATE TABLE knowledge_type (
@@ -72,6 +75,21 @@ CREATE UNIQUE INDEX knowledge_doc_path_one_current
   ON knowledge_doc_path (path)
   WHERE valid_to IS NULL;
 
+CREATE TABLE knowledge_doc_section (
+  doc_id            text NOT NULL REFERENCES knowledge_doc(doc_id) ON DELETE CASCADE,
+  section_id        text NOT NULL,
+  parent_section_id text,
+  ordinal           integer NOT NULL DEFAULT 0,
+  level             integer NOT NULL CHECK (level >= 1),
+  heading           text NOT NULL,
+  anchor            text NOT NULL,
+  content_hash      text,
+  PRIMARY KEY (doc_id, section_id),
+  UNIQUE (doc_id, anchor)
+);
+
+CREATE INDEX knowledge_doc_section_parent ON knowledge_doc_section (doc_id, parent_section_id);
+
 CREATE TABLE knowledge_edge (
   edge_id     text PRIMARY KEY,
   from_doc_id text NOT NULL REFERENCES knowledge_doc(doc_id) ON DELETE CASCADE,
@@ -105,9 +123,12 @@ CREATE TABLE knowledge_link (
   raw_target       text NOT NULL,
   resolved_doc_id  text REFERENCES knowledge_doc(doc_id) ON DELETE SET NULL,
   resolved_anchor  text,
+  resolved_section_id text,
   status           text NOT NULL CHECK (status IN ('resolved','unresolved','external','anchor-missing')),
   provenance       text NOT NULL DEFAULT 'declared',
-  created_at       timestamptz NOT NULL DEFAULT now()
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT knowledge_link_section_fkey FOREIGN KEY (resolved_doc_id, resolved_section_id)
+    REFERENCES knowledge_doc_section (doc_id, section_id) ON DELETE SET NULL
 );
 
 CREATE INDEX knowledge_link_unresolved
@@ -142,12 +163,14 @@ CREATE TABLE knowledge_doc_chunk (
   ordinal   integer NOT NULL,
   anchor    text,
   text      text NOT NULL,
-  embedding vector(1536),
+  content_hash text,
+  embedding vector(1024),
   model     text,
   UNIQUE (doc_id, ordinal)
 );
 
 CREATE INDEX knowledge_doc_chunk_doc ON knowledge_doc_chunk (doc_id);
+CREATE INDEX knowledge_doc_chunk_hash ON knowledge_doc_chunk (content_hash);
 CREATE INDEX knowledge_doc_chunk_vec
   ON knowledge_doc_chunk USING hnsw (embedding vector_cosine_ops);
 
@@ -158,6 +181,112 @@ CREATE TABLE knowledge_index_run (
   stats       jsonb NOT NULL DEFAULT '{}'::jsonb,
   started_at  timestamptz NOT NULL DEFAULT now(),
   finished_at timestamptz
+);
+
+CREATE TABLE knowledge_manifest (
+  manifest_id       text PRIMARY KEY,
+  build_id          text REFERENCES knowledge_index_run(build_id) ON DELETE SET NULL,
+  manifest_version  integer NOT NULL DEFAULT 1,
+  generator_version text NOT NULL,
+  source_hash       text NOT NULL,
+  payload           jsonb NOT NULL,
+  created_at        timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX knowledge_manifest_build ON knowledge_manifest (build_id, created_at DESC);
+
+CREATE TABLE knowledge_finding (
+  finding_id  bigserial PRIMARY KEY,
+  doc_id      text REFERENCES knowledge_doc(doc_id) ON DELETE CASCADE,
+  severity    text NOT NULL CHECK (severity IN ('info','warning','error','critical')),
+  code        text NOT NULL,
+  detail      jsonb NOT NULL DEFAULT '{}'::jsonb,
+  resolved_at timestamptz,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX knowledge_finding_open ON knowledge_finding (severity, created_at DESC) WHERE resolved_at IS NULL;
+CREATE INDEX knowledge_finding_doc ON knowledge_finding (doc_id, created_at DESC);
+
+CREATE TABLE knowledge_worker (
+  worker_id    text PRIMARY KEY,
+  name         text NOT NULL,
+  role         text NOT NULL,
+  layer        text NOT NULL CHECK (layer IN ('peer','gate')),
+  scope        text NOT NULL DEFAULT '',
+  capabilities text[] NOT NULL DEFAULT '{}',
+  verbs        text[] NOT NULL DEFAULT '{read,append}',
+  bar          text NOT NULL DEFAULT '[]',
+  escalation   text NOT NULL DEFAULT 'allow',
+  status       text NOT NULL CHECK (status IN ('declared','active','paused','retired')),
+  file_path    text NOT NULL,
+  content_hash text NOT NULL,
+  indexed_at   timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE knowledge_worker_run (
+  run_id          text PRIMARY KEY,
+  worker_id       text NOT NULL,
+  host_binding_id text NOT NULL,
+  status          text NOT NULL CHECK (status IN ('spawned','exited','failed','authorized')),
+  pid             integer,
+  command         text,
+  started_at      timestamptz NOT NULL DEFAULT now(),
+  ended_at        timestamptz
+);
+
+CREATE TABLE knowledge_worker_handoff (
+  handoff_id      text PRIMARY KEY,
+  from_worker_id  text NOT NULL,
+  to_worker_id    text NOT NULL,
+  condition       text,
+  status          text NOT NULL CHECK (status IN ('pending','accepted','rejected')),
+  work            jsonb NOT NULL DEFAULT '{}'::jsonb,
+  evidence        jsonb NOT NULL DEFAULT '[]'::jsonb,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  accepted_at     timestamptz
+);
+
+CREATE INDEX knowledge_worker_handoff_to ON knowledge_worker_handoff (to_worker_id, status, created_at DESC);
+
+CREATE TABLE knowledge_worker_import (
+  import_id   bigserial PRIMARY KEY,
+  source_file text NOT NULL,
+  source_hash text NOT NULL,
+  source_type text NOT NULL,
+  worker_id   text NOT NULL,
+  action      text NOT NULL CHECK (action IN ('import','replace','copy','skip','audit')),
+  detail      jsonb NOT NULL DEFAULT '{}'::jsonb,
+  imported_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX knowledge_worker_import_worker ON knowledge_worker_import (worker_id, imported_at DESC);
+
+CREATE TABLE knowledge_worker_event (
+  event_id  bigserial PRIMARY KEY,
+  worker_id text NOT NULL,
+  event     text NOT NULL,
+  verb      text,
+  path      text,
+  decision  text NOT NULL,
+  reasons   jsonb NOT NULL DEFAULT '[]'::jsonb,
+  evidence  jsonb NOT NULL DEFAULT '[]'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX knowledge_worker_event_worker ON knowledge_worker_event (worker_id, created_at DESC);
+
+CREATE TABLE knowledge_worker_placement (
+  worker_id       text NOT NULL REFERENCES knowledge_worker(worker_id) ON DELETE CASCADE,
+  host_binding_id text NOT NULL,
+  PRIMARY KEY (worker_id, host_binding_id)
+);
+
+CREATE TABLE knowledge_worker_edge (
+  from_worker_id text NOT NULL REFERENCES knowledge_worker(worker_id) ON DELETE CASCADE,
+  to_worker_id   text NOT NULL REFERENCES knowledge_worker(worker_id) ON DELETE CASCADE,
+  on_label       text NOT NULL DEFAULT '',
+  PRIMARY KEY (from_worker_id, to_worker_id, on_label)
 );
 
 INSERT INTO knowledge_type (type, label, required_sections, header_profile, representation, default_liveness)

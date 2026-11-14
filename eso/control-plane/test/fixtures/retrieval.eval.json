@@ -1,0 +1,7 @@
+[
+  { "query": "agent instruction", "expected": ["agents/instructions.md"] },
+  { "query": "hooks", "expected": ["agents/hooks/README.md"] },
+  { "query": "core rules", "expected": ["agents/rules/core.md"] },
+  { "query": "subagents", "expected": ["agents/subagents/README.md"] },
+  { "query": "mcp configuration", "expected": ["agents/mcp/README.md"] }
+]

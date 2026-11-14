@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnInit, effect, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
@@ -8,7 +8,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { ConsumerProfileService } from '../../../core/consumers/consumer-profile.service.js';
-import type { ConsumerProfile, McpProviderDto } from '../../../../../../../libs/api-client/types.js';
+import type { ConsumerProfile, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, McpProviderDto, WorkerConfigDto, EvidenceRequirementDto } from '../../../../../../../libs/api-client/types.js';
 
 type LayerId = 'multiAgent' | 'rules' | 'skills' | 'hooks' | 'memory' | 'codeGraph' | 'documentGraph' | 'topology';
 
@@ -58,7 +58,15 @@ interface WorkerEntry {
     layer: WorkerLayer;
     hostBindingIds: string[];
     scope: string;
-    status: 'declared' | 'active' | 'paused';
+    status: 'declared' | 'active' | 'paused' | 'retired';
+    capabilities: string[];
+    verbs: string[];
+    bar: EvidenceRequirementDto[];
+    escalation: string;
+    instructions?: string;
+    sourceFile?: string;
+    sourceHash?: string;
+    sourceType?: string;
 }
 
 interface WorkerEdge {
@@ -72,6 +80,10 @@ interface WorkerDraft {
     role: string;
     layer: WorkerLayer;
     scope: string;
+    capabilities: string;
+    verbs: string;
+    bar: string;
+    escalation: string;
 }
 
 interface PluginEntry {
@@ -86,14 +98,20 @@ interface PluginEntry {
 
 function defaultWorkers(): WorkerEntry[] {
     return [
-        { id: 'worker-scout', name: 'Scout', role: 'scout', layer: 'peer', hostBindingIds: [], scope: 'read-only recon', status: 'declared' },
-        { id: 'worker-plan', name: 'Plan', role: 'plan', layer: 'peer', hostBindingIds: [], scope: '/tmp/slp/plan/', status: 'declared' },
-        { id: 'worker-build', name: 'Build', role: 'build', layer: 'peer', hostBindingIds: [], scope: 'slice.allowed_files', status: 'declared' },
-        { id: 'worker-fixbug', name: 'Fixbug', role: 'fixbug', layer: 'peer', hostBindingIds: [], scope: 'failure files only', status: 'declared' },
-        { id: 'worker-verify', name: 'Verify', role: 'verify', layer: 'gate', hostBindingIds: [], scope: '/tmp/slp/verify/', status: 'declared' },
-        { id: 'worker-audit', name: 'Audit', role: 'audit', layer: 'gate', hostBindingIds: [], scope: '/tmp/slp/audit/', status: 'declared' },
-        { id: 'worker-qc', name: 'QC', role: 'qc', layer: 'gate', hostBindingIds: [], scope: '/tmp/slp/qc/', status: 'declared' },
+        { id: 'worker-scout', name: 'Scout', role: 'scout', layer: 'peer', hostBindingIds: [], scope: '/tmp/slp/recon/', status: 'declared', capabilities: ['scout'], verbs: ['read', 'write'], bar: [], escalation: 'stop+notify' },
+        { id: 'worker-plan', name: 'Plan', role: 'plan', layer: 'peer', hostBindingIds: [], scope: '/tmp/slp/plan/', status: 'declared', capabilities: ['plan'], verbs: ['read', 'write'], bar: [], escalation: 'stop+notify' },
+        { id: 'worker-build', name: 'Build', role: 'build', layer: 'peer', hostBindingIds: [], scope: 'agents/, scripts/, tools/', status: 'declared', capabilities: ['be', 'fe'], verbs: ['read', 'write', 'append'], bar: [], escalation: 'stop+notify' },
+        { id: 'worker-fixbug', name: 'Fixbug', role: 'fixbug', layer: 'peer', hostBindingIds: [], scope: 'findings', status: 'declared', capabilities: ['be'], verbs: ['read', 'write'], bar: [], escalation: 'stop+notify' },
+        { id: 'worker-verify', name: 'Verify', role: 'verify', layer: 'gate', hostBindingIds: [], scope: '/tmp/slp/verify/', status: 'declared', capabilities: ['verify'], verbs: ['read', 'write', 'approve'], bar: [{ kind: 'verify', metric: 'status', op: '==', value: 'PASS' }], escalation: 'stop+notify' },
+        { id: 'worker-audit', name: 'Audit', role: 'audit', layer: 'gate', hostBindingIds: [], scope: '/tmp/slp/audit/', status: 'declared', capabilities: ['audit'], verbs: ['read', 'write', 'approve'], bar: [{ kind: 'audit', metric: 'rubric', op: '>=', value: 85 }, { kind: 'audit', metric: 'critical', op: '==', value: 0 }], escalation: 'stop+notify' },
+        { id: 'worker-qc', name: 'QC', role: 'qc', layer: 'gate', hostBindingIds: [], scope: '/tmp/slp/qc/', status: 'declared', capabilities: ['qc'], verbs: ['read', 'write', 'append', 'approve'], bar: [{ kind: 'scenario', metric: 'executed', op: 'truthy', value: true }], escalation: 'stop+notify' },
     ];
+}
+
+const defaultWorkerPolicy = { capabilities: [] as string[], verbs: ['read', 'append'], bar: [] as EvidenceRequirementDto[], escalation: 'allow' };
+
+function splitList(value: string): string[] {
+    return value.split(',').map((item) => item.trim()).filter(Boolean);
 }
 
 function defaultWorkerEdges(): WorkerEdge[] {
@@ -222,13 +240,13 @@ function defaultPlugins(): PluginEntry[] {
                                             @for (layer of agentLayers(); track layer.id) {
                                                 <article class="layer-row" [class.layer-disabled]="!layer.enabled">
                                                     <div class="layer-ident"><span class="layer-no">{{ layer.n }}</span><div><strong>{{ layer.label }}</strong><small>{{ layer.description }}</small></div></div>
-                                                    <div class="layer-cell"><span>{{ layer.id === 'multiAgent' ? 'IAM policy' : 'Files' }}</span></div>
+                                                    <div class="layer-cell"><span>{{ layer.id === 'multiAgent' ? 'Worker policy' : 'Files' }}</span></div>
                                                     <div class="layer-cell layer-config">
                                                         @switch (layer.id) {
-                                                            @case ('multiAgent') { <span>3 roles · 4 workers</span> }
-                                                            @case ('rules') { <span>{{ layer.files }} files · ESO material</span> }
-                                                            @case ('skills') { <span>{{ layer.files }} files · ESO material</span> }
-                                                            @case ('hooks') { <span>{{ layer.files }} files · host hook plugin</span> }
+                                                            @case ('multiAgent') { <span>{{ workers().length }} workers · {{ workerRoleCount() }} roles</span> }
+                                                            @case ('rules') { <span>{{ ruleFiles().length }} rule{{ ruleFiles().length === 1 ? '' : 's' }} · {{ ruleMdcCount() }} .mdc · {{ ruleMdCount() }} .md</span> }
+                                                            @case ('skills') { <span>{{ materialCounts().skills }} files · installed</span> }
+                                                            @case ('hooks') { <span>{{ materialCounts().hooks }} files · host hook plugin</span> }
                                                         }
                                                     </div>
                                                     <div class="layer-state"><mat-slide-toggle [ngModel]="layer.enabled" [disabled]="!isStackEditable()" (ngModelChange)="updateLayer(layer.id, 'enabled', $event)"></mat-slide-toggle></div>
@@ -287,6 +305,73 @@ function defaultPlugins(): PluginEntry[] {
                                     </section>
                                 </div>
 
+                            </section>
+
+                            <section class="rules-material">
+                                <header class="rules-material-head">
+                                    <div><p class="eyebrow">Rules material</p><h3>Rules source · .mdc / .md</h3><p>Both are canonical under <code>agents/rules/</code>. <code>.mdc</code> is Cursor format; <code>.md</code> is Markdown format. Host trees are projections elsewhere.</p></div>
+                                    <div class="rules-actions">
+                                        <input #ruleFileInput type="file" accept=".mdc,.md" multiple hidden (change)="onRuleFiles($event)">
+                                        <input #ruleFolderInput type="file" accept=".mdc,.md" webkitdirectory directory multiple hidden (change)="onRuleFiles($event)">
+                                        <button mat-stroked-button type="button" [disabled]="ruleImporting()" (click)="ruleFileInput.click()">{{ ruleImporting() ? 'Reading…' : 'Import .mdc' }}</button>
+                                        <button mat-stroked-button type="button" [disabled]="ruleImporting()" (click)="ruleFolderInput.click()">Import folder</button>
+                                    </div>
+                                </header>
+                                @if (ruleImportPreview(); as preview) {
+                                    <div class="rule-import-preview">
+                                        <header><div><h4>Rule import preview</h4><p>{{ preview.candidates.length }} rule(s) · {{ preview.skipped.length }} skipped</p></div><button mat-button type="button" (click)="closeRuleImport()">Cancel</button></header>
+                                        @if (preview.candidates.length > 0) {
+                                            <div class="worker-table-wrap">
+                                                <table class="worker-table">
+                                                    <thead><tr><th>Import</th><th>Source</th><th>Rule</th><th>Globs</th><th>Always</th><th>Action</th></tr></thead>
+                                                    <tbody>
+                                                        @for (candidate of preview.candidates; track candidate.sourceHash) {
+                                                            <tr>
+                                                                <td><mat-checkbox [checked]="ruleSelectedHashes().includes(candidate.sourceHash)" (change)="toggleRuleImport(candidate.sourceHash, $event.checked)"></mat-checkbox></td>
+                                                                <td><code>{{ candidate.sourceFile }}</code><br><small>{{ candidate.sourceType }}</small>@if (candidate.warnings?.length) { <br><small class="import-warning">{{ candidate.warnings.join(' · ') }}</small> }</td>
+                                                                <td><strong>{{ candidate.rule.id }}</strong><br><small>{{ candidate.rule.description || 'no description' }}</small></td>
+                                                                <td><code>{{ candidate.rule.globs || '—' }}</code></td>
+                                                                <td>{{ candidate.rule.alwaysApply ? 'yes' : 'no' }}</td>
+                                                                <td>
+                                                                    @if (candidate.conflict) {
+                                                                        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="import-action-field"><mat-label>Conflict</mat-label>
+                                                                            <mat-select [ngModel]="ruleAction(candidate.sourceHash)" (ngModelChange)="setRuleAction(candidate.sourceHash, $event)">
+                                                                                <mat-option value="skip">skip</mat-option>
+                                                                                <mat-option value="replace">replace</mat-option>
+                                                                                <mat-option value="copy">copy</mat-option>
+                                                                            </mat-select>
+                                                                        </mat-form-field>
+                                                                    } @else { <span class="badge">import</span> }
+                                                                </td>
+                                                            </tr>
+                                                        }
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            <div class="import-actions"><button mat-flat-button color="primary" type="button" [disabled]="importableRuleCount() === 0" (click)="applyRuleImport()">Import {{ importableRuleCount() }} selected</button></div>
+                                        }
+                                        @if (preview.skipped.length > 0) {
+                                            <div class="import-skipped">
+                                                <h4>Skipped</h4>
+                                                @for (item of preview.skipped; track item.sourceFile + item.reason) { <div><code>{{ item.sourceFile }}</code><span>{{ item.reason }}</span></div> }
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                                @if (ruleFiles().length === 0) {
+                                    <p class="muted">No .mdc rules yet. Import a Cursor rule or folder.</p>
+                                } @else {
+                                    <div class="worker-table-wrap">
+                                        <table class="worker-table">
+                                            <thead><tr><th>Rule</th><th>Description</th><th>Globs</th><th>Always apply</th><th></th></tr></thead>
+                                            <tbody>
+                                                @for (rule of ruleFiles(); track rule.id) {
+                                                    <tr><td><strong>{{ rule.id }}</strong><br><code>{{ rule.sourceFile || 'agents/rules/' + rule.id + '.mdc' }}</code></td><td>{{ rule.description || '—' }}</td><td><code>{{ rule.globs || '—' }}</code></td><td>{{ rule.alwaysApply ? 'yes' : 'no' }}</td><td><button mat-button type="button" (click)="deleteRule(rule)">Remove</button></td></tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                }
                             </section>
                         }
 
@@ -573,6 +658,15 @@ function defaultPlugins(): PluginEntry[] {
                                     <p>A worker is a host-neutral identity: name, role, layer, scope. Its host placement is a separate deployment step. Credentials are never stored here.</p>
                                 </header>
 
+                                <section class="slp-orchestration">
+                                    <div class="orchestration-node supervisor"><span>Supervisor</span><strong>Operator</strong><small>approve · escalate · sign Done</small></div>
+                                    <span class="orchestration-arrow">→</span>
+                                    <div class="orchestration-node lead"><span>Lead</span><strong>Main chat agent</strong><small>split · spawn · roll up</small></div>
+                                    <span class="orchestration-arrow">→</span>
+                                    <div class="orchestration-node workers"><span>Workers</span><strong>7 positions</strong><small>peer · gate</small></div>
+                                    <p>Lead is not a worker; no layer; not spawnable. Workers below are the only rows with peer/gate.</p>
+                                </section>
+
                                 <div class="agent-stats worker-stats">
                                     <div><strong>{{ workers().length }}</strong><span>workers</span></div>
                                     <div><strong>{{ workerRoleCount() }}</strong><span>roles in use</span></div>
@@ -598,104 +692,290 @@ function defaultPlugins(): PluginEntry[] {
                                 </section>
 
                                 <section class="workers-section">
-                                    <h3>Worker definitions</h3>
-                                    <p class="section-hint">Define the role and scope once. This is host-neutral; deployment is the next section.</p>
-                                    <div class="worker-form">
-                                        <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Worker name</mat-label><input matInput [ngModel]="workerDraft().name" (ngModelChange)="setWorkerDraft('name', $event)" placeholder="quang-lead"></mat-form-field>
-                                        <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Role</mat-label>
-                                            <mat-select [ngModel]="workerDraft().role" (ngModelChange)="setWorkerRole($event)">
-                                                @for (role of workerRoles; track role) { <mat-option [value]="role">{{ role }}</mat-option> }
-                                            </mat-select>
-                                        </mat-form-field>
-                                        <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Layer</mat-label>
-                                            <mat-select [ngModel]="workerDraft().layer" (ngModelChange)="setWorkerDraft('layer', $event)">
-                                                <mat-option value="peer">peer — may write in scope</mat-option>
-                                                <mat-option value="gate">gate — verify or judge only</mat-option>
-                                            </mat-select>
-                                        </mat-form-field>
-                                        <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Scope</mat-label><input matInput [ngModel]="workerDraft().scope" (ngModelChange)="setWorkerDraft('scope', $event)" placeholder="eso/ui/**"></mat-form-field>
-                                        <button mat-flat-button color="primary" type="button" (click)="addWorker()">Add worker</button>
+                                    <header class="workers-head">
+                                        <div><h3>Worker definitions</h3><p class="section-hint">Identity, policy, then deployment. Select a worker to inspect it. This is host-neutral.</p></div>
+                                        <div class="workers-head-actions">
+                                            <input #workerFileInput type="file" accept=".md,.mdc" multiple hidden (change)="onWorkerFiles($event)">
+                                            <input #workerFolderInput type="file" accept=".md,.mdc" webkitdirectory directory multiple hidden (change)="onWorkerFiles($event)">
+                                            <button mat-stroked-button type="button" [disabled]="workerImporting()" (click)="workerFileInput.click()">{{ workerImporting() ? 'Reading…' : 'Import agents' }}</button>
+                                            <button mat-stroked-button type="button" [disabled]="workerImporting()" (click)="workerFolderInput.click()">Import folder</button>
+                                            <button mat-flat-button color="primary" type="button" (click)="addWorker()">Add worker</button>
+                                        </div>
+                                    </header>
+                                    @if (workerImportPreview(); as preview) {
+                                        <section class="worker-import-preview">
+                                            <header><div><h3>Import preview</h3><p>{{ preview.candidates.length }} agent file(s) · {{ preview.skipped.length }} skipped</p></div><button mat-button type="button" (click)="closeImportPreview()">Cancel</button></header>
+                                            @if (preview.candidates.length > 0) {
+                                                <div class="worker-table-wrap">
+                                                    <table class="worker-table">
+                                                        <thead><tr><th>Import</th><th>Source</th><th>Detected</th><th>Mapped worker</th><th>Action</th><th>Warnings</th></tr></thead>
+                                                        <tbody>
+                                                            @for (candidate of preview.candidates; track candidate.sourceHash) {
+                                                                <tr>
+                                                                    <td><mat-checkbox [checked]="importSelectedHashes().includes(candidate.sourceHash)" (change)="toggleImport(candidate.sourceHash, $event.checked)"></mat-checkbox></td>
+                                                                    <td><code>{{ candidate.sourceFile }}</code></td>
+                                                                    <td><span class="badge">{{ candidate.sourceType }}</span></td>
+                                                                    <td><strong>{{ candidate.worker.name }}</strong><br><code>{{ candidate.worker.id }} · {{ candidate.worker.role }} · {{ candidate.worker.layer }}</code></td>
+                                                                    <td>
+                                                                        @if (candidate.conflict) {
+                                                                            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="import-action-field"><mat-label>Conflict</mat-label>
+                                                                                <mat-select [ngModel]="importAction(candidate.sourceHash)" (ngModelChange)="setImportAction(candidate.sourceHash, $event)">
+                                                                                    <mat-option value="skip">skip</mat-option>
+                                                                                    <mat-option value="replace">replace</mat-option>
+                                                                                    <mat-option value="copy">copy</mat-option>
+                                                                                </mat-select>
+                                                                            </mat-form-field>
+                                                                        } @else { <span class="badge">import</span> }
+                                                                    </td>
+                                                                    <td>@if (candidate.warnings.length) { <small class="import-warning">{{ candidate.warnings.join(' · ') }}</small> } @else { <small class="muted">none</small> }</td>
+                                                                </tr>
+                                                            }
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                                <div class="import-actions"><button mat-flat-button color="primary" type="button" [disabled]="importSelectedHashes().length === 0" (click)="importWorkers()">Import {{ importableCount() }} selected</button></div>
+                                            }
+                                            @if (preview.skipped.length > 0) {
+                                                <div class="import-skipped">
+                                                    <h4>Skipped</h4>
+                                                    @for (item of preview.skipped; track item.sourceFile + item.reason) { <div><code>{{ item.sourceFile }}</code><span>{{ item.reason }}</span></div> }
+                                                </div>
+                                            }
+                                        </section>
+                                    }
+                                    @if (workerImportDirty()) {
+                                        <div class="import-dirty">
+                                            <div><strong>Imported workers are not saved.</strong><span>Review the inspector, then Save settings.</span></div>
+                                            <button mat-flat-button color="primary" type="button" (click)="save()">Save settings</button>
+                                        </div>
+                                    }
+                                    <div class="workers-layout">
+                                        <div class="workers-list">
+                                            @if (workers().length === 0) {
+                                                <p class="muted worker-empty">No workers registered. Add a worker to start the formation.</p>
+                                            } @else {
+                                                @for (worker of workers(); track worker.id) {
+                                                    <button type="button" class="worker-card" [class.active]="selectedWorker()?.id === worker.id" (click)="selectWorker(worker.id)">
+                                                        <span class="worker-avatar">{{ worker.name.slice(0, 1).toUpperCase() }}</span>
+                                                        <span class="worker-card-copy"><strong>{{ worker.name }}</strong><small>{{ worker.role }} · {{ worker.layer }}</small><small>{{ worker.hostBindingIds.length === 0 ? 'Not deployed' : worker.hostBindingIds.length + ' binding' + (worker.hostBindingIds.length === 1 ? '' : 's') }}</small></span>
+                                                        <span class="badge" [class.badge-warn]="worker.layer === 'gate'">{{ worker.status }}</span>
+                                                    </button>
+                                                }
+                                            }
+                                        </div>
+                                        <div class="worker-inspector">
+                                            @if (selectedWorker(); as worker) {
+                                                <header class="inspector-head">
+                                                    <div><p class="eyebrow">Worker</p><h3>{{ worker.name || 'Unnamed worker' }}</h3><small>{{ worker.id }}</small>@if (worker.sourceFile) { <small class="source-badge">imported · {{ worker.sourceFile }}</small> }</div>
+                                                    <span class="badge" [class.badge-warn]="worker.layer === 'gate'">{{ worker.layer }}</span>
+                                                </header>
+                                                <section class="inspector-block">
+                                                    <h4>Identity</h4>
+                                                    <div class="inspector-grid">
+                                                        <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Name</mat-label><input matInput [ngModel]="worker.name" (ngModelChange)="updateWorkerField(worker.id, 'name', $event)"></mat-form-field>
+                                                        <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Role</mat-label>
+                                                            <mat-select [ngModel]="worker.role" (ngModelChange)="updateWorkerField(worker.id, 'role', $event)">
+                                                                @for (role of workerRoles; track role) { <mat-option [value]="role">{{ role }}</mat-option> }
+                                                            </mat-select>
+                                                        </mat-form-field>
+                                                        <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Layer</mat-label>
+                                                            <mat-select [ngModel]="worker.layer" (ngModelChange)="updateWorkerField(worker.id, 'layer', $event)">
+                                                                <mat-option value="peer">peer</mat-option>
+                                                                <mat-option value="gate">gate</mat-option>
+                                                            </mat-select>
+                                                        </mat-form-field>
+                                                        <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Status</mat-label>
+                                                            <mat-select [ngModel]="worker.status" (ngModelChange)="setWorkerStatus(worker.id, $event)">
+                                                                @for (status of workerStatuses; track status) { <mat-option [value]="status">{{ status }}</mat-option> }
+                                                            </mat-select>
+                                                        </mat-form-field>
+                                                    </div>
+                                                    <details class="instructions-panel" [open]="!!worker.instructions">
+                                                        <summary>Instructions — prompt body @if (worker.instructions) { <span class="badge">set</span> }</summary>
+                                                        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full"><mat-label>Prompt body</mat-label><textarea matInput rows="4" [ngModel]="worker.instructions || ''" (ngModelChange)="updateWorkerField(worker.id, 'instructions', $event)"></textarea></mat-form-field>
+                                                        <p class="field-help">Imported subagent prompt. Kept in the worker file; not shown to the host until the worker is spawned.</p>
+                                                    </details>
+                                                    @if (worker.status !== 'active') {
+                                                        <div class="worker-status-hint"><span>Declared workers cannot be checked or spawned.</span><button mat-stroked-button type="button" (click)="activateWorker(worker.id)">Activate worker</button></div>
+                                                    }
+                                                </section>
+                                                <section class="inspector-block policy-block">
+                                                    <div class="inspector-block-head">
+                                                        <h4>Permissions &amp; evidence</h4>
+                                                        <p>What this worker may do, where it may do it, and what it must prove.</p>
+                                                    </div>
+                                                    <details class="policy-help">
+                                                        <summary>What do these mean?</summary>
+                                                        <dl>
+                                                            <div><dt>Capability</dt><dd>A skill label. It describes what kind of work the worker can take. It is not a permission and is not enforced today.</dd></div>
+                                                            <div><dt>Verb</dt><dd>An enforced action: read · write · append · approve · configure · handoff. A worker can only do what its verbs allow.</dd></div>
+                                                            <div><dt>Scope</dt><dd>The path or glob where the verb may act. A write outside scope is denied.</dd></div>
+                                                            <div><dt>Required evidence</dt><dd>Proof the worker must supply before write, append, approve, or handoff. It is a label the caller passes, not a file upload.</dd></div>
+                                                            <div><dt>Escalation</dt><dd>What the caller should do when the check denies: report, stop and notify, or continue with a warning.</dd></div>
+                                                        </dl>
+                                                    </details>
+                                                    <div class="policy-field">
+                                                        <span class="field-label">Scopes — where it may act</span>
+                                                        <div class="tag-list">
+                                                            @for (scope of workerScopeList(worker); track scope) {
+                                                                <span class="tag" [class.tag-invalid]="!scopeIsValid(scope)"><code>{{ scope }}</code><button type="button" aria-label="Remove scope" (click)="removeWorkerScope(worker.id, scope)">×</button></span>
+                                                            } @empty {
+                                                                <span class="tag-empty">No scope. Write actions will be denied.</span>
+                                                            }
+                                                        </div>
+                                                        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full">
+                                                            <mat-label>Add scope</mat-label>
+                                                            <input matInput [ngModel]="newScope()" (ngModelChange)="newScope.set($event)" (keyup.enter)="addWorkerScope(worker.id)" placeholder="/tmp/slp/build/ or agents/**">
+                                                            <button mat-button matSuffix type="button" (click)="addWorkerScope(worker.id)">Add</button>
+                                                        </mat-form-field>
+                                                        @if (scopeInputError(); as inputError) { <p class="field-error">{{ inputError }}</p> }
+                                                        <p class="field-help">Path prefix, glob, or symbolic scope. Use <code>agents/**</code> for a tree. Invalid paths are rejected.</p>
+                                                    </div>
+                                                    <div class="policy-field">
+                                                        <span class="field-label">Capabilities — skills this worker has</span>
+                                                        <div class="tag-list">
+                                                            @for (capability of worker.capabilities; track capability) {
+                                                                <span class="tag">{{ capability }}<button type="button" aria-label="Remove capability" (click)="removeWorkerCapability(worker.id, capability)">×</button></span>
+                                                            } @empty {
+                                                                <span class="tag-empty">No capabilities. Optional, descriptive only.</span>
+                                                            }
+                                                        </div>
+                                                        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full">
+                                                            <mat-label>Add capability</mat-label>
+                                                            <input matInput [ngModel]="newCapability()" (ngModelChange)="newCapability.set($event)" (keyup.enter)="addWorkerCapability(worker.id)" placeholder="be, fe, qc">
+                                                            <button mat-button matSuffix type="button" (click)="addWorkerCapability(worker.id)">Add</button>
+                                                        </mat-form-field>
+                                                        @if (capabilityInputError(); as inputError) { <p class="field-error">{{ inputError }}</p> }
+                                                        <div class="tag-suggestions">
+                                                            @for (suggestion of ['be','fe','qc','review','design','pm']; track suggestion) { <button type="button" (click)="quickCapability(worker.id, suggestion)">{{ suggestion }}</button> }
+                                                        </div>
+                                                        <p class="field-help">Lowercase slug only. Capability is a skill label, not a permission.</p>
+                                                    </div>
+                                                    <div class="policy-field">
+                                                        <span class="field-label">Allowed actions — verbs it may use</span>
+                                                        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full">
+                                                            <mat-select multiple [ngModel]="worker.verbs" (ngModelChange)="setWorkerVerbs(worker.id, $event)">
+                                                                <mat-option value="read">read — inspect files</mat-option>
+                                                                <mat-option value="write">write — create or replace files</mat-option>
+                                                                <mat-option value="append">append — add to files or logs</mat-option>
+                                                                <mat-option value="approve">approve — pass a gate</mat-option>
+                                                                <mat-option value="configure">configure — change settings</mat-option>
+                                                                <mat-option value="handoff">handoff — pass work to another worker</mat-option>
+                                                            </mat-select>
+                                                        </mat-form-field>
+                                                        <p class="field-help">Verb is an enforced permission. Gate workers may write only inside their evidence scope; <code>configure</code> is always denied.</p>
+                                                    </div>
+                                                    <div class="policy-field">
+                                                        <span class="field-label">Required evidence — proof before acting</span>
+                                                        <div class="tag-list">
+                                                            @for (requirement of worker.bar; track $index) {
+                                                                <span class="tag tag-evidence">{{ evidenceLabel(requirement) }}<button type="button" aria-label="Remove evidence" (click)="removeWorkerEvidence(worker.id, $index)">×</button></span>
+                                                            } @empty {
+                                                                <span class="tag-empty">No evidence required.</span>
+                                                            }
+                                                        </div>
+                                                        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full">
+                                                            <mat-label>Evidence type</mat-label>
+                                                            <mat-select [ngModel]="newEvidenceKind()" (ngModelChange)="newEvidenceKind.set($event)">
+                                                                <mat-option value="test">Tests pass</mat-option>
+                                                                <mat-option value="verify">Verify result</mat-option>
+                                                                <mat-option value="audit">Audit score</mat-option>
+                                                                <mat-option value="audit-critical">Audit critical findings = 0</mat-option>
+                                                                <mat-option value="scenario">Scenario executed</mat-option>
+                                                            </mat-select>
+                                                        </mat-form-field>
+                                                        @if (newEvidenceKind() === 'audit' || newEvidenceKind() === 'verify') {
+                                                            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full">
+                                                                <mat-label>{{ newEvidenceKind() === 'audit' ? 'Minimum rubric score' : 'Required verify result' }}</mat-label>
+                                                                <input matInput type="number" [ngModel]="newEvidenceValue()" (ngModelChange)="newEvidenceValue.set($event)" [placeholder]="newEvidenceKind() === 'audit' ? '85' : 'PASS'">
+                                                            </mat-form-field>
+                                                        }
+                                                        @if (evidenceInputError(); as inputError) { <p class="field-error">{{ inputError }}</p> }
+                                                        <button mat-stroked-button type="button" (click)="addWorkerEvidence(worker.id)">Add requirement</button>
+                                                        <p class="field-help">Checked as a typed value, not a text label. Audit compares rubric score; verify compares status; test/scenario require a pass flag.</p>
+                                                    </div>
+                                                    <div class="policy-field">
+                                                        <span class="field-label">When policy blocks — escalation</span>
+                                                        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full">
+                                                            <mat-select [ngModel]="worker.escalation" (ngModelChange)="updateWorkerField(worker.id, 'escalation', $event)">
+                                                                <mat-option value="allow">allow — report the denial</mat-option>
+                                                                <mat-option value="stop+notify">stop + notify — stop and tell the operator</mat-option>
+                                                                <mat-option value="run+warn+notify">run + warn + notify — continue with warning</mat-option>
+                                                            </mat-select>
+                                                        </mat-form-field>
+                                                    </div>
+                                                    @if (workerValidationErrors().length > 0) {
+                                                        @for (error of workerValidationErrors(); track error) { <p class="field-error">{{ error }}</p> }
+                                                    }
+
+                                                </section>
+                                                <section class="inspector-block">
+                                                    <h4>Deployment</h4>
+                                                    @if (hostProfiles().length === 0) {
+                                                        <div class="formation-empty compact"><div><strong>No host bindings yet</strong><span>Create one in Host bindings first.</span></div><button mat-stroked-button type="button" (click)="selectTab('hosts')">Open Host bindings</button></div>
+                                                    } @else {
+                                                        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full"><mat-label>Host bindings · {{ worker.hostBindingIds.length }} selected</mat-label>
+                                                            <mat-select multiple [ngModel]="worker.hostBindingIds" (ngModelChange)="setWorkerHostBindings(worker.id, $event)">
+                                                                @for (binding of hostProfiles(); track binding.id) { <mat-option [value]="binding.id">{{ bindingLabel(binding) }}</mat-option> }
+                                                            </mat-select>
+                                                        </mat-form-field>
+                                                    }
+                                                </section>
+                                                <section class="inspector-actions">
+                                                    <button mat-stroked-button type="button" [disabled]="worker.status !== 'active'" (click)="openPolicyCheck(worker)">Test policy</button>
+                                                    <button mat-stroked-button type="button" (click)="removeWorker(worker.id)">Remove</button>
+                                                </section>
+                                                @if (policyWorker()?.id === worker.id) {
+                                                    <section class="worker-policy-check inspector-policy">
+                                                        <header><div><p class="eyebrow">Policy check</p><small>{{ worker.scope || 'no scope' }} · {{ worker.verbs.join(', ') || 'no verbs' }}</small></div><button mat-button type="button" (click)="closePolicyCheck()">Close</button></header>
+                                                        <div class="policy-check-form">
+                                                            <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Verb</mat-label>
+                                                                <mat-select [ngModel]="policyVerb()" (ngModelChange)="policyVerb.set($event)">
+                                                                    @for (verb of ['read','write','append','approve','configure','handoff']; track verb) { <mat-option [value]="verb">{{ verb }}</mat-option> }
+                                                                </mat-select>
+                                                            </mat-form-field>
+                                                            <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Path</mat-label><input matInput [ngModel]="policyPath()" (ngModelChange)="policyPath.set($event)" placeholder="agents/rules/core.md"></mat-form-field>
+                                                            <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Evidence type</mat-label>
+                                                                <mat-select [ngModel]="policyEvidenceKind()" (ngModelChange)="policyEvidenceKind.set($event)">
+                                                                    <mat-option value="test">Tests pass</mat-option>
+                                                                    <mat-option value="verify">Verify result</mat-option>
+                                                                    <mat-option value="audit">Audit score</mat-option>
+                                                                    <mat-option value="audit-critical">Audit critical findings = 0</mat-option>
+                                                                    <mat-option value="scenario">Scenario executed</mat-option>
+                                                                </mat-select>
+                                                            </mat-form-field>
+                                                            @if (policyEvidenceKind() === 'audit' || policyEvidenceKind() === 'verify') {
+                                                                <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>{{ policyEvidenceKind() === 'audit' ? 'Rubric score' : 'Verify result' }}</mat-label><input matInput [ngModel]="policyEvidenceValue()" (ngModelChange)="policyEvidenceValue.set($event)" placeholder="90"></mat-form-field>
+                                                            }
+                                                            <button mat-flat-button color="primary" type="button" [disabled]="policyChecking()" (click)="runPolicyCheck()">{{ policyChecking() ? 'Checking…' : 'Run check' }}</button>
+                                                        </div>
+                                                        @if (policyResult(); as result) {
+                                                            <div class="policy-result" [class.policy-deny]="result.decision === 'DENY'"><strong>{{ result.decision }}</strong>@if (result.reasons?.length) { <span>{{ result.reasons.join(' · ') }}</span> } @else { <span>policy satisfied</span> }</div>
+                                                        }
+                                                    </section>
+                                                }
+                                            } @else {
+                                                <p class="muted worker-empty">Select a worker or add one.</p>
+                                            }
+                                        </div>
                                     </div>
-                                    <p class="knowledge-note">This defines the worker only. peer can write inside its scope; gate verifies or judges and never implements. Gate/peer evidence scopes such as <code>/tmp/slp/plan/</code> are ephemeral SLP workspaces, not product files.</p>
-                                    @if (workers().length === 0) {
-                                        <p class="muted worker-empty">No workers registered. Add a host-neutral worker definition first.</p>
-                                    } @else {
+                                </section>
+
+                                @if (workerImports().length > 0) {
+                                    <details class="import-history">
+                                        <summary>Import history · {{ workerImports().length }}</summary>
                                         <div class="worker-table-wrap">
                                             <table class="worker-table">
-                                                <caption>Definitions · one row per worker · no host binding here</caption>
-                                                <thead><tr><th>Worker</th><th>Role</th><th>Layer</th><th>Scope</th><th>Status</th><th></th></tr></thead>
+                                                <thead><tr><th>Source</th><th>Worker</th><th>Action</th><th>At</th></tr></thead>
                                                 <tbody>
-                                                    @for (worker of workers(); track worker.id) {
-                                                        <tr>
-                                                            <td><strong>{{ worker.name }}</strong><br><code>{{ worker.id }}</code></td>
-                                                            <td>{{ worker.role }}</td>
-                                                            <td><span class="badge" [class.badge-warn]="worker.layer === 'gate'">{{ worker.layer }}</span></td>
-                                                            <td><code>{{ worker.scope || 'not declared' }}</code></td>
-                                                            <td><span class="badge" [class.badge-warn]="worker.status === 'paused'">{{ worker.status }}</span></td>
-                                                            <td><button mat-stroked-button type="button" (click)="removeWorker(worker.id)">Remove</button></td>
-                                                        </tr>
+                                                    @for (record of workerImports(); track record.import_id) {
+                                                        <tr><td><code>{{ record.source_file }}</code><br><small>{{ record.source_type }}</small></td><td><code>{{ record.worker_id }}</code></td><td><span class="badge">{{ record.action }}</span></td><td>{{ record.imported_at }}</td></tr>
                                                     }
                                                 </tbody>
                                             </table>
                                         </div>
-                                    }
-                                </section>
-
-                                <section class="deployment-section">
-                                    <header class="deployment-head">
-                                        <div><p class="eyebrow">Deployment</p><h3>Deployment map</h3><p>Worker definitions above are host-neutral. This step assigns them to one or more existing host bindings. It does not create or delete host bindings.</p></div>
-                                        <span class="scope-badge">SEPARATE STEP</span>
-                                    </header>
-                                    @if (hostProfiles().length === 0) {
-                                        <div class="formation-empty">
-                                            <div><strong>No host bindings yet</strong><span>Create a host binding first. The formation applies to host bindings from tab 3 — this is not a second list.</span></div>
-                                            <button mat-stroked-button type="button" (click)="selectTab('hosts')">Open Host bindings</button>
-                                        </div>
-                                    } @else {
-                                        <div class="formation-deploy">
-                                            <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                                                <mat-label>Apply formation to host bindings · {{ formationHostIds().length }}/{{ hostProfiles().length }} selected</mat-label>
-                                                <mat-select multiple [ngModel]="formationHostIds()" (ngModelChange)="formationHostIds.set($event)">
-                                                    @for (binding of hostProfiles(); track binding.id) { <mat-option [value]="binding.id">{{ bindingLabel(binding) }}</mat-option> }
-                                                </mat-select>
-                                            </mat-form-field>
-                                            <button mat-stroked-button type="button" [disabled]="!canApplyFormation()" (click)="applyFormationHosts()">Apply to all workers</button>
-                                            @if (formationHostIds().length > 0) {
-                                                <div class="formation-selected">
-                                                    <span>Selected for placement</span>
-                                                    @for (id of formationHostIds(); track id) { <strong>{{ formationBindingLabel(id) }}</strong> }
-                                                    <button mat-button type="button" (click)="formationHostIds.set([])">Clear</button>
-                                                </div>
-                                            }
-                                            @if (formationApplyReason(); as reason) {
-                                                <small class="formation-warning">{{ reason }}</small>
-                                            } @else {
-                                                <small>Options are all host bindings from tab 3. Selection does not create or delete bindings; it assigns workers to them. {{ workers().length }} workers × {{ validFormationHostIds().length }} selected = {{ workers().length * validFormationHostIds().length }} placements.</small>
-                                            }
-                                        </div>
-                                    }
-                                    <div class="placement-summary">
-                                        <div><strong>{{ workerPlacementCount() }}</strong><span>placements</span></div>
-                                        <div><strong>{{ workerHostCoverage() }}</strong><span>host bindings used</span></div>
-                                        <button mat-button type="button" [disabled]="workerPlacementCount() === 0" (click)="clearFormationPlacements()">Clear placements</button>
-                                    </div>
-                                    <div class="worker-table-wrap placement-table-wrap">
-                                        <table class="worker-table">
-                                            <caption>Placements · same workers, viewed by host binding count</caption>
-                                            <thead><tr><th>Worker</th><th>Role</th><th>Layer</th><th>Host placements</th></tr></thead>
-                                            <tbody>
-                                                @for (worker of workers(); track worker.id) {
-                                                    <tr>
-                                                        <td><strong>{{ worker.name }}</strong><br><code>{{ worker.id }}</code></td>
-                                                        <td>{{ worker.role }}</td>
-                                                        <td><span class="badge" [class.badge-warn]="worker.layer === 'gate'">{{ worker.layer }}</span></td>
-                                                        <td class="worker-bindings" [title]="workerBindingLabel(worker)">{{ worker.hostBindingIds.length === 0 ? 'Not deployed' : worker.hostBindingIds.length + ' host binding' + (worker.hostBindingIds.length === 1 ? '' : 's') }}</td>
-                                                    </tr>
-                                                }
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </section>
+                                    </details>
+                                }
 
                                 <section class="workers-section">
                                     <h3>What a worker does not own</h3>
@@ -726,6 +1006,117 @@ function defaultPlugins(): PluginEntry[] {
                                         <div><span>Result</span><strong>Knowledge is owned, classified, and traceable</strong></div>
                                     </div>
                                 </header>
+
+                                <section class="knowledge-index-panel">
+                                    <div>
+                                        <span class="eyebrow">Knowledge index</span>
+                                        <strong>{{ knowledgeSummary()?.docs || 0 }} docs · {{ knowledgeSummary()?.edges || 0 }} edges · {{ knowledgeSummary()?.findings || 0 }} findings</strong>
+                                        <small>{{ knowledgeSummary()?.manifest ? 'Manifest v' + knowledgeSummary()?.manifest?.manifest_version + ' · source ' + (knowledgeSummary()?.manifest?.build_id || 'not indexed') : 'No index run yet. Index files to build manifest + graph.' }}</small>
+                                        <small>{{ knowledgeEmbeddingStatus()?.model || 'BAAI/bge-m3' }} · {{ knowledgeEmbeddingStatus()?.embedded || 0 }}/{{ knowledgeEmbeddingStatus()?.chunks || 0 }} chunks embedded</small>
+                                    </div>
+                                    <div class="knowledge-index-actions">
+                                        <button mat-stroked-button type="button" [disabled]="knowledgeEmbedding() || !knowledgeEmbeddingStatus()?.chunks || (knowledgeEmbeddingStatus()?.embedded || 0) >= (knowledgeEmbeddingStatus()?.chunks || 0)" (click)="embedKnowledge()">{{ knowledgeEmbedding() ? 'Embedding…' : ((knowledgeEmbeddingStatus()?.embedded || 0) >= (knowledgeEmbeddingStatus()?.chunks || 0) ? 'Embedded' : 'Embed pending') }}</button>
+                                        <button mat-stroked-button type="button" [disabled]="knowledgeChecking()" (click)="runKnowledgeCheck()">{{ knowledgeChecking() ? 'Checking…' : 'Run check' }}</button>
+                                        <button mat-flat-button color="primary" type="button" [disabled]="knowledgeIndexing()" (click)="indexKnowledge()">{{ knowledgeIndexing() ? 'Indexing…' : 'Index now' }}</button>
+                                    </div>
+                                </section>
+                                @if (knowledgeCheck(); as check) {
+                                    <section class="knowledge-check-result" [class.check-fail]="check.status === 'FAIL'">
+                                        <header><strong>Preflight · {{ check.status }}</strong><span>{{ check.checks.length }} checks</span></header>
+                                        @for (item of check.checks; track item.id) {
+                                            <div><span class="badge" [class.badge-warn]="item.status === 'FAIL'">{{ item.status }}</span><strong>{{ item.label }}</strong><small>{{ item.detail }}</small></div>
+                                        }
+                                    </section>
+                                }
+
+                                <section class="knowledge-index-detail">
+                                    <header class="knowledge-detail-head">
+                                        <div><h3>Indexed documents</h3><p>Read from Postgres. Content remains in files.</p></div>
+                                        <div class="knowledge-search">
+                                            <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Search indexed docs</mat-label><input matInput [ngModel]="knowledgeQuery()" (ngModelChange)="knowledgeQuery.set($event)" (keyup.enter)="searchKnowledge()" placeholder="requirement, manifest…"></mat-form-field>
+                                            <button mat-stroked-button type="button" (click)="searchKnowledge()">Search</button>
+                                        </div>
+                                    </header>
+                                    @if (knowledgeDocs().length === 0) {
+                                        <p class="muted">No indexed documents yet. Click Index now.</p>
+                                    } @else {
+                                        <div class="worker-table-wrap knowledge-doc-table">
+                                            <table class="worker-table">
+                                                <thead><tr><th>Document</th><th>Type</th><th>Status</th><th>Sections</th></tr></thead>
+                                                <tbody>
+                                                    @for (doc of knowledgeDocs(); track doc.doc_id) {
+                                                        <tr class="knowledge-doc-row" (click)="selectKnowledgeDoc(doc)"><td><strong>{{ doc.title || doc.path }}</strong><br><code>{{ doc.path }}</code></td><td>{{ doc.type }}</td><td>{{ doc.status }}</td><td>{{ doc.sections }}</td></tr>
+                                                    }
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    }
+                                    @if (knowledgeFindings().length > 0) {
+                                        <div class="knowledge-findings">
+                                            <h4>Open findings · {{ knowledgeFindings().length }}</h4>
+                                            @for (finding of knowledgeFindings(); track finding.finding_id) {
+                                                <div><span class="badge badge-warn">{{ finding.code }}</span><code>{{ finding.path || finding.doc_id || 'index' }}</code></div>
+                                            }
+                                        </div>
+                                    }
+                                    @if (knowledgeRetrieval(); as retrieval) {
+                                        <div class="knowledge-retrieval">
+                                            <header><strong>Hybrid retrieval</strong><span>{{ retrieval.results.length }} results · FTS {{ retrieval.counts.fts }} · graph {{ retrieval.counts.graph }} · vector {{ retrieval.vector.enabled ? 'on' : 'off' }}</span></header>
+                                            @if (!retrieval.vector.enabled) { <small>{{ retrieval.vector.reason }}</small> }
+                                            @if (retrieval.results.length === 0) {
+                                                <p class="muted">No match for “{{ retrieval.query }}”.</p>
+                                            } @else {
+                                                <div class="worker-table-wrap">
+                                                    <table class="worker-table">
+                                                        <thead><tr><th>#</th><th>Document</th><th>Why</th><th>RRF</th></tr></thead>
+                                                        <tbody>
+                                                            @for (hit of retrieval.results; track hit.doc.doc_id) {
+                                                                <tr class="knowledge-doc-row" (click)="selectKnowledgeDoc(hit.doc)"><td>{{ hit.rank }}</td><td><strong>{{ hit.doc.title || hit.doc.path }}</strong><br><code>{{ hit.doc.path }}</code></td><td>{{ hit.why.join(' · ') }}</td><td>{{ hit.score }}</td></tr>
+                                                            }
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                    @if (knowledgeCheck()?.coverage?.length) {
+                                        <div class="knowledge-coverage">
+                                            <h4>Coverage by type</h4>
+                                            <div class="worker-table-wrap">
+                                                <table class="worker-table">
+                                                    <thead><tr><th>Type</th><th>Docs</th><th>Sections</th><th>Findings</th></tr></thead>
+                                                    <tbody>
+                                                        @for (row of knowledgeCheck()?.coverage; track row.type) {
+                                                            <tr><td>{{ row.type }}</td><td>{{ row.docs }}</td><td>{{ row.sections }}</td><td>{{ row.findings }}</td></tr>
+                                                        }
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    }
+                                    @if (knowledgeDocDetail(); as detail) {
+                                        <div class="knowledge-graph-panel">
+                                            <header><div><h4>{{ detail.doc?.title || 'Document' }}</h4><code>{{ detail.doc?.path }}</code></div><button mat-button type="button" (click)="knowledgeDocDetail.set(null)">Close</button></header>
+                                            <div class="knowledge-graph-columns">
+                                                <div><span>Outgoing</span>
+                                                    @if (detail.outgoing.length === 0) { <small>No outgoing edges</small> }
+                                                    @for (edge of detail.outgoing; track edge.edge_id) { <div><em>{{ edge.kind }}</em><code>{{ edge.path }}</code></div> }
+                                                </div>
+                                                <div><span>Incoming</span>
+                                                    @if (detail.incoming.length === 0) { <small>No incoming edges</small> }
+                                                    @for (edge of detail.incoming; track edge.edge_id) { <div><em>{{ edge.kind }}</em><code>{{ edge.path }}</code></div> }
+                                                </div>
+                                                <div><span>Transitive · {{ detail.descendants.length }}</span>
+                                                    @if (detail.descendants.length === 0) { <small>No transitive edges</small> }
+                                                    @for (relative of detail.descendants; track relative.doc_id + relative.depth) { <div><em>depth {{ relative.depth }}</em><code>{{ relative.path }}</code></div> }
+                                                </div>
+                                                <div><span>Sections · {{ detail.sections.length }}</span>
+                                                    @for (section of detail.sections.slice(0, 8); track section.section_id) { <div><code>{{ section.anchor }}</code><small>{{ section.heading }}</small></div> }
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                </section>
 
                                 <div class="knowledge-layout">
                                     <div class="knowledge-main">
@@ -1114,7 +1505,7 @@ function defaultPlugins(): PluginEntry[] {
                 <footer class="settings-actions">
                     <button mat-stroked-button type="button" (click)="back()">Cancel</button>
                     <div class="settings-footer-right">
-                        <button mat-stroked-button type="button" [disabled]="saving()" (click)="save()">Save settings</button>
+                        <button mat-stroked-button type="button" [disabled]="saving() || (activeTab() === 'workers' && workerValidationErrors().length > 0)" (click)="save()">Save settings</button>
                         @if (activeTab() === lastTab) {
                             <button mat-flat-button color="primary" type="button" [disabled]="saving()" (click)="finish()">{{ saving() ? 'Saving…' : 'Finish' }}</button>
                         } @else {
@@ -1126,12 +1517,12 @@ function defaultPlugins(): PluginEntry[] {
         </div>
     `,
     styles: [`
-        .settings-page { display: grid; gap: var(--space-5); max-width: var(--container); margin: 0 auto; }
-        .page-header { display: flex; justify-content: space-between; gap: var(--space-4); align-items: flex-start; }
+        .settings-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); max-width: var(--container); min-width: 0; margin: 0 auto; }
+        .page-header { display: flex; justify-content: space-between; gap: var(--space-4); align-items: flex-start; min-width: 0; }
         .page-header h1 { margin: 0 0 var(--space-1); }
         .eyebrow { color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-size: var(--text-xs); margin: 0 0 var(--space-1); }
         .subtitle { color: var(--muted); margin: 0; }
-        .settings-tabs { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); overflow: hidden; }
+        .settings-tabs { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); min-width: 0; gap: 2px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); overflow: hidden; }
         .settings-tab { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border: 0; border-right: 1px solid var(--line); background: transparent; color: var(--muted); font: inherit; text-align: left; cursor: pointer; }
         .settings-tab-copy { display: grid; gap: 2px; min-width: 0; }
         .settings-tab-copy strong { color: var(--ink); font-size: var(--text-sm); font-weight: 650; line-height: 1.2; }
@@ -1143,7 +1534,7 @@ function defaultPlugins(): PluginEntry[] {
         .settings-tab:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
         .settings-step-no { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; border: 1px solid currentColor; font-size: var(--text-xs); font-weight: 700; flex: none; }
         .settings-tab-content { border: 1px solid var(--line); border-top: 0; border-radius: 0 0 var(--radius-md) var(--radius-md); background: var(--surface); }
-        .tab-panel { display: grid; gap: var(--space-4); padding: var(--space-5); }
+        .tab-panel { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: var(--space-4); padding: var(--space-5); }
         .section-hint { color: var(--muted); margin: 0; }
         .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
         .form-grid mat-form-field { width: 100%; }
@@ -1205,7 +1596,7 @@ function defaultPlugins(): PluginEntry[] {
         .loading-label { color: var(--muted); margin: 0; }
         .settings-loading { border: 1px solid var(--line); border-radius: var(--radius-md); padding: var(--space-5); background: var(--surface); }
         @media (max-width: 1100px) { .settings-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); } .host-grid { grid-template-columns: 1fr; } .layer-row { grid-template-columns: minmax(200px, 1fr) minmax(120px, .6fr) minmax(180px, 1fr) auto; gap: var(--space-3); height: auto; min-height: 100px; } .layer-columns { display: none; } }
-        @media (max-width: 700px) { .settings-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); } .form-grid, .event-grid, .stack-summary { grid-template-columns: 1fr; } .page-header { flex-direction: column; } .tab-panel { padding: var(--space-4); } .layer-row { grid-template-columns: 1fr; align-items: start; } .layer-state { justify-content: flex-start; } .group-head { flex-direction: column; } }
+        @media (max-width: 700px) { .settings-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; } .settings-tabs .settings-tab { min-width: 0; overflow: hidden; } .form-grid, .event-grid, .stack-summary { grid-template-columns: 1fr; } .page-header { flex-direction: column; } .tab-panel { padding: var(--space-4); } .layer-row { grid-template-columns: 1fr; align-items: start; } .layer-state { justify-content: flex-start; } .group-head { flex-direction: column; } }
     `],
 })
 export class ConsumerSettingsPage implements OnInit {
@@ -1246,8 +1637,6 @@ export class ConsumerSettingsPage implements OnInit {
             newStackVersion: this.newStackVersion(),
             hostProfiles: this.hostProfiles(),
             developers: this.developers(),
-            workers: this.workers(),
-            workerEdges: this.workerEdges(),
             formationHostIds: this.formationHostIds(),
             jiraEnabled: this.jiraEnabled(),
             jiraProject: this.jiraProject(),
@@ -1302,10 +1691,57 @@ export class ConsumerSettingsPage implements OnInit {
     readonly detectedHosts = signal<Array<{ hostPluginId: string; label: string; markers: string[] }>>([]);
     readonly developers = signal<string[]>([]);
     readonly workers = signal<WorkerEntry[]>(defaultWorkers());
+    readonly selectedWorkerId = signal('');
+    readonly selectedWorker = computed(() =>
+        this.workers().find((worker) => worker.id === this.selectedWorkerId()) || this.workers()[0] || null
+    );
+
+    readonly workerValidationErrors = computed(() => {
+        const errors: string[] = [];
+        for (const worker of this.workers()) {
+            for (const scope of this.workerScopeList(worker)) {
+                if (!this.scopeIsValid(scope)) errors.push(`${worker.name}: invalid scope "${scope}"`);
+            }
+            for (const capability of worker.capabilities) {
+                if (!/^[a-z][a-z0-9-]{0,31}$/.test(capability)) errors.push(`${worker.name}: invalid capability "${capability}"`);
+            }
+            for (const requirement of worker.bar) {
+                if (!this.requirementIsValid(requirement)) errors.push(`${worker.name}: invalid evidence requirement "${this.evidenceLabel(requirement)}"`);
+            }
+        }
+        return errors;
+    });
     readonly workerEdges = signal<WorkerEdge[]>(defaultWorkerEdges());
+    readonly policyWorker = signal<WorkerEntry | null>(null);
+    readonly policyVerb = signal('read');
+    readonly policyPath = signal('');
+    readonly policyEvidenceKind = signal<'test' | 'verify' | 'audit' | 'audit-critical' | 'scenario'>('test');
+    readonly policyEvidenceValue = signal('');
+    readonly policyResult = signal<any | null>(null);
+    readonly policyChecking = signal(false);
+    readonly workerImporting = signal(false);
+    readonly workerImportPreview = signal<any | null>(null);
+    readonly importSelectedHashes = signal<string[]>([]);
+    readonly importActions = signal<Record<string, 'import' | 'replace' | 'copy' | 'skip'>>({});
+    readonly workerImportDirty = signal(false);
+    readonly workerImports = signal<any[]>([]);
+    readonly ruleFiles = signal<any[]>([]);
+    readonly materialCounts = signal<{ skills: number; hooks: number; subagents: number; rules: number }>({ skills: 0, hooks: 0, subagents: 0, rules: 0 });
+    readonly ruleImporting = signal(false);
+    readonly ruleImportPreview = signal<any | null>(null);
+    readonly ruleSelectedHashes = signal<string[]>([]);
+    readonly ruleImportActions = signal<Record<string, 'skip' | 'replace' | 'copy'>>({});
+    readonly newCapability = signal('');
+    readonly newEvidenceKind = signal<'test' | 'verify' | 'audit' | 'audit-critical' | 'scenario'>('test');
+    readonly newEvidenceValue = signal('85');
+    readonly newScope = signal('');
+    readonly scopeInputError = signal('');
+    readonly capabilityInputError = signal('');
+    readonly evidenceInputError = signal('');
     readonly formationHostIds = signal<string[]>([]);
-    readonly workerDraft = signal<WorkerDraft>({ name: '', role: 'dev', layer: 'peer', scope: '' });
+    readonly workerDraft = signal<WorkerDraft>({ name: '', role: 'dev', layer: 'peer', scope: '', capabilities: '', verbs: 'read,append', bar: '', escalation: 'allow' });
     readonly workerRoles = ['scout', 'plan', 'build', 'fixbug', 'verify', 'audit', 'qc', 'lead', 'ba', 'dev', 'fe', 'be', 'qa', 'pm', 'review'];
+    readonly workerStatuses: Array<'declared' | 'active' | 'paused' | 'retired'> = ['declared', 'active', 'paused', 'retired'];
     readonly newDeveloperId = signal('');
     readonly bindingDeveloper = signal('');
     readonly addingHostFor = signal<string | null>(null);
@@ -1338,6 +1774,17 @@ export class ConsumerSettingsPage implements OnInit {
     readonly openRegisterRequired = signal(true);
     readonly buildEnforcementRequired = signal(true);
     readonly quartetProfile = signal<'standard' | 'extended'>('standard');
+    readonly knowledgeSummary = signal<KnowledgeSummaryDto | null>(null);
+    readonly knowledgeDocs = signal<KnowledgeDocDto[]>([]);
+    readonly knowledgeFindings = signal<KnowledgeFindingDto[]>([]);
+    readonly knowledgeDocDetail = signal<KnowledgeDocDetailDto | null>(null);
+    readonly knowledgeCheck = signal<KnowledgeCheckDto | null>(null);
+    readonly knowledgeRetrieval = signal<KnowledgeRetrievalDto | null>(null);
+    readonly knowledgeEmbeddingStatus = signal<KnowledgeEmbeddingStatusDto | null>(null);
+    readonly knowledgeEmbedding = signal(false);
+    readonly knowledgeChecking = signal(false);
+    readonly knowledgeQuery = signal('');
+    readonly knowledgeIndexing = signal(false);
     readonly manifestEnabled = signal(true);
     readonly manifestPath = signal('.harness/manifest.json');
     readonly manifestHumanHeaderKeys = signal<string[]>(['id', 'type', 'status', 'owner', 'sot_doc_version', 'representation', 'source_of_truth', 'phase']);
@@ -1577,7 +2024,15 @@ export class ConsumerSettingsPage implements OnInit {
             layer: worker?.layer === 'gate' ? 'gate' : 'peer',
             hostBindingIds,
             scope: String(worker?.scope || ''),
-            status: worker?.status === 'active' || worker?.status === 'paused' ? worker.status : 'declared',
+            status: ['active', 'paused', 'retired'].includes(worker?.status) ? worker.status : 'declared',
+            capabilities: Array.isArray(worker?.capabilities) ? worker.capabilities : [],
+            verbs: Array.isArray(worker?.verbs) ? worker.verbs : ['read', 'append'],
+            bar: Array.isArray(worker?.bar) ? worker.bar.map((item: any) => typeof item === 'string' ? { kind: 'manual', label: item } : item) : [],
+            escalation: String(worker?.escalation || 'allow'),
+            instructions: String(worker?.instructions || ''),
+            sourceFile: worker?.sourceFile ? String(worker.sourceFile) : undefined,
+            sourceHash: worker?.sourceHash ? String(worker.sourceHash) : undefined,
+            sourceType: worker?.sourceType ? String(worker.sourceType) : undefined,
         };
     }
 
@@ -1649,33 +2104,390 @@ export class ConsumerSettingsPage implements OnInit {
         this.workers.update((workers) => workers.map((worker) => ({ ...worker, hostBindingIds: [...hostBindingIds] })));
     }
 
+    private loadRuleFiles(id: string): void {
+        Promise.all([this.service.getRules(id), this.service.getMaterialSummary(id)])
+            .then(([rules, material]) => {
+                this.ruleFiles.set(rules);
+                this.materialCounts.set(material);
+                this.stackLayers.update((layers) => layers.map((layer) => layer.id === 'rules' ? { ...layer, files: rules.length } : layer));
+            })
+            .catch(() => {
+                this.ruleFiles.set([]);
+                this.materialCounts.set({ skills: 0, hooks: 0, subagents: 0, rules: 0 });
+            });
+    }
+
+    ruleMdcCount(): number {
+        return this.ruleFiles().filter((rule) => String(rule.sourceFile || '').toLowerCase().endsWith('.mdc')).length;
+    }
+
+    ruleMdCount(): number {
+        return this.ruleFiles().length - this.ruleMdcCount();
+    }
+
+    onRuleFiles(event: Event): void {
+        const input = event.target as HTMLInputElement;
+        const files = Array.from(input.files || []);
+        input.value = '';
+        if (files.length === 0) return;
+        this.ruleImporting.set(true);
+        Promise.all(files.map(async (file) => ({ name: file.name, content: await file.text() })))
+            .then((payload) => this.service.previewRuleImport(this.consumerId, payload))
+            .then((preview) => {
+                this.ruleImportPreview.set(preview);
+                this.ruleSelectedHashes.set(preview.candidates.map((candidate: any) => candidate.sourceHash));
+                this.ruleImportActions.set(Object.fromEntries(preview.candidates.map((candidate: any) => [candidate.sourceHash, candidate.conflict ? 'skip' : 'replace'])));
+            })
+            .catch((err) => this.error.set(err?.detail || err?.message || 'Rule import preview failed'))
+            .finally(() => this.ruleImporting.set(false));
+    }
+
+    ruleAction(hash: string): 'skip' | 'replace' | 'copy' {
+        return this.ruleImportActions()[hash] || 'skip';
+    }
+
+    setRuleAction(hash: string, action: 'skip' | 'replace' | 'copy'): void {
+        this.ruleImportActions.update((actions) => ({ ...actions, [hash]: action }));
+    }
+
+    toggleRuleImport(hash: string, checked: boolean): void {
+        this.ruleSelectedHashes.update((hashes) => checked ? [...new Set([...hashes, hash])] : hashes.filter((item) => item !== hash));
+    }
+
+    importableRuleCount(): number {
+        const preview = this.ruleImportPreview();
+        if (!preview) return 0;
+        const selected = new Set(this.ruleSelectedHashes());
+        return preview.candidates.filter((candidate: any) => selected.has(candidate.sourceHash) && this.ruleAction(candidate.sourceHash) !== 'skip').length;
+    }
+
+    applyRuleImport(): void {
+        const preview = this.ruleImportPreview();
+        if (!preview) return;
+        const selected = new Set(this.ruleSelectedHashes());
+        const candidates = preview.candidates
+            .filter((candidate: any) => selected.has(candidate.sourceHash) && this.ruleAction(candidate.sourceHash) !== 'skip')
+            .map((candidate: any) => ({ ...candidate, action: this.ruleAction(candidate.sourceHash) }));
+        if (candidates.length === 0) return;
+        this.service.applyRuleImport(this.consumerId, candidates)
+            .then(() => this.loadRuleFiles(this.consumerId))
+            .then(() => {
+                this.ruleImportPreview.set(null);
+                this.ruleSelectedHashes.set([]);
+                this.ruleImportActions.set({});
+            })
+            .catch((err) => this.error.set(err?.detail || err?.message || 'Rule import failed'));
+    }
+
+    deleteRule(rule: any): void {
+        if (!window.confirm(`Remove ${rule.id} from agents/rules?`)) return;
+        this.service.deleteRule(this.consumerId, rule.id)
+            .then(() => this.loadRuleFiles(this.consumerId))
+            .catch((err) => this.error.set(err?.detail || err?.message || 'Rule delete failed'));
+    }
+
+    closeRuleImport(): void {
+        this.ruleImportPreview.set(null);
+        this.ruleSelectedHashes.set([]);
+        this.ruleImportActions.set({});
+    }
+
+    onWorkerFiles(event: Event): void {
+        const input = event.target as HTMLInputElement;
+        const files = Array.from(input.files || []);
+        input.value = '';
+        if (files.length === 0) return;
+        this.workerImporting.set(true);
+        Promise.all(files.map(async (file) => ({ name: file.name, content: await file.text() })))
+            .then((payload) => this.service.previewWorkerImport(this.consumerId, payload))
+            .then((preview) => {
+                this.workerImportPreview.set(preview);
+                this.importSelectedHashes.set(preview.candidates.map((candidate: any) => candidate.sourceHash));
+                this.importActions.set(Object.fromEntries(preview.candidates.map((candidate: any) => [candidate.sourceHash, candidate.conflict ? 'skip' : 'import'])));
+            })
+            .catch((err) => this.error.set(err?.detail || err?.message || 'Import preview failed'))
+            .finally(() => this.workerImporting.set(false));
+    }
+
+    toggleImport(hash: string, checked: boolean): void {
+        this.importSelectedHashes.update((hashes) => checked
+            ? [...new Set([...hashes, hash])]
+            : hashes.filter((item) => item !== hash));
+    }
+
+    importAction(hash: string): 'import' | 'replace' | 'copy' | 'skip' {
+        return this.importActions()[hash] || 'import';
+    }
+
+    setImportAction(hash: string, action: 'import' | 'replace' | 'copy' | 'skip'): void {
+        this.importActions.update((actions) => ({ ...actions, [hash]: action }));
+    }
+
+    importableCount(): number {
+        const preview = this.workerImportPreview();
+        if (!preview) return 0;
+        const selected = new Set(this.importSelectedHashes());
+        return preview.candidates.filter((candidate: any) => selected.has(candidate.sourceHash) && this.importAction(candidate.sourceHash) !== 'skip').length;
+    }
+
+    importWorkers(): void {
+        const preview = this.workerImportPreview();
+        if (!preview) return;
+        const selected = new Set(this.importSelectedHashes());
+        const imported: WorkerEntry[] = [];
+        for (const candidate of preview.candidates) {
+            if (!selected.has(candidate.sourceHash)) continue;
+            const action = this.importAction(candidate.sourceHash);
+            if (action === 'skip') continue;
+            const worker = this.normalizeWorker(candidate.worker);
+            let targetId = worker.id;
+            if (action === 'replace' && candidate.conflictWith) {
+                this.workers.update((workers) => workers.filter((item) => item.id !== candidate.conflictWith));
+                targetId = candidate.conflictWith;
+            }
+            if (action === 'copy') {
+                let suffix = 2;
+                targetId = `${worker.id}-copy`;
+                while (this.workers().some((item) => item.id === targetId)) targetId = `${worker.id}-copy-${suffix++}`;
+            }
+            const next = { ...worker, id: targetId };
+            this.workers.update((workers) => [...workers.filter((item) => item.id !== targetId), next]);
+            imported.push(next);
+            void this.service.recordWorkerImport(this.consumerId, {
+                sourceFile: candidate.sourceFile,
+                sourceHash: candidate.sourceHash,
+                sourceType: candidate.sourceType,
+                workerId: targetId,
+                action: action === 'import' ? 'import' : action,
+            }).catch(() => undefined);
+        }
+        if (imported.length === 0) return;
+        this.selectedWorkerId.set(imported[0].id);
+        this.workerImportPreview.set(null);
+        this.importSelectedHashes.set([]);
+        this.importActions.set({});
+        this.workerImportDirty.set(true);
+        this.saved.set(false);
+        this.loadWorkerImports();
+    }
+
+    loadWorkerImports(): void {
+        this.service.getWorkerImports(this.consumerId)
+            .then((records) => this.workerImports.set(records))
+            .catch(() => this.workerImports.set([]));
+    }
+
+    closeImportPreview(): void {
+        this.workerImportPreview.set(null);
+        this.importSelectedHashes.set([]);
+    }
+
+    selectWorker(id: string): void {
+        this.selectedWorkerId.set(id);
+        this.newEvidenceValue.set('85');
+        this.evidenceInputError.set('');
+    }
+
+    updateWorkerField<K extends 'name' | 'role' | 'layer' | 'scope' | 'escalation' | 'instructions'>(id: string, key: K, value: WorkerEntry[K]): void {
+        this.workers.update((workers) => workers.map((worker) => worker.id === id ? { ...worker, [key]: value } : worker));
+    }
+
+    setWorkerVerbs(id: string, verbs: string[]): void {
+        this.workers.update((workers) => workers.map((worker) => worker.id === id ? { ...worker, verbs: [...verbs] } : worker));
+    }
+
+    workerScopeList(worker: WorkerEntry): string[] {
+        return worker.scope.split(',').map((item) => item.trim()).filter(Boolean);
+    }
+
+    scopeIsValid(scope: string): boolean {
+        return /^(\/|\.\.?\/)?[A-Za-z0-9._*/-]+$/.test(scope);
+    }
+
+    evidenceLabel(requirement: EvidenceRequirementDto): string {
+        if (requirement.kind === 'audit') return `Audit ${requirement.metric || 'rubric'} ${requirement.op || '>='} ${requirement.value ?? 0}`;
+        if (requirement.kind === 'verify') return `Verify ${requirement.value || 'PASS'}`;
+        if (requirement.kind === 'test') return 'Tests pass';
+        if (requirement.kind === 'scenario') return 'Scenario executed';
+        return requirement.label || requirement.kind;
+    }
+
+    requirementIsValid(requirement: EvidenceRequirementDto): boolean {
+        if (requirement.kind === 'audit') return Number.isFinite(Number(requirement.value));
+        if (requirement.kind === 'verify') return String(requirement.value || 'PASS').length > 0;
+        return requirement.kind === 'test' || requirement.kind === 'scenario';
+    }
+
+    addWorkerScope(id: string): void {
+        const values = this.newScope().split(',').map((item) => item.trim()).filter(Boolean);
+        if (values.length === 0) return;
+        const invalid = values.find((value) => !/^(\/|\.\.?\/)?[A-Za-z0-9._*/-]+$/.test(value));
+        if (invalid) {
+            this.scopeInputError.set(`Scope must be a path or glob: ${invalid}`);
+            return;
+        }
+        this.scopeInputError.set('');
+        this.workers.update((workers) => workers.map((worker) => {
+            if (worker.id !== id) return worker;
+            const existing = new Set(this.workerScopeList(worker));
+            values.forEach((value) => existing.add(value));
+            return { ...worker, scope: [...existing].join(', ') };
+        }));
+        this.newScope.set('');
+    }
+
+    removeWorkerScope(id: string, value: string): void {
+        this.workers.update((workers) => workers.map((worker) => worker.id === id
+            ? { ...worker, scope: this.workerScopeList(worker).filter((item) => item !== value).join(', ') }
+            : worker));
+    }
+
+    addWorkerCapability(id: string): void {
+        const values = this.newCapability().split(',').map((item) => item.trim().toLowerCase()).filter(Boolean);
+        if (values.length === 0) return;
+        const invalid = values.find((value) => !/^[a-z][a-z0-9-]{0,31}$/.test(value));
+        if (invalid) {
+            this.capabilityInputError.set(`Capability must be a lowercase slug: ${invalid}`);
+            return;
+        }
+        this.capabilityInputError.set('');
+        this.workers.update((workers) => workers.map((worker) => {
+            if (worker.id !== id) return worker;
+            const existing = new Set(worker.capabilities);
+            values.forEach((value) => existing.add(value));
+            return { ...worker, capabilities: [...existing] };
+        }));
+        this.newCapability.set('');
+    }
+
+    removeWorkerCapability(id: string, capability: string): void {
+        this.workers.update((workers) => workers.map((worker) => worker.id === id
+            ? { ...worker, capabilities: worker.capabilities.filter((item) => item !== capability) }
+            : worker));
+    }
+
+    addWorkerEvidence(id: string): void {
+        const kind = this.newEvidenceKind();
+        let requirement: EvidenceRequirementDto;
+        if (kind === 'audit') {
+            const value = Number(this.newEvidenceValue());
+            if (!Number.isFinite(value)) {
+                this.evidenceInputError.set('Audit threshold must be a number.');
+                return;
+            }
+            requirement = { kind: 'audit', metric: 'rubric', op: '>=', value };
+        } else if (kind === 'verify') {
+            requirement = { kind: 'verify', metric: 'status', op: '==', value: this.newEvidenceValue().trim().toUpperCase() || 'PASS' };
+        } else if (kind === 'audit-critical') {
+            requirement = { kind: 'audit', metric: 'critical', op: '==', value: 0 };
+        } else if (kind === 'scenario') {
+            requirement = { kind: 'scenario', metric: 'executed', op: 'truthy', value: true };
+        } else {
+            requirement = { kind: 'test', metric: 'passed', op: 'truthy', value: true };
+        }
+        this.evidenceInputError.set('');
+        this.workers.update((workers) => workers.map((worker) => {
+            if (worker.id !== id) return worker;
+            const label = this.evidenceLabel(requirement);
+            if (worker.bar.some((item) => this.evidenceLabel(item) === label)) return worker;
+            return { ...worker, bar: [...worker.bar, requirement] };
+        }));
+    }
+
+    removeWorkerEvidence(id: string, index: number): void {
+        this.workers.update((workers) => workers.map((worker) => worker.id === id
+            ? { ...worker, bar: worker.bar.filter((_, itemIndex) => itemIndex !== index) }
+            : worker));
+    }
+
+    quickCapability(id: string, value: string): void {
+        this.newCapability.set(value);
+        this.addWorkerCapability(id);
+    }
+
+    setWorkerList(id: string, key: 'capabilities' | 'verbs', value: string): void {
+        const items = splitList(value);
+        this.workers.update((workers) => workers.map((worker) => worker.id === id ? { ...worker, [key]: items } : worker));
+    }
+
+    setWorkerHostBindings(id: string, hostBindingIds: string[]): void {
+        this.workers.update((workers) => workers.map((worker) => worker.id === id ? { ...worker, hostBindingIds: [...hostBindingIds] } : worker));
+    }
+
     addWorker(): void {
-        const draft = this.workerDraft();
-        const name = draft.name.trim();
-        if (!name) return;
+        const id = `worker-${Date.now().toString(36)}`;
         const worker: WorkerEntry = {
-            id: `worker-${Date.now().toString(36)}`,
-            name,
-            role: draft.role,
-            layer: draft.layer,
+            id,
+            name: 'New worker',
+            role: 'dev',
+            layer: 'peer',
             hostBindingIds: [],
-            scope: draft.scope.trim(),
+            scope: '',
             status: 'declared',
+            capabilities: [],
+            verbs: ['read', 'append'],
+            bar: [],
+            escalation: 'allow',
         };
         this.workers.update((workers) => [...workers, worker]);
-        this.workerDraft.set({ name: '', role: 'dev', layer: 'peer', scope: '' });
+        this.selectedWorkerId.set(id);
+    }
+
+    setWorkerStatus(id: string, status: WorkerEntry['status']): void {
+        this.workers.update((workers) => workers.map((worker) => worker.id === id ? { ...worker, status } : worker));
+    }
+
+    activateWorker(id: string): void {
+        this.setWorkerStatus(id, 'active');
+    }
+
+    openPolicyCheck(worker: WorkerEntry): void {
+        this.policyWorker.set(worker);
+        this.policyResult.set(null);
+        this.policyPath.set('');
+        this.policyEvidenceValue.set('');
+    }
+
+    closePolicyCheck(): void {
+        this.policyWorker.set(null);
+        this.policyResult.set(null);
+    }
+
+    buildPolicyEvidence(): any {
+        const kind = this.policyEvidenceKind();
+        if (kind === 'audit' || kind === 'audit-critical') return { kind: 'audit', rubric: Number(this.policyEvidenceValue()) || 0, critical: 0 };
+        if (kind === 'verify') return { kind: 'verify', status: this.policyEvidenceValue().trim().toUpperCase() || 'PASS' };
+        if (kind === 'scenario') return { kind: 'scenario', executed: true };
+        return { kind: 'test', passed: true };
+    }
+
+    runPolicyCheck(): void {
+        const profile = this.current();
+        const worker = this.policyWorker();
+        if (!profile || !worker || this.policyChecking()) return;
+        this.policyChecking.set(true);
+        this.service.checkWorker(profile.id, worker.id, {
+            verb: this.policyVerb(),
+            path: this.policyPath().trim() || undefined,
+            evidence: [this.buildPolicyEvidence()],
+        })
+            .then((result) => this.policyResult.set(result))
+            .catch((err) => this.policyResult.set({ decision: 'DENY', reasons: [err?.detail || err?.message || 'Policy check failed'] }))
+            .finally(() => this.policyChecking.set(false));
     }
 
     removeWorker(id: string): void {
         this.workers.update((workers) => workers.filter((worker) => worker.id !== id));
         this.workerEdges.update((edges) => edges.filter((edge) => edge.from !== id && edge.to !== id));
+        if (this.selectedWorkerId() === id) this.selectedWorkerId.set('');
+        if (this.policyWorker()?.id === id) this.closePolicyCheck();
     }
 
     resetWorkers(): void {
         this.workers.set(defaultWorkers());
         this.workerEdges.set(defaultWorkerEdges());
         this.formationHostIds.set([]);
-        this.workerDraft.set({ name: '', role: 'dev', layer: 'peer', scope: '' });
+        this.workerDraft.set({ name: '', role: 'dev', layer: 'peer', scope: '', capabilities: '', verbs: 'read,append', bar: '', escalation: 'allow' });
     }
 
     workerName(id: string): string {
@@ -2317,6 +3129,99 @@ export class ConsumerSettingsPage implements OnInit {
         })));
     }
 
+    private loadKnowledgeIndex(id: string): void {
+        this.service.getKnowledge(id)
+            .then((summary) => this.knowledgeSummary.set(summary))
+            .catch(() => this.knowledgeSummary.set(null));
+        this.loadKnowledgeDetails(id);
+    }
+
+    loadKnowledgeDetails(id: string): void {
+        this.service.getKnowledgeDocs(id, this.knowledgeQuery())
+            .then((docs) => this.knowledgeDocs.set(docs))
+            .catch(() => this.knowledgeDocs.set([]));
+        this.service.getKnowledgeFindings(id)
+            .then((findings) => this.knowledgeFindings.set(findings))
+            .catch(() => this.knowledgeFindings.set([]));
+        this.service.getKnowledgeEmbeddings(id)
+            .then((status) => this.knowledgeEmbeddingStatus.set(status))
+            .catch(() => this.knowledgeEmbeddingStatus.set(null));
+    }
+
+    selectKnowledgeDoc(doc: KnowledgeDocDto): void {
+        const profile = this.current();
+        if (!profile) return;
+        this.service.getKnowledgeDoc(profile.id, doc.doc_id)
+            .then((detail) => this.knowledgeDocDetail.set(detail))
+            .catch(() => this.knowledgeDocDetail.set(null));
+    }
+
+    searchKnowledge(): void {
+        const profile = this.current();
+        if (!profile) return;
+        const query = this.knowledgeQuery().trim();
+        if (!query) {
+            this.knowledgeRetrieval.set(null);
+            this.loadKnowledgeDetails(profile.id);
+            return;
+        }
+        this.service.retrieveKnowledge(profile.id, query)
+            .then((result) => this.knowledgeRetrieval.set(result))
+            .catch(() => this.knowledgeRetrieval.set(null));
+    }
+
+    embedKnowledge(): void {
+        const profile = this.current();
+        if (!profile || this.knowledgeEmbedding()) return;
+        this.knowledgeEmbedding.set(true);
+        this.service.embedKnowledge(profile.id)
+            .then(() => this.loadKnowledgeDetails(profile.id))
+            .catch((err) => this.error.set(err?.detail || err?.message || 'Embedding failed'))
+            .finally(() => this.knowledgeEmbedding.set(false));
+    }
+
+    runKnowledgeCheck(): void {
+        const profile = this.current();
+        if (!profile || this.knowledgeChecking()) return;
+        this.knowledgeChecking.set(true);
+        this.service.checkKnowledge(profile.id)
+            .then((result) => this.knowledgeCheck.set(result))
+            .catch((err) => this.error.set(err?.detail || err?.message || 'Knowledge check failed'))
+            .finally(() => this.knowledgeChecking.set(false));
+    }
+
+    indexKnowledge(): void {
+        const profile = this.current();
+        if (!profile || this.knowledgeIndexing()) return;
+        this.knowledgeIndexing.set(true);
+        this.error.set(null);
+        this.service.indexKnowledge(profile.id)
+            .then((summary) => {
+                this.knowledgeSummary.set(summary);
+                this.loadKnowledgeDetails(profile.id);
+                this.saved.set(true);
+            })
+            .catch((err) => this.error.set(err?.detail || err?.message || 'Knowledge index failed'))
+            .finally(() => this.knowledgeIndexing.set(false));
+    }
+
+    private loadWorkerFiles(id: string): void {
+        this.service.getWorkers(id)
+            .then((config) => {
+                if (Array.isArray(config.workers) && config.workers.length > 0) {
+                    this.workers.set(config.workers.map((worker) => this.normalizeWorker(worker)));
+                }
+                if (Array.isArray(config.edges) && config.edges.length > 0) {
+                    this.workerEdges.set(config.edges.map((edge) => ({ ...edge })));
+                }
+                this.pruneWorkerBindings();
+                this.loadWorkerImports();
+            })
+            .catch(() => {
+                // No worker files yet; the default formation remains visible.
+            });
+    }
+
     save(navigateAfter = false): void {
         const profile = this.current();
         if (!profile) return;
@@ -2327,7 +3232,7 @@ export class ConsumerSettingsPage implements OnInit {
             observation: { consent: this.consent(), events: this.events() },
             settings: {
                 general: { owner: this.owner().trim(), locale: this.locale().trim(), tags: this.tags().split(',').map((tag) => tag.trim()).filter(Boolean), description: this.description().trim() },
-                harness: { stack: { version: this.activeStackVersion(), status: this.stackStatus(), layers: this.stackLayers(), versions: this.stackVersions() }, hostProfiles: this.hostProfiles(), developers: this.developers(), workers: this.workers(), workerEdges: this.workerEdges(), formationHostIds: this.formationHostIds(), plugins: this.plugins() },
+                harness: { stack: { version: this.activeStackVersion(), status: this.stackStatus(), layers: this.stackLayers(), versions: this.stackVersions() }, hostProfiles: this.hostProfiles(), developers: this.developers(), formationHostIds: this.formationHostIds(), plugins: this.plugins() },
                 jira: { enabled: this.jiraEnabled(), projectKey: this.jiraProject().trim(), syncMode: this.jiraSyncMode() },
                 knowledge: {
                     sdlc: { enabled: this.sdlcEnabled(), pipeline: this.sdlcPipeline(), crProcess: this.crProcess() },
@@ -2357,12 +3262,43 @@ export class ConsumerSettingsPage implements OnInit {
                 },
             },
         };
-        this.service.updateSettings(profile.id, this.name().trim() || profile.name, nextProfile, profile.version || 1)
+        const workerConfig: WorkerConfigDto = {
+            workers: this.workers().map((worker) => ({
+                id: worker.id,
+                name: worker.name,
+                role: worker.role,
+                layer: worker.layer,
+                scope: worker.scope,
+                status: worker.status,
+                hostBindingIds: [...worker.hostBindingIds],
+                capabilities: [...worker.capabilities],
+                verbs: [...worker.verbs],
+                bar: [...worker.bar],
+                escalation: worker.escalation,
+                instructions: worker.instructions || '',
+                sourceFile: worker.sourceFile,
+                sourceHash: worker.sourceHash,
+                sourceType: worker.sourceType,
+            })),
+            edges: this.workerEdges().map((edge) => ({ ...edge })),
+            bindings: this.hostProfiles().map((binding) => ({
+                id: binding.id,
+                developer: binding.userId,
+                hostPluginId: binding.hostPluginId,
+                stackVersion: binding.stackVersion,
+                memorySource: binding.memorySource,
+                codeGraphSource: binding.codeGraphSource,
+                installState: binding.installState,
+            })),
+        };
+        this.service.saveWorkers(profile.id, workerConfig)
+            .then(() => this.service.updateSettings(profile.id, this.name().trim() || profile.name, nextProfile, profile.version || 1))
             .then(async (updated) => {
                 await this.service.saveStackVersions(profile.id, this.stackVersions());
                 this.current.set(updated);
                 this.hydrate(updated);
                 this.saved.set(true);
+                this.workerImportDirty.set(false);
                 if (navigateAfter) this.router.navigate(['/consumers', profile.id]);
             })
             .catch((err) => this.error.set(err?.detail || err?.message || 'Unable to save settings'))
@@ -2447,8 +3383,8 @@ export class ConsumerSettingsPage implements OnInit {
         const savedDevelopers = Array.isArray(harness.developers) ? harness.developers : [];
         const developerIds = [...new Set([...savedDevelopers, ...savedProfiles.map((profile: HostProfile) => profile.userId)])];
         this.developers.set(developerIds);
-        this.workers.set(Array.isArray(harness.workers) && harness.workers.length > 0 ? harness.workers.map((worker: any) => this.normalizeWorker(worker)) : defaultWorkers());
-        this.workerEdges.set(Array.isArray(harness.workerEdges) && harness.workerEdges.length > 0 ? harness.workerEdges : defaultWorkerEdges());
+        this.workers.set(defaultWorkers());
+        this.workerEdges.set(defaultWorkerEdges());
         this.formationHostIds.set(Array.isArray(harness.formationHostIds) ? harness.formationHostIds : []);
         const savedPlugins = Array.isArray(harness.plugins)
             ? harness.plugins.filter((plugin: PluginEntry) => plugin.type !== 'provider')
@@ -2466,6 +3402,9 @@ export class ConsumerSettingsPage implements OnInit {
         this.restoreDraft();
         this.pruneWorkerBindings();
         this.hydrated.set(true);
+        void this.loadWorkerFiles(profile.id);
+        void this.loadRuleFiles(profile.id);
+        void this.loadKnowledgeIndex(profile.id);
     }
 
     private restoreDraft(): void {

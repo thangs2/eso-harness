@@ -13,6 +13,22 @@ import type {
     McpDiscoveryDto,
     HostDiscoveryDto,
     StackVersionsDto,
+    WorkerConfigDto,
+    WorkerPolicyResultDto,
+    WorkerImportPreviewDto,
+    WorkerImportAuditDto,
+    WorkerImportRecordDto,
+    RuleFileDto,
+    RuleImportPreviewDto,
+    MaterialSummaryDto,
+    KnowledgeSummaryDto,
+    KnowledgeDocDto,
+    KnowledgeFindingDto,
+    KnowledgeDocDetailDto,
+    KnowledgeCheckDto,
+    KnowledgeRetrievalDto,
+    KnowledgeEmbeddingStatusDto,
+    KnowledgeEmbeddingResultDto,
 } from './types.js';
 
 export class ControlPlaneApiClient {
@@ -201,6 +217,184 @@ export class ControlPlaneApiClient {
         });
         if (!res.ok) throw await this.problem(res);
         return (await res.json()) as StackVersionsDto;
+    }
+
+    async getConsumerKnowledge(id: string): Promise<KnowledgeSummaryDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/knowledge`, {
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as KnowledgeSummaryDto;
+    }
+
+    async getConsumerKnowledgeDocs(id: string, query = ''): Promise<KnowledgeDocDto[]> {
+        const qs = query.trim() ? `?q=${encodeURIComponent(query.trim())}` : '';
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/knowledge/docs${qs}`, {
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as KnowledgeDocDto[];
+    }
+
+    async getConsumerKnowledgeEmbeddings(id: string): Promise<KnowledgeEmbeddingStatusDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/knowledge/embeddings`, {
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as KnowledgeEmbeddingStatusDto;
+    }
+
+    async embedConsumerKnowledge(id: string): Promise<KnowledgeEmbeddingResultDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/knowledge/embed`, {
+            method: 'POST',
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as KnowledgeEmbeddingResultDto;
+    }
+
+    async retrieveConsumerKnowledge(id: string, query: string, filters: { type?: string; status?: string } = {}): Promise<KnowledgeRetrievalDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/knowledge/retrieve`, {
+            method: 'POST',
+            headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query, ...filters }),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as KnowledgeRetrievalDto;
+    }
+
+    async checkConsumerKnowledge(id: string): Promise<KnowledgeCheckDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/knowledge/check`, {
+            method: 'POST',
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as KnowledgeCheckDto;
+    }
+
+    async getConsumerKnowledgeDoc(id: string, docId: string): Promise<KnowledgeDocDetailDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/knowledge/docs/${encodeURIComponent(docId)}`, {
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as KnowledgeDocDetailDto;
+    }
+
+    async getConsumerKnowledgeFindings(id: string): Promise<KnowledgeFindingDto[]> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/knowledge/findings`, {
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as KnowledgeFindingDto[];
+    }
+
+    async indexConsumerKnowledge(id: string): Promise<KnowledgeSummaryDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/knowledge/index`, {
+            method: 'POST',
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as KnowledgeSummaryDto;
+    }
+
+    async getConsumerWorkers(id: string): Promise<WorkerConfigDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/workers`, {
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as WorkerConfigDto;
+    }
+
+    async getConsumerMaterialSummary(id: string): Promise<MaterialSummaryDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/material/summary`, {
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as MaterialSummaryDto;
+    }
+
+    async deleteConsumerRule(id: string, ruleId: string): Promise<{ removed: boolean }> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/rules/${encodeURIComponent(ruleId)}`, {
+            method: 'DELETE',
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as { removed: boolean };
+    }
+
+    async getConsumerRules(id: string): Promise<RuleFileDto[]> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/rules`, {
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as RuleFileDto[];
+    }
+
+    async previewConsumerRuleImport(id: string, files: Array<{ name: string; content: string }>): Promise<RuleImportPreviewDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/rules/import/preview`, {
+            method: 'POST',
+            headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ files }),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as RuleImportPreviewDto;
+    }
+
+    async applyConsumerRuleImport(id: string, candidates: any[]): Promise<{ written: any[] }> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/rules/import/apply`, {
+            method: 'POST',
+            headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ candidates }),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as { written: any[] };
+    }
+
+    async getConsumerWorkerImports(id: string): Promise<WorkerImportRecordDto[]> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/workers/imports`, {
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as WorkerImportRecordDto[];
+    }
+
+    async recordConsumerWorkerImport(id: string, record: WorkerImportAuditDto): Promise<void> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/workers/import/audit`, {
+            method: 'POST',
+            headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify(record),
+        });
+        if (!res.ok) throw await this.problem(res);
+    }
+
+    async previewConsumerWorkerImport(id: string, files: Array<{ name: string; content: string }>): Promise<WorkerImportPreviewDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/workers/import/preview`, {
+            method: 'POST',
+            headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ files }),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as WorkerImportPreviewDto;
+    }
+
+    async checkConsumerWorker(id: string, workerId: string, action: { verb: string; path?: string; evidence?: any[] }): Promise<WorkerPolicyResultDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/workers/${encodeURIComponent(workerId)}/check`, {
+            method: 'POST',
+            headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify(action),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as WorkerPolicyResultDto;
+    }
+
+    async saveConsumerWorkers(id: string, config: WorkerConfigDto): Promise<WorkerConfigDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/workers`, {
+            method: 'PUT',
+            headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify(config),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as WorkerConfigDto;
     }
 
     async getConsumerHosts(id: string): Promise<HostDiscoveryDto> {

@@ -6,9 +6,11 @@
   "scripts": {
     "build": "tsc",
     "test": "bun test test/",
-    "prebuild": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\""
+    "prebuild": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "eval:retrieval": "bun scripts/eval-retrieval.ts"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.3.2",
     "@nestjs/common": "^10.4.15",
     "@nestjs/core": "^10.4.15",
     "@nestjs/platform-fastify": "^10.4.15",

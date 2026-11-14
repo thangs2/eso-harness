@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { CONTROL_PLANE_API_CLIENT } from '../tokens.js';
-import type { ConsumerListResponse, ConsumerPlan, ConsumerProfile, FsBrowseResponse, HostDiscoveryDto, McpDiscoveryDto, SetupConsumerPayload, StackVersionsDto } from '../../../../../../libs/api-client/types.js';
+import type { ConsumerListResponse, ConsumerPlan, ConsumerProfile, FsBrowseResponse, HostDiscoveryDto, McpDiscoveryDto, SetupConsumerPayload, StackVersionsDto, WorkerConfigDto, WorkerPolicyResultDto, WorkerImportPreviewDto, WorkerImportRecordDto, RuleFileDto, RuleImportPreviewDto, MaterialSummaryDto, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, KnowledgeEmbeddingResultDto } from '../../../../../../libs/api-client/types.js';
 
 @Injectable({ providedIn: 'root' })
 export class ConsumerProfileService {
@@ -29,6 +29,106 @@ export class ConsumerProfileService {
     saveStackVersions(id: string, versions: unknown[]): Promise<StackVersionsDto> {
         if (!this.client) throw new Error('API client is not configured');
         return this.client.saveConsumerStackVersions(id, versions);
+    }
+
+    getKnowledge(id: string): Promise<KnowledgeSummaryDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.getConsumerKnowledge(id);
+    }
+
+    getKnowledgeDocs(id: string, query = ''): Promise<KnowledgeDocDto[]> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.getConsumerKnowledgeDocs(id, query);
+    }
+
+    getKnowledgeEmbeddings(id: string): Promise<KnowledgeEmbeddingStatusDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.getConsumerKnowledgeEmbeddings(id);
+    }
+
+    embedKnowledge(id: string): Promise<KnowledgeEmbeddingResultDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.embedConsumerKnowledge(id);
+    }
+
+    retrieveKnowledge(id: string, query: string, filters: { type?: string; status?: string } = {}): Promise<KnowledgeRetrievalDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.retrieveConsumerKnowledge(id, query, filters);
+    }
+
+    checkKnowledge(id: string): Promise<KnowledgeCheckDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.checkConsumerKnowledge(id);
+    }
+
+    getKnowledgeDoc(id: string, docId: string): Promise<KnowledgeDocDetailDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.getConsumerKnowledgeDoc(id, docId);
+    }
+
+    getKnowledgeFindings(id: string): Promise<KnowledgeFindingDto[]> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.getConsumerKnowledgeFindings(id);
+    }
+
+    indexKnowledge(id: string): Promise<KnowledgeSummaryDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.indexConsumerKnowledge(id);
+    }
+
+    getMaterialSummary(id: string): Promise<MaterialSummaryDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.getConsumerMaterialSummary(id);
+    }
+
+    deleteRule(id: string, ruleId: string): Promise<{ removed: boolean }> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.deleteConsumerRule(id, ruleId);
+    }
+
+    getRules(id: string): Promise<RuleFileDto[]> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.getConsumerRules(id);
+    }
+
+    previewRuleImport(id: string, files: Array<{ name: string; content: string }>): Promise<RuleImportPreviewDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.previewConsumerRuleImport(id, files);
+    }
+
+    applyRuleImport(id: string, candidates: any[]): Promise<{ written: any[] }> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.applyConsumerRuleImport(id, candidates);
+    }
+
+    getWorkerImports(id: string): Promise<WorkerImportRecordDto[]> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.getConsumerWorkerImports(id);
+    }
+
+    recordWorkerImport(id: string, record: any): Promise<void> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.recordConsumerWorkerImport(id, record);
+    }
+
+    previewWorkerImport(id: string, files: Array<{ name: string; content: string }>): Promise<WorkerImportPreviewDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.previewConsumerWorkerImport(id, files);
+    }
+
+    checkWorker(id: string, workerId: string, action: { verb: string; path?: string; evidence?: any[] }): Promise<WorkerPolicyResultDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.checkConsumerWorker(id, workerId, action);
+    }
+
+    getWorkers(id: string): Promise<WorkerConfigDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.getConsumerWorkers(id);
+    }
+
+    saveWorkers(id: string, config: WorkerConfigDto): Promise<WorkerConfigDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.saveConsumerWorkers(id, config);
     }
 
     getHosts(id: string): Promise<HostDiscoveryDto> {

@@ -43,6 +43,49 @@ export interface PlatformStore {
     listEvents(consumerId: string, limit?: number): Promise<ConsumerEvent[]>;
     listStackVersions(consumerId: string): Promise<StackVersionRecord[]>;
     replaceStackVersions(consumerId: string, versions: StackVersionRecord[]): Promise<void>;
+    replaceWorkerIndex(
+        consumerId: string,
+        workers: Array<{
+            workerId: string;
+            name: string;
+            role: string;
+            layer: 'peer' | 'gate';
+            scope: string;
+            status: 'declared' | 'active' | 'paused' | 'retired';
+            filePath: string;
+            contentHash: string;
+            hostBindingIds: string[];
+            capabilities: string[];
+            verbs: string[];
+            bar: any[];
+            escalation: string;
+        }>,
+        edges: Array<{ from: string; to: string; on: string }>
+    ): Promise<void>;
+    replaceKnowledgeIndex(consumerId: string, payload: any): Promise<void>;
+    knowledgeSummary(consumerId: string): Promise<any>;
+    knowledgeDocs(consumerId: string, query?: string, limit?: number): Promise<any[]>;
+    knowledgeFindings(consumerId: string, limit?: number): Promise<any[]>;
+    knowledgeDoc(consumerId: string, docId: string): Promise<any>;
+    knowledgeCoverage(consumerId: string): Promise<any[]>;
+    knowledgeFtsSearch(consumerId: string, query: string, limit?: number): Promise<any[]>;
+    knowledgeGraphCandidates(consumerId: string, docIds: string[], limit?: number): Promise<any[]>;
+    knowledgeChunks(consumerId: string, pendingOnly?: boolean, limit?: number): Promise<any[]>;
+    updateChunkEmbeddings(consumerId: string, items: Array<{ chunkId: string; vector: number[] }>): Promise<void>;
+    knowledgeVectorCount(consumerId: string): Promise<number>;
+    knowledgeVectorSearch(consumerId: string, vector: number[], limit?: number): Promise<any[]>;
+    knowledgeWorker(consumerId: string, workerId: string): Promise<any>;
+    knowledgeWorkerEdge(consumerId: string, fromWorkerId: string, toWorkerId: string): Promise<any>;
+    recordWorkerEvent(consumerId: string, event: any): Promise<void>;
+    listWorkerEvents(consumerId: string, workerId?: string, limit?: number): Promise<any[]>;
+    createWorkerHandoff(consumerId: string, handoff: any): Promise<void>;
+    acceptWorkerHandoff(consumerId: string, handoffId: string, workerId: string): Promise<any>;
+    listWorkerHandoffs(consumerId: string, workerId?: string, limit?: number): Promise<any[]>;
+    recordWorkerImport(consumerId: string, record: any): Promise<void>;
+    listWorkerImports(consumerId: string, limit?: number): Promise<any[]>;
+    createWorkerRun(consumerId: string, run: any): Promise<void>;
+    updateWorkerRun(consumerId: string, runId: string, patch: any): Promise<void>;
+    listWorkerRuns(consumerId: string, workerId?: string, limit?: number): Promise<any[]>;
     withSearchPath<T>(consumerId: string, fn: (tx: PlatformStore) => Promise<T>): Promise<T>;
     getSearchPath(): string | null;
     /** Test-only fault hook (memory store). */
@@ -188,6 +231,112 @@ export class MemoryPlatformStore implements PlatformStore {
         this.stackVersions.set(consumerId, clone(versions).sort((a, b) => a.version - b.version));
     }
 
+    async replaceWorkerIndex(
+        _consumerId: string,
+        _workers: Array<{
+            workerId: string;
+            name: string;
+            role: string;
+            layer: 'peer' | 'gate';
+            scope: string;
+            status: 'declared' | 'active' | 'paused' | 'retired';
+            filePath: string;
+            contentHash: string;
+            hostBindingIds: string[];
+            capabilities: string[];
+            verbs: string[];
+            bar: any[];
+            escalation: string;
+        }>,
+        _edges: Array<{ from: string; to: string; on: string }>
+    ): Promise<void> {
+        // Files are canonical for workers; the memory store has no index surface.
+    }
+
+    async replaceKnowledgeIndex(_consumerId: string, _payload: any): Promise<void> {
+        // Files are canonical; the memory store has no knowledge index surface.
+    }
+
+    async knowledgeSummary(_consumerId: string): Promise<any> {
+        return { docs: 0, sections: 0, edges: 0, findings: 0, links: 0, manifest: null, run: null };
+    }
+
+    async knowledgeDocs(_consumerId: string, _query?: string, _limit?: number): Promise<any[]> {
+        return [];
+    }
+
+    async knowledgeFindings(_consumerId: string, _limit?: number): Promise<any[]> {
+        return [];
+    }
+
+    async knowledgeDoc(_consumerId: string, _docId: string): Promise<any> {
+        return { doc: null, sections: [], outgoing: [], incoming: [], descendants: [], links: [] };
+    }
+
+    async knowledgeCoverage(_consumerId: string): Promise<any[]> {
+        return [];
+    }
+
+    async knowledgeFtsSearch(_consumerId: string, _query: string, _limit?: number): Promise<any[]> {
+        return [];
+    }
+
+    async knowledgeGraphCandidates(_consumerId: string, _docIds: string[], _limit?: number): Promise<any[]> {
+        return [];
+    }
+
+    async knowledgeChunks(_consumerId: string, _pendingOnly?: boolean, _limit?: number): Promise<any[]> {
+        return [];
+    }
+
+    async updateChunkEmbeddings(_consumerId: string, _items: Array<{ chunkId: string; vector: number[] }>): Promise<void> {}
+
+    async knowledgeVectorCount(_consumerId: string): Promise<number> {
+        return 0;
+    }
+
+    async knowledgeVectorSearch(_consumerId: string, _vector: number[], _limit?: number): Promise<any[]> {
+        return [];
+    }
+
+    async knowledgeWorker(_consumerId: string, _workerId: string): Promise<any> {
+        return null;
+    }
+
+    async knowledgeWorkerEdge(_consumerId: string, _fromWorkerId: string, _toWorkerId: string): Promise<any> {
+        return null;
+    }
+
+    async recordWorkerEvent(_consumerId: string, _event: any): Promise<void> {}
+
+    async listWorkerEvents(_consumerId: string, _workerId?: string, _limit?: number): Promise<any[]> {
+        return [];
+    }
+
+    async createWorkerHandoff(_consumerId: string, _handoff: any): Promise<void> {}
+
+    async acceptWorkerHandoff(_consumerId: string, _handoffId: string, _workerId: string): Promise<any> {
+        return null;
+    }
+
+    async listWorkerHandoffs(_consumerId: string, _workerId?: string, _limit?: number): Promise<any[]> {
+        return [];
+    }
+
+    async createWorkerRun(_consumerId: string, _run: any): Promise<void> {}
+
+    async updateWorkerRun(_consumerId: string, _runId: string, _patch: any): Promise<void> {}
+
+    async listWorkerRuns(_consumerId: string, _workerId?: string, _limit?: number): Promise<any[]> {
+        return [];
+    }
+
+    async recordWorkerImport(_consumerId: string, _record: any): Promise<void> {}
+
+    async listWorkerImports(_consumerId: string, _limit?: number): Promise<any[]> {
+        return [];
+    }
+
     async withSearchPath<T>(consumerId: string, fn: (tx: PlatformStore) => Promise<T>): Promise<T> {
         const schema = this.schemaName(consumerId);
         return this.transaction(async (tx) => {
@@ -219,6 +368,10 @@ export class MemoryPlatformStore implements PlatformStore {
  * Deliberately no `pg` dependency: Bun ships the SQL client, and the control plane runs on Bun in
  * Initialization. Identifiers are generated by `schemaNameFor` and quoted; values are parameterised.
  */
+function pgTextArray(values: string[]): string {
+    return `{${(values || []).map((value) => `"${String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',')}}`;
+}
+
 export class BunSqlPlatformStore implements PlatformStore {
     readonly kind = 'postgres' as const;
     private readonly sql: any;
@@ -407,6 +560,508 @@ export class BunSqlPlatformStore implements PlatformStore {
                 );
             }
         });
+    }
+
+    async replaceWorkerIndex(
+        consumerId: string,
+        workers: Array<{
+            workerId: string;
+            name: string;
+            role: string;
+            layer: 'peer' | 'gate';
+            scope: string;
+            status: 'declared' | 'active' | 'paused' | 'retired';
+            filePath: string;
+            contentHash: string;
+            hostBindingIds: string[];
+            capabilities: string[];
+            verbs: string[];
+            bar: any[];
+            escalation: string;
+        }>,
+        edges: Array<{ from: string; to: string; on: string }>
+    ): Promise<void> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        const ids = new Set(workers.map((worker) => worker.workerId));
+        await this.sql.begin(async (tx: any) => {
+            await tx.unsafe(`SET LOCAL search_path = ${schema}, platform, public`);
+            await tx.unsafe(`DELETE FROM knowledge_worker_edge`);
+            await tx.unsafe(`DELETE FROM knowledge_worker_placement`);
+            await tx.unsafe(`DELETE FROM knowledge_worker`);
+            for (const worker of workers) {
+                await tx.unsafe(
+                    `INSERT INTO knowledge_worker
+                     (worker_id, name, role, layer, scope, status, file_path, content_hash, capabilities, verbs, bar, escalation, indexed_at)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::text[],$10::text[],$11,$12,now())`,
+                    [worker.workerId, worker.name, worker.role, worker.layer, worker.scope, worker.status, worker.filePath, worker.contentHash, pgTextArray(worker.capabilities), pgTextArray(worker.verbs), JSON.stringify(worker.bar), worker.escalation]
+                );
+                for (const hostBindingId of worker.hostBindingIds) {
+                    await tx.unsafe(
+                        `INSERT INTO knowledge_worker_placement (worker_id, host_binding_id) VALUES ($1,$2)`,
+                        [worker.workerId, hostBindingId]
+                    );
+                }
+            }
+            for (const edge of edges) {
+                if (!ids.has(edge.from) || !ids.has(edge.to)) continue;
+                await tx.unsafe(
+                    `INSERT INTO knowledge_worker_edge (from_worker_id, to_worker_id, on_label) VALUES ($1,$2,$3)
+                     ON CONFLICT DO NOTHING`,
+                    [edge.from, edge.to, edge.on]
+                );
+            }
+        });
+    }
+
+    async replaceKnowledgeIndex(consumerId: string, payload: any): Promise<void> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        const txBody = async (tx: any) => {
+            await tx.unsafe(`SET LOCAL search_path = ${schema}, platform, public`);
+            await tx.unsafe(`DELETE FROM knowledge_link`);
+            await tx.unsafe(`DELETE FROM knowledge_finding`);
+            await tx.unsafe(`DELETE FROM knowledge_doc_search`);
+            await tx.unsafe(`DELETE FROM knowledge_edge_claim`);
+            await tx.unsafe(`DELETE FROM knowledge_edge`);
+            await tx.unsafe(`DELETE FROM knowledge_doc_section`);
+            await tx.unsafe(`DELETE FROM knowledge_doc_path`);
+            await tx.unsafe(`DELETE FROM knowledge_manifest`);
+            await tx.unsafe(`DROP TABLE IF EXISTS pg_temp.eso_embedding_keep`);
+            await tx.unsafe(`CREATE TEMP TABLE eso_embedding_keep ON COMMIT DROP AS
+                SELECT content_hash, embedding, model FROM knowledge_doc_chunk
+                WHERE embedding IS NOT NULL AND content_hash IS NOT NULL`);
+            await tx.unsafe(`DELETE FROM knowledge_doc_chunk`);
+            await tx.unsafe(`DELETE FROM knowledge_doc`);
+            await tx.unsafe(`DELETE FROM knowledge_index_run`);
+
+            for (const type of payload.types || []) {
+                await tx.unsafe(
+                    `INSERT INTO knowledge_type (type, label, required_sections, header_profile, representation, default_liveness)
+                     VALUES ($1,$2,'[]'::jsonb,'{}'::jsonb,$3,'living') ON CONFLICT (type) DO NOTHING`,
+                    [type.type, type.label || type.type, type.representation || 'human']
+                );
+            }
+            for (const doc of payload.docs || []) {
+                await tx.unsafe(
+                    `INSERT INTO knowledge_doc
+                     (doc_id,path,type,status,owner,representation,origin,custodian,liveness,kt_state,
+                      source_pointer,human_sot_pointer,title,content_hash,header_json,indexed_at)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,now())`,
+                    [doc.docId, doc.path, doc.type, doc.status, doc.owner, doc.representation, doc.origin,
+                     doc.custodian, doc.liveness, doc.ktState, doc.sourcePointer, doc.humanSotPointer,
+                     doc.title, doc.contentHash, JSON.stringify(doc.header || {})]
+                );
+            }
+            for (const doc of payload.docs || []) {
+                await tx.unsafe(
+                    `UPDATE knowledge_doc SET source_doc_id=$2, human_sot_doc_id=$3 WHERE doc_id=$1`,
+                    [doc.docId, doc.sourceDocId || null, doc.humanSotDocId || null]
+                );
+                await tx.unsafe(
+                    `INSERT INTO knowledge_doc_path (doc_id,path,valid_from,valid_to) VALUES ($1,$2,now(),NULL)`,
+                    [doc.docId, doc.path]
+                );
+            }
+            for (const section of payload.sections || []) {
+                await tx.unsafe(
+                    `INSERT INTO knowledge_doc_section
+                     (doc_id,section_id,parent_section_id,ordinal,level,heading,anchor,content_hash)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+                    [section.docId, section.sectionId, section.parentSectionId || null, section.ordinal,
+                     section.level, section.heading, section.anchor, section.contentHash || null]
+                );
+            }
+            for (const link of payload.links || []) {
+                await tx.unsafe(
+                    `INSERT INTO knowledge_link
+                     (doc_id,raw_target,resolved_doc_id,resolved_anchor,resolved_section_id,status,provenance)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+                    [link.docId, link.rawTarget, link.resolvedDocId || null, link.resolvedAnchor || null,
+                     link.resolvedSectionId || null, link.status, link.provenance || 'declared']
+                );
+            }
+            for (const edge of payload.edges || []) {
+                await tx.unsafe(
+                    `INSERT INTO knowledge_edge (edge_id,from_doc_id,to_doc_id,kind,conflict)
+                     VALUES ($1,$2,$3,$4,false) ON CONFLICT DO NOTHING`,
+                    [edge.edgeId, edge.fromDocId, edge.toDocId, edge.kind]
+                );
+            }
+            for (const chunk of payload.chunks || []) {
+                await tx.unsafe(
+                    `INSERT INTO knowledge_doc_chunk (chunk_id,doc_id,ordinal,anchor,text,content_hash,embedding,model)
+                     VALUES ($1,$2,$3,$4,$5,$6,NULL,$7)`,
+                    [chunk.chunkId, chunk.docId, chunk.ordinal, chunk.anchor || null, chunk.text, chunk.contentHash || null, 'BAAI/bge-m3']
+                );
+            }
+            await tx.unsafe(`UPDATE knowledge_doc_chunk c
+                SET embedding = k.embedding, model = k.model
+                FROM pg_temp.eso_embedding_keep k
+                WHERE c.content_hash = k.content_hash AND c.embedding IS NULL`);
+            for (const search of payload.search || []) {
+                await tx.unsafe(
+                    `INSERT INTO knowledge_doc_search (doc_id,tsv,excerpt)
+                     VALUES ($1,to_tsvector('simple',$2),$3)`,
+                    [search.docId, search.text, search.excerpt]
+                );
+            }
+            for (const finding of payload.findings || []) {
+                await tx.unsafe(
+                    `INSERT INTO knowledge_finding (doc_id,severity,code,detail)
+                     VALUES ($1,$2,$3,$4::jsonb)`,
+                    [finding.docId || null, finding.severity || 'warning', finding.code, JSON.stringify(finding.detail || {})]
+                );
+            }
+            for (const run of payload.runs || []) {
+                await tx.unsafe(
+                    `INSERT INTO knowledge_index_run (build_id,source_hash,status,stats,started_at,finished_at)
+                     VALUES ($1,$2,$3,$4::jsonb,now(),now())`,
+                    [run.buildId, run.sourceHash, run.status, JSON.stringify(run.stats || {})]
+                );
+            }
+            for (const manifest of payload.manifests || []) {
+                await tx.unsafe(
+                    `INSERT INTO knowledge_manifest
+                     (manifest_id,build_id,manifest_version,generator_version,source_hash,payload)
+                     VALUES ($1,$2,$3,$4,$5,$6::jsonb)`,
+                    [manifest.manifestId, manifest.buildId || null, manifest.manifestVersion || 1,
+                     manifest.generatorVersion || 'eso-indexer@1', manifest.sourceHash, JSON.stringify(manifest.payload)]
+                );
+            }
+            await tx.unsafe(
+                `UPDATE knowledge_meta SET manifest_path=$1, manifest_version=$2, generator_version=$3, updated_at=now()`,
+                ['.harness/manifest.json', 1, 'eso-indexer@1']
+            );
+        };
+        await this.sql.begin(txBody);
+    }
+
+    async knowledgeWorkerEdge(consumerId: string, fromWorkerId: string, toWorkerId: string): Promise<any> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        const rows = await this.sql.unsafe(
+            `SELECT from_worker_id,to_worker_id,on_label FROM ${schema}.knowledge_worker_edge
+             WHERE from_worker_id=$1 AND to_worker_id=$2`,
+            [fromWorkerId, toWorkerId]
+        );
+        return rows[0] || null;
+    }
+
+    async recordWorkerEvent(consumerId: string, event: any): Promise<void> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        await this.sql.unsafe(
+            `INSERT INTO ${schema}.knowledge_worker_event
+             (worker_id,event,verb,path,decision,reasons,evidence)
+             VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb)`,
+            [event.workerId, event.event, event.verb || null, event.path || null,
+             event.decision, JSON.stringify(event.reasons || []), JSON.stringify(event.evidence || [])]
+        );
+    }
+
+    async recordWorkerImport(consumerId: string, record: any): Promise<void> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        await this.sql.unsafe(
+            `INSERT INTO ${schema}.knowledge_worker_import
+             (source_file,source_hash,source_type,worker_id,action,detail)
+             VALUES ($1,$2,$3,$4,$5,$6::jsonb)`,
+            [record.sourceFile, record.sourceHash, record.sourceType || 'unknown',
+             record.workerId, record.action || 'import', JSON.stringify(record.detail || {})]
+        );
+    }
+
+    async listWorkerImports(consumerId: string, limit = 50): Promise<any[]> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        const cap = Math.max(1, Math.min(Number(limit) || 50, 200));
+        return await this.sql.unsafe(
+            `SELECT import_id,source_file,source_hash,source_type,worker_id,action,detail,imported_at
+             FROM ${schema}.knowledge_worker_import ORDER BY imported_at DESC LIMIT $1`,
+            [cap]
+        );
+    }
+
+    async createWorkerRun(consumerId: string, run: any): Promise<void> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        await this.sql.unsafe(
+            `INSERT INTO ${schema}.knowledge_worker_run
+             (run_id,worker_id,host_binding_id,status,pid,command)
+             VALUES ($1,$2,$3,$4,$5,$6)`,
+            [run.runId, run.workerId, run.hostBindingId, run.status, run.pid || null, run.command || null]
+        );
+    }
+
+    async updateWorkerRun(consumerId: string, runId: string, patch: any): Promise<void> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        await this.sql.unsafe(
+            `UPDATE ${schema}.knowledge_worker_run
+             SET status=$2, ended_at=now() WHERE run_id=$1`,
+            [runId, patch.status]
+        );
+    }
+
+    async listWorkerRuns(consumerId: string, workerId?: string, limit = 50): Promise<any[]> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        const cap = Math.max(1, Math.min(Number(limit) || 50, 200));
+        return await this.sql.unsafe(
+            `SELECT run_id,worker_id,host_binding_id,status,pid,command,started_at,ended_at
+             FROM ${schema}.knowledge_worker_run
+             WHERE ($1::text IS NULL OR worker_id=$1)
+             ORDER BY started_at DESC LIMIT $2`,
+            [workerId || null, cap]
+        );
+    }
+
+    async createWorkerHandoff(consumerId: string, handoff: any): Promise<void> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        await this.sql.unsafe(
+            `INSERT INTO ${schema}.knowledge_worker_handoff
+             (handoff_id,from_worker_id,to_worker_id,condition,status,work,evidence)
+             VALUES ($1,$2,$3,$4,'pending',$5::jsonb,$6::jsonb)`,
+            [handoff.handoffId, handoff.fromWorkerId, handoff.toWorkerId, handoff.condition || null,
+             JSON.stringify(handoff.work || {}), JSON.stringify(handoff.evidence || [])]
+        );
+    }
+
+    async acceptWorkerHandoff(consumerId: string, handoffId: string, workerId: string): Promise<any> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        const rows = await this.sql.unsafe(
+            `UPDATE ${schema}.knowledge_worker_handoff
+             SET status='accepted', accepted_at=now()
+             WHERE handoff_id=$1 AND to_worker_id=$2 AND status='pending'
+             RETURNING *`,
+            [handoffId, workerId]
+        );
+        return rows[0] || null;
+    }
+
+    async listWorkerHandoffs(consumerId: string, workerId?: string, limit = 50): Promise<any[]> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        const cap = Math.max(1, Math.min(Number(limit) || 50, 200));
+        return await this.sql.unsafe(
+            `SELECT handoff_id,from_worker_id,to_worker_id,condition,status,work,evidence,created_at,accepted_at
+             FROM ${schema}.knowledge_worker_handoff
+             WHERE ($1::text IS NULL OR to_worker_id=$1 OR from_worker_id=$1)
+             ORDER BY created_at DESC LIMIT $2`,
+            [workerId || null, cap]
+        );
+    }
+
+    async listWorkerEvents(consumerId: string, workerId?: string, limit = 50): Promise<any[]> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        const cap = Math.max(1, Math.min(Number(limit) || 50, 200));
+        return await this.sql.unsafe(
+            `SELECT event_id,worker_id,event,verb,path,decision,reasons,evidence,created_at
+             FROM ${schema}.knowledge_worker_event
+             WHERE ($1::text IS NULL OR worker_id=$1)
+             ORDER BY created_at DESC,event_id DESC LIMIT $2`,
+            [workerId || null, cap]
+        );
+    }
+
+    async knowledgeWorker(consumerId: string, workerId: string): Promise<any> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        const rows = await this.sql.unsafe(
+            `SELECT worker_id,name,role,layer,scope,status,file_path,content_hash,
+                    capabilities,verbs,bar,escalation,indexed_at,
+                    (SELECT array_agg(host_binding_id ORDER BY host_binding_id)
+                     FROM ${schema}.knowledge_worker_placement p WHERE p.worker_id=k.worker_id) AS host_binding_ids
+             FROM ${schema}.knowledge_worker k WHERE worker_id=$1`,
+            [workerId]
+        );
+        return rows[0] || null;
+    }
+
+    async knowledgeChunks(consumerId: string, pendingOnly = false, limit = 500): Promise<any[]> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        const cap = Math.max(1, Math.min(Number(limit) || 500, 5000));
+        return await this.sql.unsafe(
+            `SELECT chunk_id,doc_id,ordinal,anchor,text,model,
+                    (embedding IS NOT NULL) AS embedded
+             FROM ${schema}.knowledge_doc_chunk
+             ${pendingOnly ? 'WHERE embedding IS NULL' : ''}
+             ORDER BY doc_id,ordinal LIMIT $1`,
+            [cap]
+        );
+    }
+
+    async updateChunkEmbeddings(consumerId: string, items: Array<{ chunkId: string; vector: number[] }>): Promise<void> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        await this.sql.begin(async (tx: any) => {
+            await tx.unsafe(`SET LOCAL search_path = ${schema}, platform, public`);
+            for (const item of items) {
+                const literal = `[${item.vector.map((value) => Number(value).toFixed(8)).join(',')}]`;
+                await tx.unsafe(
+                    `UPDATE knowledge_doc_chunk SET embedding=$2::vector, model=$3 WHERE chunk_id=$1`,
+                    [item.chunkId, literal, 'BAAI/bge-m3']
+                );
+            }
+        });
+    }
+
+    async knowledgeVectorCount(consumerId: string): Promise<number> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        const rows = await this.sql.unsafe(
+            `SELECT count(*)::int AS count FROM ${schema}.knowledge_doc_chunk WHERE embedding IS NOT NULL`
+        );
+        return Number(rows[0]?.count || 0);
+    }
+
+    async knowledgeVectorSearch(consumerId: string, vector: number[], limit = 20): Promise<any[]> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        const literal = `[${vector.map((value) => Number(value).toFixed(8)).join(',')}]`;
+        const cap = Math.max(1, Math.min(Number(limit) || 20, 100));
+        return await this.sql.unsafe(
+            `SELECT d.doc_id,d.path,d.type,d.status,d.owner,d.title,d.content_hash,d.indexed_at,
+                    (SELECT count(*) FROM ${schema}.knowledge_doc_section s WHERE s.doc_id=d.doc_id)::int AS sections,
+                    min(c.embedding <=> $1::vector) AS distance
+             FROM ${schema}.knowledge_doc_chunk c
+             JOIN ${schema}.knowledge_doc d ON d.doc_id=c.doc_id
+             WHERE c.embedding IS NOT NULL
+             GROUP BY d.doc_id,d.path,d.type,d.status,d.owner,d.title,d.content_hash,d.indexed_at
+             ORDER BY distance LIMIT $2`,
+            [literal, cap]
+        );
+    }
+
+    async knowledgeFtsSearch(consumerId: string, query: string, limit = 20): Promise<any[]> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        const q = (query || '').trim();
+        if (!q) return [];
+        const cap = Math.max(1, Math.min(Number(limit) || 20, 100));
+        return await this.sql.unsafe(
+            `SELECT d.doc_id,d.path,d.type,d.status,d.owner,d.title,d.content_hash,d.indexed_at,
+                    (SELECT count(*) FROM ${schema}.knowledge_doc_section s WHERE s.doc_id=d.doc_id)::int AS sections,
+                    ts_rank(se.tsv, websearch_to_tsquery('simple',$1)) AS rank,
+                    ts_headline('simple', se.excerpt, websearch_to_tsquery('simple',$1), 'MaxWords=30,MinWords=10') AS headline
+             FROM ${schema}.knowledge_doc_search se
+             JOIN ${schema}.knowledge_doc d ON d.doc_id=se.doc_id
+             WHERE se.tsv @@ websearch_to_tsquery('simple',$1)
+             ORDER BY rank DESC, d.path LIMIT $2`,
+            [q, cap]
+        );
+    }
+
+    async knowledgeGraphCandidates(consumerId: string, docIds: string[], limit = 50): Promise<any[]> {
+        if (!docIds.length) return [];
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        const cap = Math.max(1, Math.min(Number(limit) || 50, 200));
+        return await this.sql.unsafe(
+            `SELECT d.doc_id,d.path,d.type,d.status,d.owner,d.title,d.content_hash,d.indexed_at,
+                    (SELECT count(*) FROM ${schema}.knowledge_doc_section s WHERE s.doc_id=d.doc_id)::int AS sections,
+                    count(*)::int AS connections,
+                    string_agg(DISTINCT e.kind, ',' ORDER BY e.kind) AS kinds
+             FROM ${schema}.knowledge_edge e
+             JOIN ${schema}.knowledge_doc d
+               ON d.doc_id = CASE WHEN e.from_doc_id IN (SELECT jsonb_array_elements_text($1::jsonb)) THEN e.to_doc_id ELSE e.from_doc_id END
+             WHERE (e.from_doc_id IN (SELECT jsonb_array_elements_text($1::jsonb)) OR e.to_doc_id IN (SELECT jsonb_array_elements_text($1::jsonb)))
+               AND NOT (d.doc_id IN (SELECT jsonb_array_elements_text($1::jsonb)))
+             GROUP BY d.doc_id,d.path,d.type,d.status,d.owner,d.title,d.content_hash,d.indexed_at
+             ORDER BY connections DESC, d.path LIMIT $2`,
+            [docIds, cap]
+        );
+    }
+
+    async knowledgeCoverage(consumerId: string): Promise<any[]> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        return await this.sql.unsafe(
+            `SELECT t.type, t.label,
+                    (SELECT count(*) FROM ${schema}.knowledge_doc d WHERE d.type=t.type)::int AS docs,
+                    (SELECT count(*) FROM ${schema}.knowledge_doc_section s JOIN ${schema}.knowledge_doc d ON d.doc_id=s.doc_id WHERE d.type=t.type)::int AS sections,
+                    (SELECT count(*) FROM ${schema}.knowledge_finding f JOIN ${schema}.knowledge_doc d ON d.doc_id=f.doc_id WHERE d.type=t.type AND f.resolved_at IS NULL)::int AS findings
+             FROM ${schema}.knowledge_type t
+             ORDER BY t.type`
+        );
+    }
+
+    async knowledgeDoc(consumerId: string, docId: string): Promise<any> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        const docs = await this.sql.unsafe(
+            `SELECT doc_id,path,type,status,owner,representation,title,content_hash,indexed_at
+             FROM ${schema}.knowledge_doc WHERE doc_id=$1`,
+            [docId]
+        );
+        if (!docs[0]) return { doc: null, sections: [], outgoing: [], incoming: [], descendants: [], links: [] };
+        const sections = await this.sql.unsafe(
+            `SELECT section_id,parent_section_id,ordinal,level,heading,anchor
+             FROM ${schema}.knowledge_doc_section WHERE doc_id=$1 ORDER BY ordinal`,
+            [docId]
+        );
+        const outgoing = await this.sql.unsafe(
+            `SELECT e.edge_id,e.kind,d.doc_id,d.path,d.title
+             FROM ${schema}.knowledge_edge e JOIN ${schema}.knowledge_doc d ON d.doc_id=e.to_doc_id
+             WHERE e.from_doc_id=$1 ORDER BY e.kind,d.path`,
+            [docId]
+        );
+        const incoming = await this.sql.unsafe(
+            `SELECT e.edge_id,e.kind,d.doc_id,d.path,d.title
+             FROM ${schema}.knowledge_edge e JOIN ${schema}.knowledge_doc d ON d.doc_id=e.from_doc_id
+             WHERE e.to_doc_id=$1 ORDER BY e.kind,d.path`,
+            [docId]
+        );
+        const descendants = await this.sql.unsafe(
+            `WITH RECURSIVE walk(doc_id, depth) AS (
+                SELECT e.to_doc_id, 1 FROM ${schema}.knowledge_edge e WHERE e.from_doc_id=$1
+                UNION ALL
+                SELECT e.to_doc_id, w.depth + 1
+                FROM walk w JOIN ${schema}.knowledge_edge e ON e.from_doc_id = w.doc_id
+                WHERE w.depth < 2
+             )
+             SELECT DISTINCT w.doc_id, w.depth, d.path, d.title
+             FROM walk w JOIN ${schema}.knowledge_doc d ON d.doc_id = w.doc_id
+             ORDER BY w.depth, d.path`,
+            [docId]
+        );
+        const links = await this.sql.unsafe(
+            `SELECT raw_target,resolved_doc_id,resolved_section_id,status
+             FROM ${schema}.knowledge_link WHERE doc_id=$1 ORDER BY link_id`,
+            [docId]
+        );
+        return { doc: docs[0], sections, outgoing, incoming, descendants, links };
+    }
+
+    async knowledgeDocs(consumerId: string, query?: string, limit = 50): Promise<any[]> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        const q = (query || '').trim();
+        const cap = Math.max(1, Math.min(Number(limit) || 50, 200));
+        const params: any[] = [];
+        let sql = `SELECT d.doc_id, d.path, d.type, d.status, d.owner, d.title, d.content_hash, d.indexed_at,
+                          (SELECT count(*) FROM ${schema}.knowledge_doc_section s WHERE s.doc_id=d.doc_id)::int AS sections
+                   FROM ${schema}.knowledge_doc d`;
+        if (q) {
+            sql += ` JOIN ${schema}.knowledge_doc_search se ON se.doc_id=d.doc_id
+                     WHERE se.tsv @@ websearch_to_tsquery('simple', $1)`;
+            params.push(q);
+        }
+        sql += ` ORDER BY d.path LIMIT $${params.length + 1}`;
+        params.push(cap);
+        return await this.sql.unsafe(sql, params);
+    }
+
+    async knowledgeFindings(consumerId: string, limit = 50): Promise<any[]> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        const cap = Math.max(1, Math.min(Number(limit) || 50, 200));
+        return await this.sql.unsafe(
+            `SELECT f.finding_id, f.doc_id, d.path, f.severity, f.code, f.detail, f.created_at
+             FROM ${schema}.knowledge_finding f
+             LEFT JOIN ${schema}.knowledge_doc d ON d.doc_id=f.doc_id
+             WHERE f.resolved_at IS NULL
+             ORDER BY f.created_at DESC, f.finding_id DESC LIMIT $1`,
+            [cap]
+        );
+    }
+
+    async knowledgeSummary(consumerId: string): Promise<any> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        const rows = await this.sql.unsafe(
+            `SELECT
+                (SELECT count(*) FROM ${schema}.knowledge_doc)::int AS docs,
+                (SELECT count(*) FROM ${schema}.knowledge_doc_section)::int AS sections,
+                (SELECT count(*) FROM ${schema}.knowledge_edge)::int AS edges,
+                (SELECT count(*) FROM ${schema}.knowledge_finding WHERE resolved_at IS NULL)::int AS findings,
+                (SELECT count(*) FROM ${schema}.knowledge_link)::int AS links`
+        );
+        const manifest = await this.sql.unsafe(
+            `SELECT manifest_id, build_id, manifest_version, generator_version, source_hash, created_at
+             FROM ${schema}.knowledge_manifest ORDER BY created_at DESC LIMIT 1`
+        );
+        return { ...rows[0], manifest: manifest[0] || null };
     }
 
     async withSearchPath<T>(consumerId: string, fn: (tx: PlatformStore) => Promise<T>): Promise<T> {

@@ -76,6 +76,223 @@ export interface ConsumerSummary {
     updatedAt: string;
 }
 
+export interface KnowledgeDocDto {
+    doc_id: string;
+    path: string;
+    type: string;
+    status: string;
+    owner: string | null;
+    title: string | null;
+    content_hash: string;
+    indexed_at: string;
+    sections: number;
+}
+
+export interface KnowledgeRetrievalHitDto {
+    rank: number;
+    doc: KnowledgeDocDto;
+    score: number;
+    why: string[];
+    signals: { fts: number; graph: number; vector: number; exact: number };
+}
+
+export interface KnowledgeRetrievalDto {
+    query: string;
+    mode: 'hybrid';
+    vector: { enabled: boolean; reason?: string; count?: number; model?: string };
+    filters: { type: string | null; status: string | null };
+    weights: { fts: number; graph: number; vector: number };
+    counts: { fts: number; graph: number; vector: number; merged: number };
+    results: KnowledgeRetrievalHitDto[];
+}
+
+export interface KnowledgeCoverageDto {
+    type: string;
+    label: string;
+    docs: number;
+    sections: number;
+    findings: number;
+}
+
+export interface KnowledgeEmbeddingStatusDto {
+    model: string;
+    embedded: number;
+    chunks: number;
+    ready: boolean;
+}
+
+export interface KnowledgeEmbeddingResultDto {
+    model: string;
+    embedded: number;
+    pending: number;
+    total: number;
+}
+
+export interface KnowledgeCheckDto {
+    status: 'PASS' | 'FAIL';
+    checks: Array<{ id: string; label: string; status: 'PASS' | 'FAIL' | 'INFO'; detail: string }>;
+    coverage: KnowledgeCoverageDto[];
+    summary: KnowledgeSummaryDto;
+}
+
+export interface KnowledgeDocDetailDto {
+    doc: KnowledgeDocDto | null;
+    sections: Array<{ section_id: string; parent_section_id: string | null; ordinal: number; level: number; heading: string; anchor: string }>;
+    outgoing: Array<{ edge_id: string; kind: string; doc_id: string; path: string; title: string | null }>;
+    incoming: Array<{ edge_id: string; kind: string; doc_id: string; path: string; title: string | null }>;
+    descendants: Array<{ doc_id: string; depth: number; path: string; title: string | null }>;
+    links: Array<{ raw_target: string; resolved_doc_id: string | null; resolved_section_id: string | null; status: string }>;
+}
+
+export interface KnowledgeFindingDto {
+    finding_id: string;
+    doc_id: string | null;
+    path: string | null;
+    severity: string;
+    code: string;
+    detail: unknown;
+    created_at: string;
+}
+
+export interface MaterialSummaryDto {
+    skills: number;
+    hooks: number;
+    subagents: number;
+    rules: number;
+}
+
+export interface RuleFileDto {
+    id: string;
+    description: string;
+    globs: string;
+    alwaysApply: boolean;
+    body: string;
+    sourceFile?: string;
+    sourceHash?: string;
+}
+
+export interface RuleImportCandidateDto {
+    sourceFile: string;
+    sourceType: 'cursor-rule' | 'markdown-rule';
+    sourceHash: string;
+    rule: RuleFileDto;
+    conflict: boolean;
+    conflictWith: string | null;
+    warnings?: string[];
+}
+
+export interface RuleImportPreviewDto {
+    candidates: RuleImportCandidateDto[];
+    skipped: Array<{ sourceFile: string; reason: string }>;
+}
+
+export interface WorkerImportCandidateDto {
+    sourceFile: string;
+    sourceType: 'eso-worker' | 'claude-subagent';
+    sourceHash: string;
+    worker: WorkerRecordDto;
+    warnings: string[];
+    conflict: boolean;
+    conflictWith?: string | null;
+}
+
+export interface WorkerImportAuditDto {
+    sourceFile: string;
+    sourceHash: string;
+    sourceType: string;
+    workerId: string;
+    action: 'import' | 'replace' | 'copy' | 'skip' | 'audit';
+    detail?: Record<string, unknown>;
+}
+
+export interface WorkerImportSkippedDto {
+    sourceFile: string;
+    reason: string;
+    sourceType?: string;
+}
+
+export interface WorkerImportRecordDto {
+    import_id: string;
+    source_file: string;
+    source_hash: string;
+    source_type: string;
+    worker_id: string;
+    action: string;
+    detail: unknown;
+    imported_at: string;
+}
+
+export interface WorkerImportPreviewDto {
+    candidates: WorkerImportCandidateDto[];
+    skipped: WorkerImportSkippedDto[];
+}
+
+export interface KnowledgeSummaryDto {
+    docs: number;
+    sections: number;
+    edges: number;
+    findings: number;
+    links: number;
+    manifest: null | {
+        manifest_id: string;
+        build_id: string | null;
+        manifest_version: number;
+        generator_version: string;
+        source_hash: string;
+        created_at: string;
+    };
+    manifestPath?: string;
+    buildId?: string;
+}
+
+export interface EvidenceRequirementDto {
+    kind: 'test' | 'verify' | 'audit' | 'scenario' | 'manual';
+    metric?: string;
+    op?: '>=' | '<=' | '==' | 'truthy';
+    value?: string | number | boolean;
+    label?: string;
+}
+
+export interface WorkerRecordDto {
+    id: string;
+    name: string;
+    role: string;
+    layer: 'peer' | 'gate';
+    scope: string;
+    status: 'declared' | 'active' | 'paused' | 'retired';
+    hostBindingIds: string[];
+}
+
+export interface WorkerEdgeDto {
+    from: string;
+    to: string;
+    on: string;
+}
+
+export interface WorkerPolicyResultDto {
+    decision: 'ALLOW' | 'DENY';
+    workerId: string;
+    reasons: string[];
+    warnings?: string[];
+    worker?: Record<string, unknown>;
+}
+
+export interface WorkerBindingDto {
+    id: string;
+    developer: string;
+    hostPluginId: string;
+    stackVersion: number;
+    memorySource: string;
+    codeGraphSource: string;
+    installState: string;
+}
+
+export interface WorkerConfigDto {
+    workers: WorkerRecordDto[];
+    edges: WorkerEdgeDto[];
+    bindings?: WorkerBindingDto[];
+}
+
 export interface ConsumerListResponse {
     items: ConsumerSummary[];
 }

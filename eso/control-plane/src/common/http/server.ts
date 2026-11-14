@@ -24,6 +24,15 @@ import { HostDiscoveryService } from '../hosts/host-discovery.service.js';
 import { SchemaProvisioningService } from '../../provisioning/schema/schema-provisioning.service.js';
 import { MaterialProvisioningService } from '../../provisioning/material/material-provisioning.service.js';
 import { ProvisioningStateService } from '../../provisioning/state/provisioning-state.service.js';
+import { WorkerFileService } from '../../modules/workers/worker-file.service.js';
+import { KnowledgeIndexService } from '../../modules/knowledge/knowledge-index.service.js';
+import { KnowledgeCheckService } from '../../modules/knowledge/knowledge-check.service.js';
+import { KnowledgeRetrievalService } from '../../modules/knowledge/knowledge-retrieval.service.js';
+import { LocalEmbeddingService } from '../../modules/knowledge/local-embedding.service.js';
+import { KnowledgeEvalService } from '../../modules/knowledge/knowledge-eval.service.js';
+import { WorkerPolicyService } from '../../modules/workers/worker-policy.service.js';
+import { WorkerImportService } from '../../modules/workers/worker-import.service.js';
+import { RuleFileService } from '../../modules/rules/rule-file.service.js';
 
 /**
  * L6.2 — the HTTP surface for Sprint 1.
@@ -56,6 +65,15 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
     const schemaProvisioning = new SchemaProvisioningService(store);
     const materialProvisioning = new MaterialProvisioningService(store);
     const stateProvisioning = new ProvisioningStateService(store);
+    const workerFiles = new WorkerFileService(store);
+    const knowledgeIndex = new KnowledgeIndexService(store);
+    const knowledgeCheck = new KnowledgeCheckService(store);
+    const knowledgeEmbedding = new LocalEmbeddingService(store);
+    const knowledgeRetrieval = new KnowledgeRetrievalService(store, knowledgeEmbedding);
+    const knowledgeEval = new KnowledgeEvalService(knowledgeRetrieval);
+    const workerPolicy = new WorkerPolicyService(store);
+    const workerImport = new WorkerImportService(workerFiles);
+    const ruleFiles = new RuleFileService(store);
 
     const provisionConsumer = async (id: string, body: any) => {
         try {
@@ -275,6 +293,175 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
 
     app.post('/api/v1/consumers/:id/profile/materialize', { preHandler: requireAuth }, async (request) => {
         return profiles.materialize((request.params as any).id);
+    });
+
+    app.get('/api/v1/consumers/:id/knowledge', { preHandler: requireAuth }, async (request) => {
+        return store.knowledgeSummary((request.params as any).id);
+    });
+
+    app.post('/api/v1/consumers/:id/knowledge/index', { preHandler: requireAuth }, async (request) => {
+        return knowledgeIndex.index((request.params as any).id);
+    });
+
+    app.post('/api/v1/consumers/:id/knowledge/evaluate', { preHandler: requireAuth }, async (request) => {
+        const body = (request.body || {}) as any;
+        return knowledgeEval.evaluate((request.params as any).id, Array.isArray(body.cases) ? body.cases : [], body.k, body.weights);
+    });
+
+    app.get('/api/v1/consumers/:id/knowledge/embeddings', { preHandler: requireAuth }, async (request) => {
+        return knowledgeEmbedding.status((request.params as any).id);
+    });
+
+    app.post('/api/v1/consumers/:id/knowledge/embed', { preHandler: requireAuth }, async (request) => {
+        const body = (request.body || {}) as any;
+        return knowledgeEmbedding.embedPending((request.params as any).id, Number(body.batchSize) || 8);
+    });
+
+    app.post('/api/v1/consumers/:id/knowledge/retrieve', { preHandler: requireAuth }, async (request) => {
+        const body = (request.body || {}) as any;
+        return knowledgeRetrieval.retrieve((request.params as any).id, String(body.query || ''), {
+            type: body.type,
+            status: body.status,
+            limit: body.limit,
+            graphDepth: body.graphDepth,
+            weights: body.weights,
+        });
+    });
+
+    app.get('/api/v1/consumers/:id/knowledge/search', { preHandler: requireAuth }, async (request) => {
+        const q = request.query as any;
+        return knowledgeRetrieval.retrieve((request.params as any).id, String(q?.q || ''), {
+            type: q?.type,
+            status: q?.status,
+            limit: Number(q?.limit) || 20,
+        });
+    });
+
+    app.get('/api/v1/consumers/:id/knowledge/coverage', { preHandler: requireAuth }, async (request) => {
+        return store.knowledgeCoverage((request.params as any).id);
+    });
+
+    app.post('/api/v1/consumers/:id/knowledge/check', { preHandler: requireAuth }, async (request) => {
+        return knowledgeCheck.check((request.params as any).id);
+    });
+
+    app.get('/api/v1/consumers/:id/knowledge/docs', { preHandler: requireAuth }, async (request) => {
+        const q = request.query as any;
+        return store.knowledgeDocs((request.params as any).id, typeof q?.q === 'string' ? q.q : '', Number(q?.limit) || 50);
+    });
+
+    app.get('/api/v1/consumers/:id/knowledge/docs/:docId', { preHandler: requireAuth }, async (request) => {
+        return store.knowledgeDoc((request.params as any).id, (request.params as any).docId);
+    });
+
+    app.get('/api/v1/consumers/:id/knowledge/findings', { preHandler: requireAuth }, async (request) => {
+        const q = request.query as any;
+        return store.knowledgeFindings((request.params as any).id, Number(q?.limit) || 50);
+    });
+
+    app.post('/api/v1/consumers/:id/workers/import/audit', { preHandler: requireAuth }, async (request) => {
+        const body = (request.body || {}) as any;
+        await store.recordWorkerImport((request.params as any).id, {
+            sourceFile: String(body.sourceFile || ''),
+            sourceHash: String(body.sourceHash || ''),
+            sourceType: String(body.sourceType || 'unknown'),
+            workerId: String(body.workerId || ''),
+            action: String(body.action || 'import'),
+            detail: body.detail || {},
+        });
+        return { ok: true };
+    });
+
+    app.get('/api/v1/consumers/:id/workers/imports', { preHandler: requireAuth }, async (request) => {
+        const q = request.query as any;
+        return store.listWorkerImports((request.params as any).id, Number(q?.limit) || 50);
+    });
+
+    app.get('/api/v1/consumers/:id/material/summary', { preHandler: requireAuth }, async (request) => {
+        return ruleFiles.materialCounts((request.params as any).id);
+    });
+
+    app.delete('/api/v1/consumers/:id/rules/:ruleId', { preHandler: requireAuth }, async (request) => {
+        return ruleFiles.remove((request.params as any).id, (request.params as any).ruleId);
+    });
+
+    app.get('/api/v1/consumers/:id/rules', { preHandler: requireAuth }, async (request) => {
+        return ruleFiles.list((request.params as any).id);
+    });
+
+    app.post('/api/v1/consumers/:id/rules/import/preview', { preHandler: requireAuth }, async (request) => {
+        const body = (request.body || {}) as any;
+        return ruleFiles.preview((request.params as any).id, Array.isArray(body.files) ? body.files : []);
+    });
+
+    app.post('/api/v1/consumers/:id/rules/import/apply', { preHandler: requireAuth }, async (request) => {
+        const body = (request.body || {}) as any;
+        return ruleFiles.apply((request.params as any).id, Array.isArray(body.candidates) ? body.candidates : []);
+    });
+
+    app.post('/api/v1/consumers/:id/workers/import/preview', { preHandler: requireAuth }, async (request) => {
+        const body = (request.body || {}) as any;
+        return workerImport.preview((request.params as any).id, Array.isArray(body.files) ? body.files : []);
+    });
+
+    app.post('/api/v1/consumers/:id/workers/:workerId/check', { preHandler: requireAuth }, async (request) => {
+        const body = (request.body || {}) as any;
+        return workerPolicy.checkAndRecord((request.params as any).id, (request.params as any).workerId, {
+            verb: body.verb,
+            path: body.path,
+            evidence: Array.isArray(body.evidence) ? body.evidence : [],
+        });
+    });
+
+    app.post('/api/v1/consumers/:id/workers/:workerId/write', { preHandler: requireAuth }, async (request) => {
+        const body = (request.body || {}) as any;
+        return workerPolicy.write((request.params as any).id, (request.params as any).workerId, {
+            path: body.path,
+            content: body.content,
+            evidence: Array.isArray(body.evidence) ? body.evidence : [],
+        });
+    });
+
+    app.post('/api/v1/consumers/:id/workers/:workerId/spawn', { preHandler: requireAuth }, async (request) => {
+        const body = (request.body || {}) as any;
+        return workerPolicy.spawn((request.params as any).id, (request.params as any).workerId, String(body.hostBindingId || ''));
+    });
+
+    app.post('/api/v1/consumers/:id/workers/:workerId/handoff', { preHandler: requireAuth }, async (request) => {
+        const body = (request.body || {}) as any;
+        return workerPolicy.handoff((request.params as any).id, (request.params as any).workerId, String(body.toWorkerId || ''), Array.isArray(body.evidence) ? body.evidence : [], body.work || {}, String(body.outcome || ''));
+    });
+
+    app.post('/api/v1/consumers/:id/workers/:workerId/handoffs/:handoffId/accept', { preHandler: requireAuth }, async (request) => {
+        return workerPolicy.acceptHandoff((request.params as any).id, (request.params as any).workerId, (request.params as any).handoffId);
+    });
+
+    app.get('/api/v1/consumers/:id/workers/:workerId/handoffs', { preHandler: requireAuth }, async (request) => {
+        const q = request.query as any;
+        return workerPolicy.listHandoffs((request.params as any).id, (request.params as any).workerId, Number(q?.limit) || 50);
+    });
+
+    app.get('/api/v1/consumers/:id/workers/:workerId/runs', { preHandler: requireAuth }, async (request) => {
+        const q = request.query as any;
+        return workerPolicy.listRuns((request.params as any).id, (request.params as any).workerId, Number(q?.limit) || 50);
+    });
+
+    app.get('/api/v1/consumers/:id/workers/:workerId/events', { preHandler: requireAuth }, async (request) => {
+        const q = request.query as any;
+        return workerPolicy.listEvents((request.params as any).id, (request.params as any).workerId, Number(q?.limit) || 50);
+    });
+
+    app.get('/api/v1/consumers/:id/workers', { preHandler: requireAuth }, async (request) => {
+        return workerFiles.read((request.params as any).id);
+    });
+
+    app.put('/api/v1/consumers/:id/workers', { preHandler: requireAuth }, async (request) => {
+        const body = request.body as any;
+        return workerFiles.write((request.params as any).id, {
+            workers: Array.isArray(body?.workers) ? body.workers : [],
+            edges: Array.isArray(body?.edges) ? body.edges : [],
+            bindings: Array.isArray(body?.bindings) ? body.bindings : [],
+        });
     });
 
     app.get('/api/v1/consumers/:id/events', { preHandler: requireAuth }, async (request) => {
