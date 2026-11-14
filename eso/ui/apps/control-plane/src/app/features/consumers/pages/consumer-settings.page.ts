@@ -8,7 +8,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { ConsumerProfileService } from '../../../core/consumers/consumer-profile.service.js';
-import type { ConsumerProfile, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, McpProviderDto, WorkerConfigDto, EvidenceRequirementDto } from '../../../../../../../libs/api-client/types.js';
+import type { ConsumerProfile, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, McpProviderDto, WorkerConfigDto, EvidenceRequirementDto, FlowSummaryDto, FlowDefinitionDto } from '../../../../../../../libs/api-client/types.js';
 
 type LayerId = 'multiAgent' | 'rules' | 'skills' | 'hooks' | 'memory' | 'codeGraph' | 'documentGraph' | 'topology';
 
@@ -39,6 +39,8 @@ interface HostProfile {
     userId: string;
     hostPluginId: string;
     stackVersion: number;
+    flowId?: string;
+    flowVersion?: number;
     memorySource: string;
     memoryProvider?: string;
     codeGraphSource: string;
@@ -112,19 +114,6 @@ const defaultWorkerPolicy = { capabilities: [] as string[], verbs: ['read', 'app
 
 function splitList(value: string): string[] {
     return value.split(',').map((item) => item.trim()).filter(Boolean);
-}
-
-function defaultWorkerEdges(): WorkerEdge[] {
-    return [
-        { from: 'worker-scout', to: 'worker-plan', on: 'context ready' },
-        { from: 'worker-plan', to: 'worker-build', on: 'slice ready' },
-        { from: 'worker-build', to: 'worker-verify', on: 'implemented' },
-        { from: 'worker-verify', to: 'worker-audit', on: 'PASS' },
-        { from: 'worker-verify', to: 'worker-fixbug', on: 'FAIL' },
-        { from: 'worker-audit', to: 'worker-fixbug', on: 'findings' },
-        { from: 'worker-fixbug', to: 'worker-verify', on: 'fixed' },
-        { from: 'worker-audit', to: 'worker-qc', on: 'PASS · operator asks' },
-    ];
 }
 
 function defaultStackLayers(): StackLayer[] {
@@ -438,7 +427,7 @@ function defaultPlugins(): PluginEntry[] {
                                                                     @for (profile of managedProfilesFor(developer); track profile.id) {
                                                                         <tr class="host-row">
                                                                             <td><div class="host-name"><strong>{{ hostLabel(profile.hostPluginId) }}</strong><small>managed</small></div></td>
-                                                                            <td>v{{ profile.stackVersion }}</td>
+                                                                            <td>v{{ profile.stackVersion }}@if (profile.flowId) { <small class="flow-pin">flow {{ profile.flowId }} · v{{ profile.flowVersion || 1 }}</small> }</td>
                                                                             <td class="host-sources">{{ hostSourcesSummary(profile) }}</td>
                                                                             <td class="host-overrides">{{ resolutionSummary(profile) }}</td>
                                                                             <td><div class="host-row-actions">
@@ -492,6 +481,20 @@ function defaultPlugins(): PluginEntry[] {
                                                                     </mat-select>
                                                                     <mat-hint>Binding pins this version.</mat-hint>
                                                                 </mat-form-field>
+                                                                <mat-form-field appearance="outline"><mat-label>Flow</mat-label>
+                                                                    <mat-select [ngModel]="newFlowId()" (ngModelChange)="changeFlow($event)">
+                                                                        <mat-option value="">No flow</mat-option>
+                                                                        @for (flow of flowSummaries(); track flow.id) { <mat-option [value]="flow.id">{{ flow.name }} · {{ flow.id }}</mat-option> }
+                                                                    </mat-select>
+                                                                    <mat-hint>Optional flow pin.</mat-hint>
+                                                                </mat-form-field>
+                                                                @if (newFlowId()) {
+                                                                    <mat-form-field appearance="outline"><mat-label>Flow version</mat-label>
+                                                                        <mat-select [ngModel]="newFlowVersion()" (ngModelChange)="newFlowVersion.set($event)">
+                                                                            @for (version of flowVersionOptions(); track version) { <mat-option [value]="version">v{{ version }}</mat-option> }
+                                                                        </mat-select>
+                                                                    </mat-form-field>
+                                                                }
                                                                 <div class="host-add-actions">
                                                                     <button mat-stroked-button type="button" (click)="cancelAddHost()">Cancel</button>
                                                                     <button mat-flat-button color="primary" type="button" (click)="saveHostBinding()">{{ editingProfile() ? 'Save binding' : 'Add host binding' }}</button>
@@ -676,14 +679,18 @@ function defaultPlugins(): PluginEntry[] {
 
                                 <section class="formation-panel">
                                     <div class="formation-head">
-                                        <div><span class="scope-badge">DEFAULT</span><strong>Seven-Star Formation</strong><small>Seven positions, not seven names. Edges are the formation.</small></div>
-                                        <button mat-stroked-button type="button" (click)="resetWorkers()">Reset to default</button>
+                                        <div><span class="scope-badge">DEFAULT FLOW</span><strong>{{ defaultFlow()?.name || 'No default flow' }}</strong><small>@if (defaultFlow(); as flow) { {{ flow.id }} · v{{ flow.version }} · {{ flow.status }} · edges are read-only here } @else { Publish a flow and set it as default. }</small></div>
+                                        <button mat-stroked-button type="button" (click)="openFlows()">Open flow editor</button>
                                     </div>
-                                    <div class="formation-chain">
-                                        @for (edge of workerEdges(); track edge.from + edge.to + edge.on) {
-                                            <span class="formation-edge"><b>{{ workerName(edge.from) }}</b> → <b>{{ workerName(edge.to) }}</b><em>{{ edge.on }}</em></span>
-                                        }
-                                    </div>
+                                    @if (workerEdges().length === 0) {
+                                        <p class="muted">No default flow edges. Open the flow editor to create and publish one.</p>
+                                    } @else {
+                                        <div class="formation-chain">
+                                            @for (edge of workerEdges(); track edge.from + edge.to + edge.on) {
+                                                <span class="formation-edge"><b>{{ workerName(edge.from) }}</b> → <b>{{ workerName(edge.to) }}</b><em>{{ edge.on }}</em></span>
+                                            }
+                                        </div>
+                                    }
                                     <button type="button" class="formation-flow" (click)="openDiagram.set('workers')">
                                         <span class="formation-flow-preview"><img src="assets/diagrams/that-tinh-tran-diagram.svg" alt="Thất Tinh Trận worker flow"></span>
                                         <span class="formation-flow-copy"><strong>View the worker flow</strong><small>Original Thất Tinh Trận diagram · click to open</small></span>
@@ -697,11 +704,28 @@ function defaultPlugins(): PluginEntry[] {
                                         <div class="workers-head-actions">
                                             <input #workerFileInput type="file" accept=".md,.mdc" multiple hidden (change)="onWorkerFiles($event)">
                                             <input #workerFolderInput type="file" accept=".md,.mdc" webkitdirectory directory multiple hidden (change)="onWorkerFiles($event)">
+                                            <button mat-stroked-button type="button" (click)="openFlows()">Flows</button>
+                                            <button mat-stroked-button type="button" [disabled]="workerSyncing()" (click)="syncWorkerSources()">{{ workerSyncing() ? 'Syncing…' : 'Sync sources' }}</button>
                                             <button mat-stroked-button type="button" [disabled]="workerImporting()" (click)="workerFileInput.click()">{{ workerImporting() ? 'Reading…' : 'Import agents' }}</button>
                                             <button mat-stroked-button type="button" [disabled]="workerImporting()" (click)="workerFolderInput.click()">Import folder</button>
                                             <button mat-flat-button color="primary" type="button" (click)="addWorker()">Add worker</button>
                                         </div>
                                     </header>
+                                    <div class="worker-source-status">
+                                        <span><strong>{{ workerSourceStatus().source }}</strong> source files · <strong>{{ workerSourceStatus().projections }}</strong> projections</span>
+                                        @if (workerSourceStatus().drift.length > 0) {
+                                            <span class="worker-drift-count">{{ workerSourceStatus().drift.length }} external change(s)</span>
+                                        } @else {
+                                            <span class="muted">sources and projections in sync</span>
+                                        }
+                                    </div>
+                                    @if (workerSourceStatus().drift.length > 0) {
+                                        <div class="worker-drift">
+                                            @for (item of workerSourceStatus().drift; track item.file + item.kind) {
+                                                <div><code>{{ item.file }}</code><span>{{ item.kind }}</span>@if (item.kind === 'projection_changed') { <button mat-button type="button" (click)="promoteProjection(item.file)">Promote</button> }</div>
+                                            }
+                                        </div>
+                                    }
                                     @if (workerImportPreview(); as preview) {
                                         <section class="worker-import-preview">
                                             <header><div><h3>Import preview</h3><p>{{ preview.candidates.length }} agent file(s) · {{ preview.skipped.length }} skipped</p></div><button mat-button type="button" (click)="closeImportPreview()">Cancel</button></header>
@@ -1682,6 +1706,9 @@ export class ConsumerSettingsPage implements OnInit {
     readonly stackVersions = signal<StackVersion[]>([{ version: 1, status: 'published', layers: defaultStackLayers() }]);
     readonly activeStackVersion = signal(1);
     readonly newStackVersion = signal(1);
+    readonly flowSummaries = signal<FlowSummaryDto[]>([]);
+    readonly newFlowId = signal('');
+    readonly newFlowVersion = signal(1);
     readonly remoteStackVersions = signal<StackVersion[]>([]);
     readonly hostProfiles = signal<HostProfile[]>([]);
     readonly plugins = signal<PluginEntry[]>(defaultPlugins());
@@ -1711,7 +1738,8 @@ export class ConsumerSettingsPage implements OnInit {
         }
         return errors;
     });
-    readonly workerEdges = signal<WorkerEdge[]>(defaultWorkerEdges());
+    readonly workerEdges = signal<WorkerEdge[]>([]);
+    readonly defaultFlow = signal<FlowDefinitionDto | null>(null);
     readonly policyWorker = signal<WorkerEntry | null>(null);
     readonly policyVerb = signal('read');
     readonly policyPath = signal('');
@@ -1726,6 +1754,8 @@ export class ConsumerSettingsPage implements OnInit {
     readonly workerImportDirty = signal(false);
     readonly workerImports = signal<any[]>([]);
     readonly ruleFiles = signal<any[]>([]);
+    readonly workerSourceStatus = signal<any>({ source: 0, projections: 0, drift: [] });
+    readonly workerSyncing = signal(false);
     readonly materialCounts = signal<{ skills: number; hooks: number; subagents: number; rules: number }>({ skills: 0, hooks: 0, subagents: 0, rules: 0 });
     readonly ruleImporting = signal(false);
     readonly ruleImportPreview = signal<any | null>(null);
@@ -2104,6 +2134,58 @@ export class ConsumerSettingsPage implements OnInit {
         this.workers.update((workers) => workers.map((worker) => ({ ...worker, hostBindingIds: [...hostBindingIds] })));
     }
 
+    private loadFlowSummaries(id: string): void {
+        this.service.getFlows(id)
+            .then((flows) => this.flowSummaries.set(flows))
+            .catch(() => this.flowSummaries.set([]));
+    }
+
+    flowVersionOptions(): number[] {
+        const flow = this.flowSummaries().find((item) => item.id === this.newFlowId());
+        return flow?.publishedVersions?.length ? flow.publishedVersions : (flow ? [flow.version] : []);
+    }
+
+    changeFlow(id: string): void {
+        this.newFlowId.set(id);
+        this.newFlowVersion.set(this.flowVersionOptions().at(-1) || 1);
+    }
+
+    private loadWorkerSourceStatus(id: string): void {
+        this.service.getWorkerSourceStatus(id)
+            .then((status) => this.workerSourceStatus.set(status))
+            .catch(() => this.workerSourceStatus.set({ source: 0, projections: 0, drift: [] }));
+    }
+
+    syncWorkerSources(): void {
+        this.workerSyncing.set(true);
+        this.service.syncWorkerSources(this.consumerId)
+            .then((status) => this.workerSourceStatus.set(status))
+            .catch((err) => this.error.set(err?.detail || err?.message || 'Worker sync failed'))
+            .finally(() => this.workerSyncing.set(false));
+    }
+
+    promoteProjection(file: string): void {
+        const id = file.replace(/\.md$/, '');
+        this.service.promoteWorkerProjection(this.consumerId, id)
+            .then(() => {
+                this.loadWorkerFiles(this.consumerId);
+                this.loadWorkerSourceStatus(this.consumerId);
+            })
+            .catch((err) => this.error.set(err?.detail || err?.message || 'Promote failed'));
+    }
+
+    private loadDefaultFlow(id: string): void {
+        this.service.getDefaultFlow(id)
+            .then((flow) => {
+                this.defaultFlow.set(flow);
+                this.workerEdges.set(flow?.edges.map((edge) => ({ from: edge.from, to: edge.to, on: edge.on })) || []);
+            })
+            .catch(() => {
+                this.defaultFlow.set(null);
+                this.workerEdges.set([]);
+            });
+    }
+
     private loadRuleFiles(id: string): void {
         Promise.all([this.service.getRules(id), this.service.getMaterialSummary(id)])
             .then(([rules, material]) => {
@@ -2478,16 +2560,8 @@ export class ConsumerSettingsPage implements OnInit {
 
     removeWorker(id: string): void {
         this.workers.update((workers) => workers.filter((worker) => worker.id !== id));
-        this.workerEdges.update((edges) => edges.filter((edge) => edge.from !== id && edge.to !== id));
         if (this.selectedWorkerId() === id) this.selectedWorkerId.set('');
         if (this.policyWorker()?.id === id) this.closePolicyCheck();
-    }
-
-    resetWorkers(): void {
-        this.workers.set(defaultWorkers());
-        this.workerEdges.set(defaultWorkerEdges());
-        this.formationHostIds.set([]);
-        this.workerDraft.set({ name: '', role: 'dev', layer: 'peer', scope: '', capabilities: '', verbs: 'read,append', bar: '', escalation: 'allow' });
     }
 
     workerName(id: string): string {
@@ -2519,7 +2593,7 @@ export class ConsumerSettingsPage implements OnInit {
         const memory = !this.isResolutionLayerEnabled('memory') ? 'Disabled by Stack' : (profile.memoryProvider ? `${profile.memorySource} · ${profile.memoryProvider}` : profile.memorySource);
         const codeGraph = !this.isResolutionLayerEnabled('codeGraph') ? 'Disabled by Stack' : (profile.codeGraphProvider ? `${profile.codeGraphSource} · ${profile.codeGraphProvider}` : profile.codeGraphSource);
         return [
-            { id: 'multiAgent', label: 'Multi-agent', value: '3 roles · 4 workers', scope: 'stack' },
+            { id: 'multiAgent', label: 'Multi-agent', value: `${this.workers().length} workers · ${this.workers().length} roles`, scope: 'stack' },
             { id: 'rules', label: 'Rules', value: (layer('rules')?.files ?? 0) + ' files', scope: 'stack' },
             { id: 'skills', label: 'Skills', value: (layer('skills')?.files ?? 0) + ' files', scope: 'stack' },
             { id: 'hooks', label: 'Hooks', value: (layer('hooks')?.files ?? 0) + ' files', scope: 'stack' },
@@ -2542,6 +2616,7 @@ export class ConsumerSettingsPage implements OnInit {
         const resolution = this.hostResolution(hostPluginId);
         this.hostProfiles.update((profiles) => [...profiles, {
             id: `hp-${Date.now()}`, userId, hostPluginId, stackVersion: this.newStackVersion(),
+            flowId: this.newFlowId() || undefined, flowVersion: this.newFlowId() ? this.newFlowVersion() : undefined,
             ...resolution,
             mcpConfigSource: this.mcpSourceForHost(hostPluginId), installState: 'pending', detected: false,
         }]);
@@ -2552,6 +2627,8 @@ export class ConsumerSettingsPage implements OnInit {
         this.addingHostFor.set('__new');
         this.bindingDeveloper.set('');
         this.newStackVersion.set(this.latestPublishedVersion());
+        this.newFlowId.set('');
+        this.newFlowVersion.set(1);
         this.useHostDefaults();
     }
 
@@ -2560,6 +2637,8 @@ export class ConsumerSettingsPage implements OnInit {
         this.addingHostFor.set(userId);
         this.bindingDeveloper.set(userId);
         this.newStackVersion.set(this.latestPublishedVersion());
+        this.newFlowId.set('');
+        this.newFlowVersion.set(1);
         this.useHostDefaults();
     }
 
@@ -2588,7 +2667,7 @@ export class ConsumerSettingsPage implements OnInit {
         const layers = this.layersForVersion(this.newStackVersion());
         const layer = (id: LayerId) => layers.find((item) => item.id === id);
         return [
-            { id: 'multiAgent', label: 'Multi-agent / SLP', value: 'IAM policy · 3 roles · 4 workers' },
+            { id: 'multiAgent', label: 'Multi-agent / SLP', value: `${this.workers().length} workers · ${this.workers().length} roles` },
             { id: 'rules', label: 'Rules / law', value: `${layer('rules')?.files ?? 0} files` },
             { id: 'skills', label: 'Skills', value: `${layer('skills')?.files ?? 0} files` },
             { id: 'hooks', label: 'Hooks', value: `${layer('hooks')?.files ?? 0} files` },
@@ -2604,6 +2683,8 @@ export class ConsumerSettingsPage implements OnInit {
         this.bindingDeveloper.set(profile.userId);
         this.newHostPluginId.set(profile.hostPluginId);
         this.newStackVersion.set(profile.stackVersion);
+        this.newFlowId.set(profile.flowId || '');
+        this.newFlowVersion.set(profile.flowVersion || 1);
         this.newMemorySource.set(profile.memorySource);
         this.newMemoryProvider.set(profile.memoryProvider || '');
         this.newCodeGraphSource.set(profile.codeGraphSource);
@@ -2621,6 +2702,8 @@ export class ConsumerSettingsPage implements OnInit {
             this.hostProfiles.update((profiles) => profiles.map((profile) => profile.id === editing ? {
                 ...profile,
                 stackVersion: this.newStackVersion(),
+                flowId: this.newFlowId() || undefined,
+                flowVersion: this.newFlowId() ? this.newFlowVersion() : undefined,
                 memorySource: this.newMemorySource(),
                 memoryProvider: this.newMemorySource() === 'market' ? this.newMemoryProvider() : undefined,
                 codeGraphSource: this.newCodeGraphSource(),
@@ -2741,6 +2824,10 @@ export class ConsumerSettingsPage implements OnInit {
     selectTab(id: string): void {
         this.activeTab.set(id);
         this.router.navigate([], { relativeTo: this.route, queryParams: { tab: id }, queryParamsHandling: 'merge', replaceUrl: true });
+    }
+
+    openFlows(): void {
+        void this.router.navigate(['/consumers', this.consumerId, 'flows']);
     }
 
     back(): void { const id = this.route.snapshot.paramMap.get('id'); this.router.navigate(['/consumers', id]); }
@@ -3211,9 +3298,6 @@ export class ConsumerSettingsPage implements OnInit {
                 if (Array.isArray(config.workers) && config.workers.length > 0) {
                     this.workers.set(config.workers.map((worker) => this.normalizeWorker(worker)));
                 }
-                if (Array.isArray(config.edges) && config.edges.length > 0) {
-                    this.workerEdges.set(config.edges.map((edge) => ({ ...edge })));
-                }
                 this.pruneWorkerBindings();
                 this.loadWorkerImports();
             })
@@ -3280,7 +3364,7 @@ export class ConsumerSettingsPage implements OnInit {
                 sourceHash: worker.sourceHash,
                 sourceType: worker.sourceType,
             })),
-            edges: this.workerEdges().map((edge) => ({ ...edge })),
+            edges: [],
             bindings: this.hostProfiles().map((binding) => ({
                 id: binding.id,
                 developer: binding.userId,
@@ -3384,7 +3468,7 @@ export class ConsumerSettingsPage implements OnInit {
         const developerIds = [...new Set([...savedDevelopers, ...savedProfiles.map((profile: HostProfile) => profile.userId)])];
         this.developers.set(developerIds);
         this.workers.set(defaultWorkers());
-        this.workerEdges.set(defaultWorkerEdges());
+        this.workerEdges.set([]);
         this.formationHostIds.set(Array.isArray(harness.formationHostIds) ? harness.formationHostIds : []);
         const savedPlugins = Array.isArray(harness.plugins)
             ? harness.plugins.filter((plugin: PluginEntry) => plugin.type !== 'provider')
@@ -3403,7 +3487,10 @@ export class ConsumerSettingsPage implements OnInit {
         this.pruneWorkerBindings();
         this.hydrated.set(true);
         void this.loadWorkerFiles(profile.id);
+        void this.loadWorkerSourceStatus(profile.id);
+        void this.loadDefaultFlow(profile.id);
         void this.loadRuleFiles(profile.id);
+        void this.loadFlowSummaries(profile.id);
         void this.loadKnowledgeIndex(profile.id);
     }
 
@@ -3476,7 +3563,6 @@ export class ConsumerSettingsPage implements OnInit {
             if (Array.isArray(draft.manifestChecks)) this.manifestChecks.set(draft.manifestChecks);
             if (Array.isArray(draft.workers) && draft.workers.length > 0) this.workers.set(draft.workers.map((worker: any) => this.normalizeWorker(worker)));
             if (Array.isArray(draft.formationHostIds)) this.formationHostIds.set(draft.formationHostIds);
-            if (Array.isArray(draft.workerEdges) && draft.workerEdges.length > 0) this.workerEdges.set(draft.workerEdges);
             if (typeof draft.consent === 'boolean') this.consent.set(draft.consent);
             if (Array.isArray(draft.events)) this.events.set(draft.events);
         } catch {

@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { CONTROL_PLANE_API_CLIENT } from '../tokens.js';
-import type { ConsumerListResponse, ConsumerPlan, ConsumerProfile, FsBrowseResponse, HostDiscoveryDto, McpDiscoveryDto, SetupConsumerPayload, StackVersionsDto, WorkerConfigDto, WorkerPolicyResultDto, WorkerImportPreviewDto, WorkerImportRecordDto, RuleFileDto, RuleImportPreviewDto, MaterialSummaryDto, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, KnowledgeEmbeddingResultDto } from '../../../../../../libs/api-client/types.js';
+import type { ConsumerListResponse, ConsumerPlan, ConsumerProfile, FsBrowseResponse, HostDiscoveryDto, McpDiscoveryDto, SetupConsumerPayload, StackVersionsDto, WorkerConfigDto, WorkerPolicyResultDto, WorkerImportPreviewDto, WorkerImportRecordDto, RuleFileDto, RuleImportPreviewDto, MaterialSummaryDto, FlowDefinitionDto, FlowSummaryDto, FlowValidationDto, FlowProposalDto, WorkerSourceStatusDto, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, KnowledgeEmbeddingResultDto } from '../../../../../../libs/api-client/types.js';
 
 @Injectable({ providedIn: 'root' })
 export class ConsumerProfileService {
@@ -74,6 +74,66 @@ export class ConsumerProfileService {
     indexKnowledge(id: string): Promise<KnowledgeSummaryDto> {
         if (!this.client) throw new Error('API client is not configured');
         return this.client.indexConsumerKnowledge(id);
+    }
+
+    getWorkerSourceStatus(id: string): Promise<WorkerSourceStatusDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.getWorkerSourceStatus(id);
+    }
+
+    syncWorkerSources(id: string): Promise<WorkerSourceStatusDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.syncWorkerSources(id);
+    }
+
+    promoteWorkerProjection(id: string, workerId: string): Promise<any> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.promoteWorkerProjection(id, workerId);
+    }
+
+    getFlows(id: string): Promise<FlowSummaryDto[]> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.getConsumerFlows(id);
+    }
+
+    getFlowProposal(id: string): Promise<FlowProposalDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.getConsumerFlowProposal(id);
+    }
+
+    applyFlowProposal(id: string): Promise<any> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.applyConsumerFlowProposal(id);
+    }
+
+    getDefaultFlow(id: string): Promise<FlowDefinitionDto | null> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.getConsumerDefaultFlow(id);
+    }
+
+    setDefaultFlow(id: string, flowId: string, version: number): Promise<any> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.setConsumerDefaultFlow(id, flowId, version);
+    }
+
+    getFlow(id: string, flowId: string): Promise<FlowDefinitionDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.getConsumerFlow(id, flowId);
+    }
+
+    saveFlow(id: string, flowId: string, flow: Partial<FlowDefinitionDto>): Promise<FlowDefinitionDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.saveConsumerFlow(id, flowId, flow);
+    }
+
+    validateFlow(id: string, flowId: string, flow: Partial<FlowDefinitionDto>): Promise<FlowValidationDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.validateConsumerFlow(id, flowId, flow);
+    }
+
+    publishFlow(id: string, flowId: string): Promise<any> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.publishConsumerFlow(id, flowId);
     }
 
     getMaterialSummary(id: string): Promise<MaterialSummaryDto> {

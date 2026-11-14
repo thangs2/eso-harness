@@ -61,6 +61,7 @@ export interface WorkerBindingFile {
 export interface WorkerConfig {
     workers: WorkerFile[];
     edges: WorkerEdgeFile[];
+    flow?: { id: string; name: string; version: number; status: string };
     bindings?: WorkerBindingFile[];
 }
 
@@ -217,6 +218,66 @@ function parseWorker(text: string, fallbackId: string): WorkerFile | null {
 export class WorkerFileService {
     constructor(private readonly store: PlatformStore) {}
 
+    private defaultFlow(root: string): { id: string; name: string; version: number; edges: WorkerEdgeFile[] } | null {
+        const index = this.readJson(join(harnessDir(root), 'flows', 'index.json'), null as any);
+        if (!index?.defaultFlowId || !index?.defaultFlowVersion) return null;
+        const path = join(harnessDir(root), 'flows', `${index.defaultFlowId}.v${index.defaultFlowVersion}.json`);
+        const flow = this.readJson(path, null as any);
+        if (!flow) return null;
+        return {
+            id: String(flow.id || index.defaultFlowId),
+            name: String(flow.name || index.defaultFlowId),
+            version: Number(flow.version || index.defaultFlowVersion),
+            edges: Array.isArray(flow.edges) ? flow.edges.filter((edge: any) => edge?.from && edge?.to).map((edge: any) => ({ from: edge.from, to: edge.to, on: edge.on || '' })) : [],
+        };
+    }
+
+    async refreshIndex(consumerId: string): Promise<void> {
+        const config = await this.read(consumerId);
+        const indexed = config.workers.map((worker) => ({
+            workerId: worker.id, name: worker.name, role: worker.role, layer: worker.layer,
+            scope: worker.scope, status: worker.status, filePath: `agents/subagents/${worker.id}.md`,
+            contentHash: '', hostBindingIds: worker.hostBindingIds || [],
+            capabilities: worker.capabilities || [], verbs: worker.verbs || [], bar: worker.bar || [], escalation: worker.escalation || 'allow',
+        }));
+        await this.store.replaceWorkerIndex(consumerId, indexed, config.edges);
+    }
+
+    async sourceStatus(consumerId: string): Promise<any> {
+        const root = await this.root(consumerId);
+        const canonical = join(workerDir(root));
+        const projection = join(root, '.agents', 'agents');
+        const source = existsSync(canonical) ? readdirSync(canonical).filter((f) => f.endsWith('.md') && f.toLowerCase() !== 'readme.md') : [];
+        const projected = existsSync(projection) ? readdirSync(projection).filter((f) => f.endsWith('.md')) : [];
+        const sourceHashes = new Map<string, string>();
+        for (const file of source) sourceHashes.set(file, createHash('sha256').update(readFileSync(join(canonical, file), 'utf8')).digest('hex'));
+        const projectionHashes = new Map<string, string>();
+        for (const file of projected) {
+            const raw = readFileSync(join(projection, file), 'utf8');
+            const body = raw.includes(PROJECTION_MARKER) ? raw.slice(raw.indexOf(PROJECTION_MARKER) + PROJECTION_MARKER.length).replace(/^\s*/, '') : raw;
+            projectionHashes.set(file, createHash('sha256').update(body).digest('hex'));
+        }
+        const drift = source.filter((file) => projectionHashes.has(file) && projectionHashes.get(file) !== sourceHashes.get(file)).map((file) => ({ file, kind: 'projection_changed' }));
+        const missingProjection = source.filter((file) => !projectionHashes.has(file)).map((file) => ({ file, kind: 'missing_projection' }));
+        const orphanProjection = projected.filter((file) => !sourceHashes.has(file)).map((file) => ({ file, kind: 'orphan_projection' }));
+        return { source: source.length, projections: projected.length, drift: [...drift, ...missingProjection, ...orphanProjection] };
+    }
+
+    async promoteProjection(consumerId: string, workerId: string): Promise<any> {
+        const root = await this.root(consumerId);
+        const source = join(workerDir(root), `${safeId(workerId)}.md`);
+        const projection = join(root, '.agents', 'agents', `${workerId}.md`);
+        if (!existsSync(projection)) return { ok: false, reason: 'PROJECTION_NOT_FOUND' };
+        const raw = readFileSync(projection, 'utf8');
+        if (!raw.includes(PROJECTION_MARKER)) return { ok: false, reason: 'NOT_A_PROJECTION' };
+        const body = raw.slice(raw.indexOf(PROJECTION_MARKER) + PROJECTION_MARKER.length).replace(/^\s*/, '');
+        atomicWrite(source, body);
+        const config = await this.read(consumerId);
+        await this.refreshIndex(consumerId);
+        this.writeProjections(root, config.workers.map((worker) => ({ workerId: worker.id })));
+        return { ok: true, workerId };
+    }
+
     async read(consumerId: string): Promise<WorkerConfig> {
         const root = await this.root(consumerId);
         const dir = workerDir(root);
@@ -241,9 +302,9 @@ export class WorkerFileService {
         }
         for (const worker of workers) worker.hostBindingIds = byId.get(worker.id) || [];
 
-        const formation = this.readJson(join(harnessDir(root), 'formation.json'), { edges: [] as WorkerEdgeFile[] });
-        const edges = Array.isArray(formation?.edges) ? formation.edges.filter((edge: any) => edge?.from && edge?.to) : [];
-        return { workers, edges };
+        const flow = this.defaultFlow(root);
+        const edges = flow?.edges || [];
+        return { workers, edges, flow: flow ? { id: flow.id, name: flow.name, version: flow.version, status: 'published' } : undefined };
     }
 
     async write(consumerId: string, config: WorkerConfig): Promise<WorkerConfig> {
@@ -316,11 +377,8 @@ export class WorkerFileService {
         const placements = workers.flatMap((worker) =>
             (worker.hostBindingIds || []).map((hostBindingId) => ({ workerId: worker.id, hostBindingId }))
         );
-        const edges = (Array.isArray(config.edges) ? config.edges : [])
-            .filter((edge) => edge?.from && edge?.to)
-            .map((edge) => ({ from: edge.from, to: edge.to, on: edge.on || '' }));
         this.writeJson(join(harnessDir(root), 'placements.json'), placements);
-        this.writeJson(join(harnessDir(root), 'formation.json'), { version: 1, edges });
+        const edges = this.defaultFlow(root)?.edges || [];
         await this.store.replaceWorkerIndex(consumerId, indexed, edges);
         this.writeBindings(root, Array.isArray(config.bindings) ? config.bindings : []);
         this.writeProjections(root, indexed);

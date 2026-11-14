@@ -33,6 +33,8 @@ import { KnowledgeEvalService } from '../../modules/knowledge/knowledge-eval.ser
 import { WorkerPolicyService } from '../../modules/workers/worker-policy.service.js';
 import { WorkerImportService } from '../../modules/workers/worker-import.service.js';
 import { RuleFileService } from '../../modules/rules/rule-file.service.js';
+import { FlowFileService } from '../../modules/flows/flow-file.service.js';
+import { FlowProposalService } from '../../modules/flows/flow-proposal.service.js';
 
 /**
  * L6.2 — the HTTP surface for Sprint 1.
@@ -74,6 +76,8 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
     const workerPolicy = new WorkerPolicyService(store);
     const workerImport = new WorkerImportService(workerFiles);
     const ruleFiles = new RuleFileService(store);
+    const flowFiles = new FlowFileService(store, workerFiles);
+    const flowProposal = new FlowProposalService(store, workerFiles, flowFiles);
 
     const provisionConsumer = async (id: string, body: any) => {
         try {
@@ -385,6 +389,61 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
         return ruleFiles.remove((request.params as any).id, (request.params as any).ruleId);
     });
 
+    app.get('/api/v1/consumers/:id/flows', { preHandler: requireAuth }, async (request) => {
+        return flowFiles.list((request.params as any).id);
+    });
+
+    app.get('/api/v1/consumers/:id/slp/flow-proposal', { preHandler: requireAuth }, async (request) => {
+        return flowProposal.preview((request.params as any).id);
+    });
+
+    app.post('/api/v1/consumers/:id/slp/flow-proposal/apply', { preHandler: requireAuth }, async (request) => {
+        return flowProposal.apply((request.params as any).id);
+    });
+
+    app.get('/api/v1/consumers/:id/flows/default', { preHandler: requireAuth }, async (request) => {
+        return flowFiles.defaultFlow((request.params as any).id);
+    });
+
+    app.put('/api/v1/consumers/:id/flows/default', { preHandler: requireAuth }, async (request) => {
+        const body = (request.body || {}) as any;
+        return flowFiles.setDefault((request.params as any).id, String(body.flowId || ''), Number(body.version) || 0);
+    });
+
+    app.get('/api/v1/consumers/:id/flows/:flowId', { preHandler: requireAuth }, async (request) => {
+        const q = request.query as any;
+        return flowFiles.get((request.params as any).id, (request.params as any).flowId, Number(q?.version) || undefined);
+    });
+
+    app.put('/api/v1/consumers/:id/flows/:flowId', { preHandler: requireAuth }, async (request) => {
+        return flowFiles.saveDraft((request.params as any).id, (request.params as any).flowId, request.body || {});
+    });
+
+    app.post('/api/v1/consumers/:id/flows/:flowId/validate', { preHandler: requireAuth }, async (request) => {
+        return flowFiles.validate((request.params as any).id, request.body || {});
+    });
+
+    app.post('/api/v1/consumers/:id/flows/:flowId/publish', { preHandler: requireAuth }, async (request) => {
+        return flowFiles.publish((request.params as any).id, (request.params as any).flowId);
+    });
+
+    app.get('/api/v1/consumers/:id/flows/:flowId/versions', { preHandler: requireAuth }, async (request) => {
+        return flowFiles.listVersions((request.params as any).id, (request.params as any).flowId);
+    });
+
+    app.get('/api/v1/consumers/:id/workers/sync/status', { preHandler: requireAuth }, async (request) => {
+        return workerFiles.sourceStatus((request.params as any).id);
+    });
+
+    app.post('/api/v1/consumers/:id/workers/sync', { preHandler: requireAuth }, async (request) => {
+        await workerFiles.refreshIndex((request.params as any).id);
+        return workerFiles.sourceStatus((request.params as any).id);
+    });
+
+    app.post('/api/v1/consumers/:id/workers/sync/promote/:workerId', { preHandler: requireAuth }, async (request) => {
+        return workerFiles.promoteProjection((request.params as any).id, (request.params as any).workerId);
+    });
+
     app.get('/api/v1/consumers/:id/rules', { preHandler: requireAuth }, async (request) => {
         return ruleFiles.list((request.params as any).id);
     });
@@ -457,6 +516,9 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
 
     app.put('/api/v1/consumers/:id/workers', { preHandler: requireAuth }, async (request) => {
         const body = request.body as any;
+        if (Array.isArray(body?.edges) && body.edges.length > 0) {
+            throw new PlatformError('EDGES_MOVED_TO_FLOW', 'Use PUT /consumers/:id/flows/:flowId and publish');
+        }
         return workerFiles.write((request.params as any).id, {
             workers: Array.isArray(body?.workers) ? body.workers : [],
             edges: Array.isArray(body?.edges) ? body.edges : [],

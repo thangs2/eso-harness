@@ -21,6 +21,11 @@ import type {
     RuleFileDto,
     RuleImportPreviewDto,
     MaterialSummaryDto,
+    FlowDefinitionDto,
+    FlowSummaryDto,
+    WorkerSourceStatusDto,
+    FlowValidationDto,
+    FlowProposalDto,
     KnowledgeSummaryDto,
     KnowledgeDocDto,
     KnowledgeFindingDto,
@@ -297,12 +302,93 @@ export class ControlPlaneApiClient {
         return (await res.json()) as KnowledgeSummaryDto;
     }
 
+    async getWorkerSourceStatus(id: string): Promise<WorkerSourceStatusDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/workers/sync/status`, { headers: this.getHeaders() });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as WorkerSourceStatusDto;
+    }
+
+    async syncWorkerSources(id: string): Promise<WorkerSourceStatusDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/workers/sync`, { method: 'POST', headers: this.getHeaders() });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as WorkerSourceStatusDto;
+    }
+
+    async promoteWorkerProjection(id: string, workerId: string): Promise<any> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/workers/sync/promote/${encodeURIComponent(workerId)}`, { method: 'POST', headers: this.getHeaders() });
+        if (!res.ok) throw await this.problem(res);
+        return res.json();
+    }
+
     async getConsumerWorkers(id: string): Promise<WorkerConfigDto> {
         const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/workers`, {
             headers: this.getHeaders(),
         });
         if (!res.ok) throw await this.problem(res);
         return (await res.json()) as WorkerConfigDto;
+    }
+
+    async getConsumerFlows(id: string): Promise<FlowSummaryDto[]> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/flows`, { headers: this.getHeaders() });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as FlowSummaryDto[];
+    }
+
+    async getConsumerFlowProposal(id: string): Promise<FlowProposalDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/slp/flow-proposal`, { headers: this.getHeaders() });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as FlowProposalDto;
+    }
+
+    async applyConsumerFlowProposal(id: string): Promise<any> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/slp/flow-proposal/apply`, { method: 'POST', headers: this.getHeaders() });
+        if (!res.ok) throw await this.problem(res);
+        return res.json();
+    }
+
+    async getConsumerDefaultFlow(id: string): Promise<FlowDefinitionDto | null> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/flows/default`, { headers: this.getHeaders() });
+        if (!res.ok) throw await this.problem(res);
+        const data = await res.json();
+        return data && data.id ? data as FlowDefinitionDto : null;
+    }
+
+    async setConsumerDefaultFlow(id: string, flowId: string, version: number): Promise<any> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/flows/default`, {
+            method: 'PUT', headers: { ...this.getHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ flowId, version }),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return res.json();
+    }
+
+    async getConsumerFlow(id: string, flowId: string): Promise<FlowDefinitionDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/flows/${encodeURIComponent(flowId)}`, { headers: this.getHeaders() });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as FlowDefinitionDto;
+    }
+
+    async saveConsumerFlow(id: string, flowId: string, flow: Partial<FlowDefinitionDto>): Promise<FlowDefinitionDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/flows/${encodeURIComponent(flowId)}`, {
+            method: 'PUT', headers: { ...this.getHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(flow),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as FlowDefinitionDto;
+    }
+
+    async validateConsumerFlow(id: string, flowId: string, flow: Partial<FlowDefinitionDto>): Promise<FlowValidationDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/flows/${encodeURIComponent(flowId)}/validate`, {
+            method: 'POST', headers: { ...this.getHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(flow),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as FlowValidationDto;
+    }
+
+    async publishConsumerFlow(id: string, flowId: string): Promise<any> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/flows/${encodeURIComponent(flowId)}/publish`, {
+            method: 'POST', headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return res.json();
     }
 
     async getConsumerMaterialSummary(id: string): Promise<MaterialSummaryDto> {

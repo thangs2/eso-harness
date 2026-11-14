@@ -154,6 +154,66 @@ export interface KnowledgeFindingDto {
     created_at: string;
 }
 
+export interface WorkerSourceStatusDto {
+    source: number;
+    projections: number;
+    drift: Array<{ file: string; kind: string }>;
+}
+
+export interface FlowNodeDto {
+    workerId: string;
+    x: number;
+    y: number;
+}
+
+export interface FlowEdgeDto {
+    id: string;
+    from: string;
+    to: string;
+    on: string;
+    condition?: { kind: string; equals?: string; [key: string]: unknown };
+    priority?: number;
+}
+
+export interface FlowDefinitionDto {
+    id: string;
+    name: string;
+    version: number;
+    status: 'draft' | 'published';
+    nodes: FlowNodeDto[];
+    edges: FlowEdgeDto[];
+    viewport: { x: number; y: number; zoom: number };
+    createdAt?: string;
+    updatedAt?: string;
+    publishedAt?: string;
+}
+
+export interface FlowSummaryDto {
+    id: string;
+    name: string;
+    version: number;
+    status: 'draft' | 'published';
+    publishedVersions: number[];
+    updatedAt: string | null;
+    isDefault?: boolean;
+}
+
+export interface FlowProposalDto {
+    available: boolean;
+    reason?: string;
+    sourceFile?: string;
+    sourceHash?: string;
+    flow?: FlowDefinitionDto;
+    warnings?: string[];
+    files?: string[];
+}
+
+export interface FlowValidationDto {
+    ok: boolean;
+    errors: string[];
+    warnings: string[];
+}
+
 export interface MaterialSummaryDto {
     skills: number;
     hooks: number;

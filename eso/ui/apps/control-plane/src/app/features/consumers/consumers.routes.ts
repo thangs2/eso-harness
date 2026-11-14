@@ -4,8 +4,10 @@ import { authGuard } from '../../core/auth/auth.guard.js';
 import { ConsumerDetailPage } from './pages/consumer-detail.page.js';
 import { ConsumerSettingsPage } from './pages/consumer-settings.page.js';
 
+
 export const CONSUMERS_ROUTES: Routes = [
     { path: '', component: ConsumersPage, canActivate: [authGuard] },
     { path: ':id/settings', component: ConsumerSettingsPage, canActivate: [authGuard] },
+    { path: ':id/flows', loadComponent: () => import('./pages/flows.page.js').then((m) => m.FlowsPage), canActivate: [authGuard] },
     { path: ':id', component: ConsumerDetailPage, canActivate: [authGuard] },
 ];

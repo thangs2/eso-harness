@@ -27,6 +27,7 @@ export const ERROR_STATUS: Readonly<Record<string, number>> = {
     DATABASE_UNAVAILABLE: 503,
     WORKER_INVALID: 422,
     WORKER_WRITE_FAILED: 500,
+    EDGES_MOVED_TO_FLOW: 422,
 };
 
 export const ERROR_MESSAGE: Readonly<Record<string, string>> = {
@@ -50,6 +51,7 @@ export const ERROR_MESSAGE: Readonly<Record<string, string>> = {
     DATABASE_UNAVAILABLE: 'Database is unavailable',
     WORKER_INVALID: 'Worker definition is invalid',
     WORKER_WRITE_FAILED: 'Could not write worker files',
+    EDGES_MOVED_TO_FLOW: 'Worker edges are defined by flows',
 };
 
 export class PlatformError extends Error {

@@ -1309,3 +1309,17 @@ button.mat-mdc-button-base { white-space: nowrap; }
 
 .worker-status-hint { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-top: var(--space-2); padding: var(--space-2) var(--space-3); border: 1px solid #f59e0b; border-radius: var(--radius-sm); background: rgba(245, 158, 11, .06); font-size: var(--text-xs); }
 .worker-status-hint span { color: var(--muted); }
+
+.f-connection-path { stroke: var(--brand); stroke-width: 2px; }
+.f-connection-selection { stroke: transparent; fill: none; }
+.f-connection-drag-handle { fill: var(--brand); }
+
+.flow-pin { display: block; color: var(--muted); font-size: 11px; }
+
+.flow-list-badges { display: flex; gap: var(--space-1); align-items: flex-start; flex-wrap: wrap; }
+
+.worker-source-status { display: flex; gap: var(--space-3); align-items: center; color: var(--muted); font-size: var(--text-xs); padding: var(--space-2) 0; }
+.worker-drift-count { color: #f59e0b; font-weight: 600; }
+.worker-drift { display: grid; gap: var(--space-1); padding: var(--space-2) var(--space-3); border: 1px solid #f59e0b; border-radius: var(--radius-sm); background: rgba(245, 158, 11, .06); }
+.worker-drift > div { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-xs); }
+.worker-drift code { overflow-wrap: anywhere; }
