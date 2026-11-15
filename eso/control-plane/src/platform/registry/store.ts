@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 import {
     CONSUMER_ID_PATTERN,
     CONSUMER_TABLE,
@@ -28,6 +31,7 @@ export interface PlatformStore {
     tableExists(table: 'platform.consumer' | 'platform.consumer_event'): Promise<boolean>;
     transaction<T>(fn: (tx: PlatformStore) => Promise<T>): Promise<T>;
     createSchema(consumerId: string): Promise<string>;
+    ensureKnowledgeSchema(consumerId: string): Promise<void>;
     dropSchema(consumerId: string): Promise<void>;
     schemaExists(consumerId: string): Promise<boolean>;
     insertConsumer(record: ConsumerRecord): Promise<void>;
@@ -62,6 +66,21 @@ export interface PlatformStore {
         }>,
         edges: Array<{ from: string; to: string; on: string }>
     ): Promise<void>;
+    replaceFlowIndex(consumerId: string, flows: Array<{
+        flowId: string;
+        version: number;
+        name: string;
+        status: 'draft' | 'published';
+        isDefault: boolean;
+        definition: any;
+        sourceHash: string;
+        updatedAt?: string;
+        publishedAt?: string;
+    }>): Promise<void>;
+    knowledgeFlows(consumerId: string): Promise<any[]>;
+    recordEdgeClaim(consumerId: string, claim: any): Promise<void>;
+    knowledgeEdgeClaims(consumerId: string, edgeId?: string): Promise<any[]>;
+    knowledgeExternalRefs(consumerId: string, docId?: string): Promise<any[]>;
     replaceKnowledgeIndex(consumerId: string, payload: any): Promise<void>;
     knowledgeSummary(consumerId: string): Promise<any>;
     knowledgeDocs(consumerId: string, query?: string, limit?: number): Promise<any[]>;
@@ -159,6 +178,10 @@ export class MemoryPlatformStore implements PlatformStore {
         return schema;
     }
 
+    async ensureKnowledgeSchema(_consumerId: string): Promise<void> {
+        // Memory store is the unit-test double; knowledge tables are exercised through the SQL adapter.
+    }
+
     async dropSchema(consumerId: string): Promise<void> {
         this.schemas.delete(this.schemaName(consumerId));
     }
@@ -251,6 +274,24 @@ export class MemoryPlatformStore implements PlatformStore {
         _edges: Array<{ from: string; to: string; on: string }>
     ): Promise<void> {
         // Files are canonical for workers; the memory store has no index surface.
+    }
+
+    async replaceFlowIndex(_consumerId: string, _flows: any[]): Promise<void> {
+        // Files are canonical for flows; the memory store has no index surface.
+    }
+
+    async knowledgeFlows(_consumerId: string): Promise<any[]> {
+        return [];
+    }
+
+    async recordEdgeClaim(_consumerId: string, _claim: any): Promise<void> {}
+
+    async knowledgeEdgeClaims(_consumerId: string, _edgeId?: string): Promise<any[]> {
+        return [];
+    }
+
+    async knowledgeExternalRefs(_consumerId: string, _docId?: string): Promise<any[]> {
+        return [];
     }
 
     async replaceKnowledgeIndex(_consumerId: string, _payload: any): Promise<void> {
@@ -405,7 +446,25 @@ export class BunSqlPlatformStore implements PlatformStore {
     async createSchema(consumerId: string): Promise<string> {
         const schema = schemaNameFor(consumerId);
         await this.sql.unsafe(`CREATE SCHEMA ${quoteSchema(schema)}`);
+        await this.ensureKnowledgeSchema(consumerId);
         return schema;
+    }
+
+    async ensureKnowledgeSchema(consumerId: string): Promise<void> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        const file = fileURLToPath(new URL('../../../sql/knowledge.bootstrap.sql', import.meta.url));
+        const source = readFileSync(file, 'utf8');
+        const statements = source.split(/;\s*(?:\r?\n|$)/).map((item) => item.split('\n').filter((line) => !line.trim().startsWith('--')).join('\n').trim()).filter(Boolean);
+        const extensions = statements.filter((statement) => /^CREATE EXTENSION/i.test(statement));
+        const ddl = statements.filter((statement) => !/^CREATE EXTENSION/i.test(statement));
+        for (const statement of extensions) await this.sql.unsafe(statement);
+        await this.sql.unsafe(`SET search_path TO ${schema}, public`);
+        try {
+            for (const statement of ddl) await this.sql.unsafe(statement);
+            await this.sql.unsafe(`ALTER TABLE knowledge_worker_event ADD COLUMN IF NOT EXISTS trace_id text, ADD COLUMN IF NOT EXISTS run_id text, ADD COLUMN IF NOT EXISTS span_id text, ADD COLUMN IF NOT EXISTS parent_span_id text, ADD COLUMN IF NOT EXISTS host_binding_id text, ADD COLUMN IF NOT EXISTS flow_edge_id text, ADD COLUMN IF NOT EXISTS duration_ms integer`);
+        } finally {
+            await this.sql.unsafe('SET search_path TO public');
+        }
     }
 
     async dropSchema(consumerId: string): Promise<void> {
@@ -613,6 +672,68 @@ export class BunSqlPlatformStore implements PlatformStore {
         });
     }
 
+    async replaceFlowIndex(consumerId: string, flows: Array<{
+        flowId: string; version: number; name: string; status: 'draft' | 'published';
+        isDefault: boolean; definition: any; sourceHash: string; updatedAt?: string; publishedAt?: string;
+    }>): Promise<void> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        await this.sql.begin(async (tx: any) => {
+            await tx.unsafe(`SET LOCAL search_path = ${schema}, platform, public`);
+            await tx.unsafe(`DELETE FROM knowledge_flow`);
+            for (const flow of flows) {
+                await tx.unsafe(
+                    `INSERT INTO knowledge_flow
+                     (flow_id,version,name,status,is_default,definition,source_hash,updated_at,published_at)
+                     VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9)`,
+                    [flow.flowId, flow.version, flow.name, flow.status, flow.isDefault,
+                     JSON.stringify(flow.definition || {}), flow.sourceHash,
+                     flow.updatedAt || new Date().toISOString(), flow.publishedAt || null]
+                );
+            }
+        });
+    }
+
+    async knowledgeFlows(consumerId: string): Promise<any[]> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        return await this.sql.unsafe(
+            `SELECT flow_id,version,name,status,is_default,definition,source_hash,updated_at,published_at
+             FROM ${schema}.knowledge_flow ORDER BY is_default DESC, flow_id, version DESC`
+        );
+    }
+
+    async recordEdgeClaim(consumerId: string, claim: any): Promise<void> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        await this.sql.unsafe(
+            `INSERT INTO ${schema}.knowledge_edge_claim
+             (edge_id,seq,provenance,source,claim,at)
+             VALUES ($1,$2,$3,$4,$5::jsonb,$6)`,
+            [claim.edgeId, claim.seq || 1, claim.provenance || 'declared', claim.source || null,
+             JSON.stringify(claim.claim || {}), claim.at || new Date().toISOString()]
+        );
+    }
+
+    async knowledgeEdgeClaims(consumerId: string, edgeId?: string): Promise<any[]> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        return await this.sql.unsafe(
+            `SELECT edge_id,seq,provenance,source,claim,at
+             FROM ${schema}.knowledge_edge_claim
+             WHERE ($1::text IS NULL OR edge_id=$1)
+             ORDER BY edge_id,seq`,
+            [edgeId || null]
+        );
+    }
+
+    async knowledgeExternalRefs(consumerId: string, docId?: string): Promise<any[]> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        return await this.sql.unsafe(
+            `SELECT doc_id,provider,external_id,kind,url,direction
+             FROM ${schema}.knowledge_external_ref
+             WHERE ($1::text IS NULL OR doc_id=$1)
+             ORDER BY provider,external_id`,
+            [docId || null]
+        );
+    }
+
     async replaceKnowledgeIndex(consumerId: string, payload: any): Promise<void> {
         const schema = quoteSchema(schemaNameFor(consumerId));
         const txBody = async (tx: any) => {
@@ -749,10 +870,12 @@ export class BunSqlPlatformStore implements PlatformStore {
         const schema = quoteSchema(schemaNameFor(consumerId));
         await this.sql.unsafe(
             `INSERT INTO ${schema}.knowledge_worker_event
-             (worker_id,event,verb,path,decision,reasons,evidence)
-             VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb)`,
+             (worker_id,event,verb,path,decision,reasons,evidence,trace_id,run_id,span_id,parent_span_id,host_binding_id,flow_edge_id,duration_ms)
+             VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,$9,$10,$11,$12,$13,$14)`,
             [event.workerId, event.event, event.verb || null, event.path || null,
-             event.decision, JSON.stringify(event.reasons || []), JSON.stringify(event.evidence || [])]
+             event.decision, JSON.stringify(event.reasons || []), JSON.stringify(event.evidence || []),
+             event.traceId || null, event.runId || null, event.spanId || null, event.parentSpanId || null,
+             event.hostBindingId || null, event.flowEdgeId || null, event.durationMs ?? null]
         );
     }
 
@@ -847,7 +970,7 @@ export class BunSqlPlatformStore implements PlatformStore {
         const schema = quoteSchema(schemaNameFor(consumerId));
         const cap = Math.max(1, Math.min(Number(limit) || 50, 200));
         return await this.sql.unsafe(
-            `SELECT event_id,worker_id,event,verb,path,decision,reasons,evidence,created_at
+            `SELECT event_id,worker_id,event,verb,path,decision,reasons,evidence,trace_id,run_id,span_id,parent_span_id,host_binding_id,flow_edge_id,duration_ms,created_at
              FROM ${schema}.knowledge_worker_event
              WHERE ($1::text IS NULL OR worker_id=$1)
              ORDER BY created_at DESC,event_id DESC LIMIT $2`,

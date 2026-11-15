@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -101,6 +102,7 @@ export class FlowFileService {
         if (!flow) return { ok: false, reason: 'VERSION_NOT_FOUND' };
         this.writeIndex(root, id, version);
         await this.workerFiles.refreshIndex(consumerId);
+        await this.indexFlows(consumerId);
         return { ok: true, flow };
     }
 
@@ -114,6 +116,34 @@ export class FlowFileService {
 
     private versionPath(root: string, id: string, version: number): string {
         return join(this.dir(root), `${id}.v${version}.json`);
+    }
+
+    private async indexFlows(consumerId: string): Promise<void> {
+        const root = await this.root(consumerId);
+        const index = this.readIndex(root);
+        const summaries = await this.list(consumerId);
+        const rows: any[] = [];
+        for (const summary of summaries) {
+            const draft = this.readIfExists(this.draftPath(root, summary.id));
+            if (draft) {
+                rows.push({
+                    flowId: summary.id, version: draft.version, name: draft.name, status: 'draft',
+                    isDefault: false, definition: draft, sourceHash: createHash('sha256').update(JSON.stringify(draft)).digest('hex'),
+                    updatedAt: draft.updatedAt, publishedAt: null,
+                });
+            }
+            for (const version of summary.publishedVersions) {
+                const flow = this.readIfExists(this.versionPath(root, summary.id, version));
+                if (!flow) continue;
+                rows.push({
+                    flowId: summary.id, version, name: flow.name, status: 'published',
+                    isDefault: index.defaultFlowId === summary.id && index.defaultFlowVersion === version,
+                    definition: flow, sourceHash: createHash('sha256').update(JSON.stringify(flow)).digest('hex'),
+                    updatedAt: flow.updatedAt, publishedAt: flow.publishedAt,
+                });
+            }
+        }
+        await this.store.replaceFlowIndex(consumerId, rows);
     }
 
     async list(consumerId: string): Promise<any[]> {
@@ -169,6 +199,7 @@ export class FlowFileService {
             updatedAt: new Date().toISOString(),
         });
         this.write(this.draftPath(root, id), flow);
+        await this.indexFlows(consumerId);
         return flow;
     }
 
@@ -186,6 +217,7 @@ export class FlowFileService {
             this.writeIndex(root, id, flow.version);
         }
         await this.workerFiles.refreshIndex(consumerId);
+        await this.indexFlows(consumerId);
         return { ok: true, flow, validation };
     }
 

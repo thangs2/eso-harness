@@ -341,6 +341,20 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
         });
     });
 
+    app.get('/api/v1/consumers/:id/knowledge/flows', { preHandler: requireAuth }, async (request) => {
+        return store.knowledgeFlows((request.params as any).id);
+    });
+
+    app.get('/api/v1/consumers/:id/knowledge/edge-claims', { preHandler: requireAuth }, async (request) => {
+        const q = request.query as any;
+        return store.knowledgeEdgeClaims((request.params as any).id, q?.edgeId);
+    });
+
+    app.get('/api/v1/consumers/:id/knowledge/external-refs', { preHandler: requireAuth }, async (request) => {
+        const q = request.query as any;
+        return store.knowledgeExternalRefs((request.params as any).id, q?.docId);
+    });
+
     app.get('/api/v1/consumers/:id/knowledge/coverage', { preHandler: requireAuth }, async (request) => {
         return store.knowledgeCoverage((request.params as any).id);
     });

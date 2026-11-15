@@ -263,24 +263,48 @@ CREATE TABLE knowledge_worker_import (
 CREATE INDEX knowledge_worker_import_worker ON knowledge_worker_import (worker_id, imported_at DESC);
 
 CREATE TABLE knowledge_worker_event (
-  event_id  bigserial PRIMARY KEY,
-  worker_id text NOT NULL,
-  event     text NOT NULL,
-  verb      text,
-  path      text,
-  decision  text NOT NULL,
-  reasons   jsonb NOT NULL DEFAULT '[]'::jsonb,
-  evidence  jsonb NOT NULL DEFAULT '[]'::jsonb,
-  created_at timestamptz NOT NULL DEFAULT now()
+  event_id       bigserial PRIMARY KEY,
+  worker_id      text NOT NULL,
+  event          text NOT NULL,
+  verb           text,
+  path           text,
+  decision       text NOT NULL,
+  reasons        jsonb NOT NULL DEFAULT '[]'::jsonb,
+  evidence       jsonb NOT NULL DEFAULT '[]'::jsonb,
+  trace_id       text,
+  run_id         text,
+  span_id        text,
+  parent_span_id text,
+  host_binding_id text,
+  flow_edge_id   text,
+  duration_ms    integer,
+  created_at     timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE INDEX knowledge_worker_event_worker ON knowledge_worker_event (worker_id, created_at DESC);
+CREATE INDEX knowledge_worker_event_trace ON knowledge_worker_event (trace_id, created_at DESC);
+CREATE INDEX knowledge_worker_event_run ON knowledge_worker_event (run_id, created_at DESC);
 
 CREATE TABLE knowledge_worker_placement (
   worker_id       text NOT NULL REFERENCES knowledge_worker(worker_id) ON DELETE CASCADE,
   host_binding_id text NOT NULL,
   PRIMARY KEY (worker_id, host_binding_id)
 );
+
+CREATE TABLE knowledge_flow (
+  flow_id      text NOT NULL,
+  version      integer NOT NULL,
+  name         text NOT NULL,
+  status       text NOT NULL CHECK (status IN ('draft','published')),
+  is_default   boolean NOT NULL DEFAULT false,
+  definition   jsonb NOT NULL DEFAULT '{}'::jsonb,
+  source_hash  text,
+  updated_at   timestamptz NOT NULL DEFAULT now(),
+  published_at timestamptz,
+  PRIMARY KEY (flow_id, version)
+);
+
+CREATE INDEX knowledge_flow_default ON knowledge_flow (is_default) WHERE is_default;
 
 CREATE TABLE knowledge_worker_edge (
   from_worker_id text NOT NULL REFERENCES knowledge_worker(worker_id) ON DELETE CASCADE,
