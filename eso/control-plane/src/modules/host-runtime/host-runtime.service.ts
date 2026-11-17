@@ -220,7 +220,7 @@ function runtimeKeyMap(rows: any[]): Map<string, string> {
 function pruneModelTiers(tiers: Record<string, any>, models: string[]): Record<string, any> {
     const out: Record<string, any> = {};
     for (const [tier, entry] of Object.entries(tiers ?? {})) {
-        if (models.length === 0 || models.includes(String(entry?.model ?? ''))) out[tier] = entry;
+        if (models.includes(String(entry?.model ?? ''))) out[tier] = entry;
     }
     return out;
 }
