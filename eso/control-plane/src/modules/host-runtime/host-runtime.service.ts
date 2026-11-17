@@ -74,6 +74,23 @@ function oneOf<T extends readonly string[]>(value: unknown, allowed: T, field: s
     return text as T[number];
 }
 
+/** Normalize the optional remote endpoint: empty -> null, non-empty must be an http(s) URL. */
+function normalizeRemoteUrl(value: unknown): string | null {
+    if (value === undefined || value === null) return null;
+    const text = String(value).trim();
+    if (!text) return null;
+    let parsed: URL;
+    try {
+        parsed = new URL(text);
+    } catch {
+        throw new PlatformError('HOST_RUNTIME_INVALID', 'remoteUrl must be an http(s) URL');
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        throw new PlatformError('HOST_RUNTIME_INVALID', 'remoteUrl must be an http(s) URL');
+    }
+    return text;
+}
+
 /** Resolve a host default model: explicit values must be non-empty and present in the effective catalog. */
 function resolveDefaultModel(body: any, models: string[], existing: any, explicit: boolean): string {
     const current = String(existing?.default_model ?? existing?.defaultModel ?? '');
@@ -122,6 +139,7 @@ function hostRuntimeDto(row: any, hostType?: string | null): any {
         leadEligible: Boolean(row.lead_eligible ?? row.leadEligible),
         health: row.health ?? 'unknown',
         lastHeartbeat: row.last_heartbeat ?? row.lastHeartbeat ?? null,
+        remoteUrl: row.remote_url ?? row.remoteUrl ?? null,
     };
 }
 
@@ -193,6 +211,7 @@ export class HostRuntimeService {
             models,
             defaultModel: resolveDefaultModel(body, models, existing, defaultExplicit),
             leadEligible: Boolean(body?.leadEligible),
+            remoteUrl: normalizeRemoteUrl(body?.remoteUrl),
             // Metadata edits preserve observed health; only an explicit health field (or heartbeat)
             // may change liveness. A newly registered runtime starts as 'unknown'.
             health: healthExplicit

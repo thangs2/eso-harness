@@ -49,10 +49,14 @@ export const HOST_RUNTIME_DDL = `CREATE TABLE IF NOT EXISTS platform.host_runtim
     lead_eligible   boolean not null default false,
     health          text not null default 'unknown' check (health in ('unknown','healthy','degraded','offline')),
     last_heartbeat  timestamptz,
+    remote_url      text,
     created_at      timestamptz not null default now(),
     updated_at      timestamptz not null default now(),
     primary key (host_id, runtime_id)
 )`;
+
+/** Idempotent column add for databases created before the remote endpoint existed. */
+export const HOST_RUNTIME_REMOTE_URL_DDL = `ALTER TABLE platform.host_runtime ADD COLUMN IF NOT EXISTS remote_url text`;
 
 /**
  * Scoped bearer token for one host runtime + consumer. Only the SHA-256 hash is stored; the
@@ -154,6 +158,7 @@ export const PLATFORM_DDL: readonly string[] = [
     // ESO is control plane only — it never starts these processes, it only records and routes.
     HOST_DDL,
     HOST_RUNTIME_DDL,
+    HOST_RUNTIME_REMOTE_URL_DDL,
     `CREATE INDEX IF NOT EXISTS idx_host_runtime_health
         ON platform.host_runtime (health)`,
     HOST_TOKEN_DDL,

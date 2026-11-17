@@ -30,6 +30,8 @@ export interface SnapshotHostRuntime {
     leadEligible?: boolean;
     health?: string;
     lastHeartbeat?: string | null;
+    /** Mode B endpoint registered by P4 ESO config (nullable until configured). */
+    remoteUrl?: string | null;
 }
 
 export interface SnapshotHost {

@@ -420,6 +420,8 @@ export interface HostRuntimeDto {
     leadEligible: boolean;
     health: HostRuntimeHealth;
     lastHeartbeat: string | null;
+    /** Optional HTTP endpoint for host-to-host Mode B discovery. ESO stores config only. */
+    remoteUrl?: string | null;
 }
 
 /** A host machine with its registered runtimes. Consumers bind hosts by `hostId`. */

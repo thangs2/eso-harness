@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Host-side ESO runtime entrypoint (Mode A): config snapshot -> worker -> model -> adapter -> evidence -> observation.",
+  "description": "Host-side ESO runtime: Mode A local worker entrypoint + Mode B host-to-host dispatch.",
   "engines": {
     "bun": ">=1.3.0"
   },
@@ -11,7 +11,8 @@
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "dev": "bun run src/cli.ts",
-    "help": "bun run src/cli.ts --help"
+    "help": "bun run src/cli.ts --help",
+    "serve": "bun run src/server.ts serve"
   },
   "devDependencies": {
     "typescript": "^7.0.2"

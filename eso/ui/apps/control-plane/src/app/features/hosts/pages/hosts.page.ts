@@ -86,7 +86,11 @@ type DialogMode = 'register' | 'host' | 'runtime';
                                     @for (runtime of host.runtimes; track runtime.runtimeKey) {
                                         <article class="runtime-card">
                                             <header class="runtime-head">
-                                                <div class="runtime-title"><code>{{ runtime.runtimeId }}</code><span class="runtime-key">{{ runtime.runtimeKey }}</span></div>
+                                                <div class="runtime-title">
+                                                    <code>{{ runtime.runtimeId }}</code>
+                                                    <span class="runtime-key">{{ runtime.runtimeKey }}</span>
+                                                    @if (runtime.remoteUrl) { <span class="runtime-remote" [attr.title]="runtime.remoteUrl">remote {{ runtime.remoteUrl }}</span> }
+                                                </div>
                                                 <span class="health-badge"
                                                       [class.health-healthy]="runtime.health === 'healthy'"
                                                       [class.health-degraded]="runtime.health === 'degraded'"
@@ -202,6 +206,11 @@ type DialogMode = 'register' | 'host' | 'runtime';
                                     <mat-select [ngModel]="formHealth()" (ngModelChange)="formHealth.set($event)">
                                         @for (state of healthStates; track state) { <mat-option [value]="state">{{ healthLabel(state) }}</mat-option> }
                                     </mat-select>
+                                </mat-form-field>
+                                <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full">
+                                    <mat-label>Remote endpoint</mat-label>
+                                    <input matInput type="url" [ngModel]="formRemoteUrl()" (ngModelChange)="formRemoteUrl.set($event)" placeholder="http://127.0.0.1:8788">
+                                    <mat-hint>Optional HTTP endpoint for host-to-host Mode B. ESO stores config only.</mat-hint>
                                 </mat-form-field>
                                 <div class="host-model-note full">
                                     <strong>Models are reported by the host runtime</strong>
@@ -334,6 +343,7 @@ export class HostsPage implements OnInit {
     readonly formRuntimeKind = signal<HostRuntimeKind>('cli');
     readonly formLeadEligible = signal(false);
     readonly formHealth = signal<HostRuntimeHealth>('unknown');
+    readonly formRemoteUrl = signal('');
 
     private readonly dialogPanel = viewChild<ElementRef<HTMLElement>>('dialogPanel');
     private readonly hostIdInput = viewChild<ElementRef<HTMLInputElement>>('hostIdInput');
@@ -433,6 +443,7 @@ export class HostsPage implements OnInit {
         this.formRuntimeKind.set('cli');
         this.formLeadEligible.set(false);
         this.formHealth.set('unknown');
+        this.formRemoteUrl.set('');
     }
 
     openRegisterFor(type: string): void {
@@ -463,6 +474,7 @@ export class HostsPage implements OnInit {
         this.formRuntimeKind.set('cli');
         this.formLeadEligible.set(false);
         this.formHealth.set('unknown');
+        this.formRemoteUrl.set('');
     }
 
     openEditRuntime(host: HostDto, runtime: HostRuntimeDto): void {
@@ -475,6 +487,7 @@ export class HostsPage implements OnInit {
         this.formRuntimeKind.set(runtime.runtimeKind);
         this.formLeadEligible.set(runtime.leadEligible);
         this.formHealth.set(runtime.health);
+        this.formRemoteUrl.set(runtime.remoteUrl || '');
     }
 
     private configureDialog(mode: DialogMode, hostId: string | null): void {
@@ -541,6 +554,7 @@ export class HostsPage implements OnInit {
             leadEligible: this.formLeadEligible(),
             health: this.formHealth(),
             lastHeartbeat: this.findRuntime(hostId, runtimeId)?.lastHeartbeat ?? null,
+            remoteUrl: this.formRemoteUrl().trim() || null,
         };
         const saveHost = mode === 'runtime' ? Promise.resolve(null) : this.service.saveHost({ hostId, hostType, label });
         saveHost

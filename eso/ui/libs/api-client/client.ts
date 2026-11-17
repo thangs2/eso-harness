@@ -403,6 +403,7 @@ export class ControlPlaneApiClient {
                 defaultModel: runtime.defaultModel || '',
                 leadEligible: runtime.leadEligible,
                 health: runtime.health,
+                remoteUrl: runtime.remoteUrl?.trim() ? runtime.remoteUrl.trim() : null,
             }),
         });
         if (!res.ok) throw await this.problem(res);

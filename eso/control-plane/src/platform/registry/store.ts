@@ -347,6 +347,7 @@ export class MemoryPlatformStore implements PlatformStore {
             lead_eligible: Boolean(runtime.leadEligible),
             health: runtime.health || current?.health || 'unknown',
             last_heartbeat: current?.last_heartbeat ?? null,
+            remote_url: runtime.remoteUrl ?? null,
             created_at: current?.created_at ?? now,
             updated_at: now,
         };
@@ -726,6 +727,7 @@ export class BunSqlPlatformStore implements PlatformStore {
                     legacyColumns.has('lead_eligible') ? 'lead_eligible' : 'false AS lead_eligible',
                     legacyColumns.has('health') ? 'health' : `'unknown' AS health`,
                     legacyColumns.has('last_heartbeat') ? 'last_heartbeat' : 'NULL::timestamptz AS last_heartbeat',
+                    legacyColumns.has('remote_url') ? 'remote_url' : 'NULL::text AS remote_url',
                     legacyColumns.has('created_at') ? 'created_at' : 'now() AS created_at',
                     legacyColumns.has('updated_at') ? 'updated_at' : 'now() AS updated_at',
                 ].join(',');
@@ -758,6 +760,7 @@ export class BunSqlPlatformStore implements PlatformStore {
                         leadEligible: Boolean(row.lead_eligible),
                         health: normalizeHealth(row.health),
                         lastHeartbeat: row.last_heartbeat ?? null,
+                        remoteUrl: row.remote_url ?? null,
                         createdAt: row.created_at ?? new Date(),
                         updatedAt: row.updated_at ?? new Date(),
                     });
@@ -772,12 +775,12 @@ export class BunSqlPlatformStore implements PlatformStore {
                 for (const runtime of runtimes.values()) {
                     await tx.unsafe(
                         `INSERT INTO platform.host_runtime
-                         (host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,created_at,updated_at)
-                         VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7,$8,$9,$10)
+                         (host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,remote_url,created_at,updated_at)
+                         VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7,$8,$9,$10,$11)
                          ON CONFLICT (host_id,runtime_id) DO NOTHING`,
                         [runtime.hostId, runtime.runtimeId, runtime.runtimeKind, JSON.stringify(runtime.models),
                          runtime.defaultModel, runtime.leadEligible, runtime.health, runtime.lastHeartbeat,
-                         runtime.createdAt, runtime.updatedAt]
+                         runtime.remoteUrl, runtime.createdAt, runtime.updatedAt]
                     );
                 }
             }
@@ -1063,14 +1066,14 @@ export class BunSqlPlatformStore implements PlatformStore {
 
     async listHostRuntimes(): Promise<any[]> {
         return await this.sql.unsafe(
-            `SELECT host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,created_at,updated_at
+            `SELECT host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,remote_url,created_at,updated_at
              FROM platform.host_runtime ORDER BY host_id, runtime_id`
         );
     }
 
     async getHostRuntime(hostId: string, runtimeId: string): Promise<any> {
         const rows = await this.sql.unsafe(
-            `SELECT host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,created_at,updated_at
+            `SELECT host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,remote_url,created_at,updated_at
              FROM platform.host_runtime WHERE host_id=$1 AND runtime_id=$2`,
             [hostId, runtimeId]
         );
@@ -1080,18 +1083,19 @@ export class BunSqlPlatformStore implements PlatformStore {
     async upsertHostRuntime(runtime: any): Promise<any> {
         const rows = await this.sql.unsafe(
             `INSERT INTO platform.host_runtime
-             (host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,updated_at)
-             VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7,NULL,now())
+             (host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,remote_url,updated_at)
+             VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7,NULL,$9,now())
              ON CONFLICT (host_id,runtime_id) DO UPDATE SET
                runtime_kind=EXCLUDED.runtime_kind,
                models=EXCLUDED.models, default_model=EXCLUDED.default_model,
                lead_eligible=EXCLUDED.lead_eligible,
                health=CASE WHEN $8 THEN EXCLUDED.health ELSE platform.host_runtime.health END,
+               remote_url=EXCLUDED.remote_url,
                updated_at=now()
-             RETURNING host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,created_at,updated_at`,
+             RETURNING host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,remote_url,created_at,updated_at`,
             [runtime.hostId, runtime.runtimeId, runtime.runtimeKind, JSON.stringify(runtime.models || []),
              runtime.defaultModel || '', Boolean(runtime.leadEligible), runtime.health || 'unknown',
-             Boolean(runtime.healthExplicit)]
+             Boolean(runtime.healthExplicit), runtime.remoteUrl ?? null]
         );
         return rows[0] || null;
     }
@@ -1104,7 +1108,7 @@ export class BunSqlPlatformStore implements PlatformStore {
                  default_model=COALESCE($5,default_model),
                  last_heartbeat=now(), updated_at=now()
              WHERE host_id=$1 AND runtime_id=$2
-             RETURNING host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,created_at,updated_at`,
+             RETURNING host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,remote_url,created_at,updated_at`,
             [hostId, runtimeId, patch.health || null, patch.models ? JSON.stringify(patch.models) : null,
              patch.defaultModel !== undefined ? patch.defaultModel : null]
         );

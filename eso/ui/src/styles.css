@@ -1609,3 +1609,6 @@ button.mat-mdc-button-base { white-space: nowrap; }
 .observation-empty strong { font-size: var(--text-sm); }
 .observation-empty span { color: var(--muted); font-size: var(--text-sm); }
 @media (max-width: 600px) { .observation-row-head { align-items: flex-start; } }
+
+/* Hosts page — subtle remote endpoint on runtime cards */
+.runtime-remote { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }

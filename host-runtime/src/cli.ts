@@ -2,13 +2,22 @@
 /**
  * Host runtime CLI.
  *
- *   bun run src/cli.ts run \
- *     --consumer testeso --runtime-key cursor:cursor-agent \
- *     --prompt "..." --flow that-tinh-tran --worker worker-build \
- *     --adapter dry --dry-run --max-steps 1 [--json]
+ *   Mode A (local worker):
+ *     bun run src/cli.ts run --consumer testeso --runtime-key cursor:cursor-agent \
+ *       --prompt "..." --flow that-tinh-tran --worker worker-build \
+ *       --adapter dry --dry-run --max-steps 1 [--json]
+ *
+ *   Mode B (remote worker):
+ *     bun run src/cli.ts dispatch --consumer testeso \
+ *       --from-runtime-key cursor:cursor-agent --to-runtime-key agy:agy \
+ *       --prompt "..." --flow that-tinh-tran --worker worker-build \
+ *       --adapter dry --dry-run --remote-url http://127.0.0.1:8788 [--json]
+ *
+ *     bun run src/server.ts serve --runtime-key agy:agy --port 8788 [--host 127.0.0.1] [--json]
  *
  * Env: ESO_BASE_URL, ESO_CONSUMER, ESO_RUNTIME_KEY,
- *      ESO_HOST_TOKEN (scoped host bearer, preferred) or ESO_OPERATOR_TOKEN / ESO_AUTH_TOKEN.
+ *      ESO_HOST_TOKEN (scoped host bearer, preferred) or ESO_OPERATOR_TOKEN / ESO_AUTH_TOKEN,
+ *      ESO_REMOTE_TOKEN (Mode B shared secret), ESO_REMOTE_ALLOWED_WS, ESO_REMOTE_URL.
  *
  * Exit codes: 0 PASS (flow-end/max-steps), 1 FAIL, 2 BLOCKED/usage/config error.
  */
@@ -17,11 +26,18 @@ import { DEFAULT_MAX_STEPS, MAX_HOST_STEPS, clampMaxSteps, runEntrypoint } from 
 import type { AuthKind, EntrypointOptions, RunReport } from './entrypoint';
 import { DEFAULT_TIMEOUT_MS } from './adapters/types';
 import type { AdapterName } from './adapters/types';
+import { DEFAULT_DISPATCH_TIMEOUT_MS, DispatchError, runDispatch } from './remote/dispatch';
+import type { DispatchOptions, DispatchReport } from './remote/dispatch';
+import { DEFAULT_REMOTE_HOST, DEFAULT_REMOTE_PORT, startRemoteServer } from './remote/server';
 
 export const DEFAULT_BASE_URL = 'http://127.0.0.1:8787';
 export const ADAPTER_NAMES: AdapterName[] = ['dry', 'cursor', 'agy'];
+const DEFAULT_REMOTE_TIMEOUT_MS = DEFAULT_DISPATCH_TIMEOUT_MS;
+
+export type CliCommand = 'run' | 'dispatch' | 'serve' | 'help';
 
 export interface ParsedRunOptions {
+    kind: 'run';
     baseUrl: string;
     consumer: string;
     runtimeKey: string;
@@ -39,10 +55,49 @@ export interface ParsedRunOptions {
     traceId?: string;
 }
 
+export interface ParsedDispatchOptions {
+    kind: 'dispatch';
+    baseUrl: string;
+    consumer: string;
+    fromRuntimeKey: string;
+    toRuntimeKey: string;
+    prompt: string;
+    authToken?: string;
+    authKind: AuthKind;
+    remoteToken: string;
+    flowId?: string;
+    workerId?: string;
+    adapter: AdapterName;
+    model?: string;
+    maxSteps: number;
+    dryRun: boolean;
+    timeoutMs: number;
+    remoteTimeoutMs: number;
+    remoteUrl?: string;
+    workspaceRepo?: string;
+    workspaceBranch?: string;
+    workspaceCommit?: string;
+    traceId?: string;
+}
+
+export interface ParsedServeOptions {
+    kind: 'serve';
+    baseUrl: string;
+    consumer: string;
+    runtimeKey: string;
+    host: string;
+    port: number;
+    hostToken: string;
+    remoteToken: string;
+    allowedWorkspaces: string[];
+}
+
+export type ParsedOptions = ParsedRunOptions | ParsedDispatchOptions | ParsedServeOptions;
+
 export interface ParsedCli {
-    command: 'run' | 'help';
+    command: CliCommand;
     json: boolean;
-    options?: ParsedRunOptions;
+    options?: ParsedOptions;
 }
 
 export class CliUsageError extends Error {
@@ -54,19 +109,17 @@ export class CliUsageError extends Error {
 
 export function helpText(): string {
     return [
-        'ESO host runtime (Mode A) — config snapshot -> worker -> model -> adapter -> evidence -> observation.',
+        'ESO host runtime — Mode A local worker + Mode B host-to-host dispatch.',
         '',
         'USAGE',
         '  bun run src/cli.ts run --consumer <id> --runtime-key <hostId:runtimeId> --prompt <text> [options]',
+        '  bun run src/cli.ts dispatch --consumer <id> --from-runtime-key <key> --to-runtime-key <key> --prompt <text> [options]',
+        '  bun run src/server.ts serve --runtime-key <hostId:runtimeId> --port 8788 [options]',
         '  bun run src/cli.ts --help',
         '',
-        'REQUIRED',
-        '  --consumer <id>        ESO consumer (env ESO_CONSUMER)',
+        'RUN (Mode A, local worker)',
         '  --runtime-key <key>    hostId:runtimeId, e.g. cursor:cursor-agent (env ESO_RUNTIME_KEY)',
-        '  --prompt <text>        the user prompt for this worker',
-        '',
-        'OPTIONS',
-        '  --flow <id>            flow to run; must match the snapshot published flow (default: snapshot flow)',
+        '  --flow <id>            flow to run; must match the snapshot published flow',
         '  --worker <id>          explicit worker (default: flow entry node, else worker-build)',
         '  --adapter <name>       dry | cursor | agy (default: dry)',
         '  --model <id>           explicit model (default: host runtime defaultModel)',
@@ -74,7 +127,29 @@ export function helpText(): string {
         '  --dry-run              force the deterministic dry adapter; still writes a REAL observation',
         '  --timeout-ms <n>       adapter process timeout (default: ' + DEFAULT_TIMEOUT_MS + ')',
         '  --cwd <dir>            adapter working directory (default: consumer.root, else current dir)',
-        '  --trace-id <id>        reuse a trace id (useful for idempotency checks)',
+        '  --trace-id <id>        reuse a trace/job id (idempotency checks)',
+        '',
+        'DISPATCH (Mode B, host A -> host B)',
+        '  --from-runtime-key <k> host A runtimeKey (env ESO_RUNTIME_KEY)',
+        '  --to-runtime-key <k>   host B runtimeKey (must be in worker placement allowedHosts)',
+        '  --remote-url <url>     host B endpoint; overrides snapshot host runtime remoteUrl (env ESO_REMOTE_URL)',
+        '  --remote-token <t>     shared Mode B secret (env ESO_REMOTE_TOKEN, min 8 chars)',
+        '  --remote-timeout-ms <n> dispatch timeout (default: ' + DEFAULT_REMOTE_TIMEOUT_MS + ')',
+        '  --workspace-repo <p>   workspace path on host B (default: consumer.root)',
+        '  --workspace-branch <b> optional branch the target checkout must be on',
+        '  --workspace-commit <c> optional commit the target checkout must be at',
+        '',
+        'SERVE (Mode B, host B remote endpoint)',
+        '  --runtime-key <key>    this host runtimeKey (env ESO_RUNTIME_KEY)',
+        '  --host <addr>          listen address (default: ' + DEFAULT_REMOTE_HOST + ')',
+        '  --port <n>             listen port (default: ' + DEFAULT_REMOTE_PORT + ')',
+        '  --allowed-workspace <p> repeatable allowed workspace root (env ESO_REMOTE_ALLOWED_WS, comma-separated)',
+        '  ESO_HOST_TOKEN         host B scoped bearer token for observation writes',
+        '  ESO_REMOTE_TOKEN       shared Mode B secret (bearer + HMAC)',
+        '',
+        'COMMON',
+        '  --consumer <id>        ESO consumer (env ESO_CONSUMER)',
+        '  --prompt <text>        the user prompt for this worker',
         '  --json                 print one JSON report on stdout',
         '  --base-url <url>       ESO base URL (env ESO_BASE_URL, default: ' + DEFAULT_BASE_URL + ')',
         '  --host-token <t>       scoped host bearer (env ESO_HOST_TOKEN)',
@@ -82,7 +157,8 @@ export function helpText(): string {
         '  -h, --help             this help',
         '',
         'ENV',
-        '  ESO_BASE_URL · ESO_CONSUMER · ESO_RUNTIME_KEY · ESO_HOST_TOKEN · ESO_OPERATOR_TOKEN · ESO_AUTH_TOKEN',
+        '  ESO_BASE_URL · ESO_CONSUMER · ESO_RUNTIME_KEY · ESO_HOST_TOKEN · ESO_OPERATOR_TOKEN ·',
+        '  ESO_AUTH_TOKEN · ESO_REMOTE_TOKEN · ESO_REMOTE_ALLOWED_WS · ESO_REMOTE_URL',
         '',
         'EXIT CODES',
         '  0 PASS (flow-end / max-steps) · 1 FAIL · 2 BLOCKED or usage/config error',
@@ -114,126 +190,277 @@ function parsePositiveInt(name: string, value: string, max?: number): number {
     return parsed;
 }
 
-/** Parse argv + env into a CLI invocation. Exported for tests (no process state touched). */
-export function parseArgs(argv: string[], env: Record<string, string | undefined> = {}): ParsedCli {
-    let json = false;
-    let help = false;
-    let command: 'run' | 'help' = 'run';
+const COMMANDS: CliCommand[] = ['run', 'dispatch', 'serve'];
 
-    const options: Partial<{
-        baseUrl: string;
-        consumer: string;
-        runtimeKey: string;
-        prompt: string;
-        hostToken: string;
-        operatorToken: string;
-        flowId: string;
-        workerId: string;
-        adapter: string;
-        model: string;
-        maxSteps: string;
-        timeoutMs: string;
-        cwd: string;
-        traceId: string;
-    }> = {};
-    let dryRun = false;
+interface RawFlags {
+    values: Record<string, string>;
+    lists: Record<string, string[]>;
+    dryRun: boolean;
+    json: boolean;
+    help: boolean;
+    command: CliCommand | null;
+}
+
+const VALUE_FLAGS = new Set([
+    '--base-url',
+    '--consumer',
+    '--runtime-key',
+    '--prompt',
+    '--flow',
+    '--worker',
+    '--adapter',
+    '--model',
+    '--max-steps',
+    '--timeout-ms',
+    '--cwd',
+    '--trace-id',
+    '--host-token',
+    '--operator-token',
+    '--remote-token',
+    '--remote-url',
+    '--remote-timeout-ms',
+    '--from-runtime-key',
+    '--to-runtime-key',
+    '--workspace-repo',
+    '--workspace-branch',
+    '--workspace-commit',
+    '--port',
+    '--host',
+    '--allowed-workspace',
+]);
+
+const FLAG_KEYS: Record<string, string> = {
+    '--base-url': 'baseUrl',
+    '--consumer': 'consumer',
+    '--runtime-key': 'runtimeKey',
+    '--prompt': 'prompt',
+    '--flow': 'flowId',
+    '--worker': 'workerId',
+    '--adapter': 'adapter',
+    '--model': 'model',
+    '--max-steps': 'maxSteps',
+    '--timeout-ms': 'timeoutMs',
+    '--cwd': 'cwd',
+    '--trace-id': 'traceId',
+    '--host-token': 'hostToken',
+    '--operator-token': 'operatorToken',
+    '--remote-token': 'remoteToken',
+    '--remote-url': 'remoteUrl',
+    '--remote-timeout-ms': 'remoteTimeoutMs',
+    '--from-runtime-key': 'fromRuntimeKey',
+    '--to-runtime-key': 'toRuntimeKey',
+    '--workspace-repo': 'workspaceRepo',
+    '--workspace-branch': 'workspaceBranch',
+    '--workspace-commit': 'workspaceCommit',
+    '--port': 'port',
+    '--host': 'host',
+    '--allowed-workspace': 'allowedWorkspace',
+};
+
+function parseRaw(argv: string[]): RawFlags {
+    const raw: RawFlags = { values: {}, lists: {}, dryRun: false, json: false, help: false, command: null };
+    const positionals: string[] = [];
 
     for (let index = 0; index < argv.length; index += 1) {
         const arg = argv[index];
         if (!arg.startsWith('-')) {
-            if (arg === 'run') continue;
-            throw new CliUsageError(`Unknown command: ${arg} (expected: run)`);
+            positionals.push(arg);
+            continue;
         }
         const flag = arg.includes('=') ? arg.slice(0, arg.indexOf('=')) : arg;
         switch (flag) {
             case '-h':
             case '--help':
-                help = true;
+                raw.help = true;
                 break;
             case '--json':
-                json = true;
+                raw.json = true;
                 break;
             case '--dry-run':
-                dryRun = true;
+                raw.dryRun = true;
                 break;
-            case '--base-url':
-            case '--consumer':
-            case '--runtime-key':
-            case '--prompt':
-            case '--flow':
-            case '--worker':
-            case '--adapter':
-            case '--model':
-            case '--max-steps':
-            case '--timeout-ms':
-            case '--cwd':
-            case '--trace-id':
-            case '--host-token':
-            case '--operator-token': {
+            default: {
+                if (!VALUE_FLAGS.has(flag)) throw new CliUsageError(`Unknown option: ${arg} (try --help)`);
                 const { value, next } = readValue(argv, index, flag);
-                const key: keyof typeof options = {
-                    '--base-url': 'baseUrl',
-                    '--consumer': 'consumer',
-                    '--runtime-key': 'runtimeKey',
-                    '--prompt': 'prompt',
-                    '--flow': 'flowId',
-                    '--worker': 'workerId',
-                    '--adapter': 'adapter',
-                    '--model': 'model',
-                    '--max-steps': 'maxSteps',
-                    '--timeout-ms': 'timeoutMs',
-                    '--cwd': 'cwd',
-                    '--trace-id': 'traceId',
-                    '--host-token': 'hostToken',
-                    '--operator-token': 'operatorToken',
-                }[flag] as keyof typeof options;
-                (options as Record<string, string>)[key] = value;
+                const key = FLAG_KEYS[flag];
+                if (key === 'allowedWorkspace') {
+                    raw.lists.allowedWorkspace = [...(raw.lists.allowedWorkspace ?? []), value];
+                } else {
+                    raw.values[key] = value;
+                }
                 index = next;
-                break;
             }
-            default:
-                throw new CliUsageError(`Unknown option: ${arg} (try --help)`);
         }
     }
 
-    if (help || argv.length === 0) return { command: 'help', json };
-    command = 'run';
+    if (positionals.length > 1) {
+        throw new CliUsageError(`Unknown command: ${positionals.join(' ')} (expected: ${COMMANDS.join(' | ')})`);
+    }
+    if (positionals.length === 1) {
+        const candidate = positionals[0];
+        if (!(COMMANDS as string[]).includes(candidate)) {
+            throw new CliUsageError(`Unknown command: ${candidate} (expected: ${COMMANDS.join(' | ')})`);
+        }
+        raw.command = candidate as CliCommand;
+    }
+    return raw;
+}
 
-    const baseUrl = (options.baseUrl ?? env.ESO_BASE_URL ?? DEFAULT_BASE_URL).trim();
-    const consumer = (options.consumer ?? env.ESO_CONSUMER ?? '').trim();
-    const runtimeKey = (options.runtimeKey ?? env.ESO_RUNTIME_KEY ?? '').trim();
-    const prompt = options.prompt ?? '';
+function envText(env: Record<string, string | undefined>, key: string): string {
+    return (env[key] ?? '').trim();
+}
+
+function envFirst(env: Record<string, string | undefined>, keys: string[]): string {
+    for (const key of keys) {
+        const value = envText(env, key);
+        if (value) return value;
+    }
+    return '';
+}
+
+function resolveCredential(raw: RawFlags, env: Record<string, string | undefined>): { token?: string; kind: AuthKind } {
+    const hostToken = (raw.values.hostToken ?? '').trim() || envText(env, 'ESO_HOST_TOKEN');
+    const operatorToken =
+        (raw.values.operatorToken ?? '').trim() || envFirst(env, ['ESO_OPERATOR_TOKEN', 'ESO_AUTH_TOKEN']);
+    if (hostToken) return { token: hostToken, kind: 'host' };
+    if (operatorToken) return { token: operatorToken, kind: 'operator' };
+    return { kind: 'operator' };
+}
+
+function resolveAllowedWorkspaces(raw: RawFlags, env: Record<string, string | undefined>): string[] {
+    const fromEnv = envText(env, 'ESO_REMOTE_ALLOWED_WS')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+    return [...fromEnv, ...(raw.lists.allowedWorkspace ?? [])];
+}
+
+function requireConsumer(raw: RawFlags, env: Record<string, string | undefined>): string {
+    const consumer = (raw.values.consumer ?? envText(env, 'ESO_CONSUMER')).trim();
     if (!consumer) throw new CliUsageError('--consumer is required (or set ESO_CONSUMER)');
+    return consumer;
+}
+
+/** Parse argv + env into a CLI invocation. Exported for tests (no process state touched). */
+export function parseArgs(argv: string[], env: Record<string, string | undefined> = {}): ParsedCli {
+    const raw = parseRaw(argv);
+    if (raw.help || argv.length === 0) return { command: 'help', json: raw.json };
+    const command = raw.command ?? 'run';
+
+    const baseUrl = (raw.values.baseUrl ?? '').trim() || envText(env, 'ESO_BASE_URL') || DEFAULT_BASE_URL;
+
+    if (command === 'run') {
+        const consumer = requireConsumer(raw, env);
+        const runtimeKey = (raw.values.runtimeKey ?? '').trim() || envText(env, 'ESO_RUNTIME_KEY');
+        if (!/^[^:\s]+:[^:\s]+$/.test(runtimeKey)) {
+            throw new CliUsageError('--runtime-key must be hostId:runtimeId (or set ESO_RUNTIME_KEY)');
+        }
+        const prompt = raw.values.prompt ?? '';
+        if (!prompt.trim()) throw new CliUsageError('--prompt is required');
+        const credential = resolveCredential(raw, env);
+        if (!credential.token) {
+            throw new CliUsageError('no credential: set ESO_HOST_TOKEN or ESO_OPERATOR_TOKEN/ESO_AUTH_TOKEN');
+        }
+        const options: ParsedRunOptions = {
+            kind: 'run',
+            baseUrl,
+            consumer,
+            runtimeKey,
+            prompt,
+            authToken: credential.token,
+            authKind: credential.kind,
+            adapter: raw.values.adapter ? parseAdapter(raw.values.adapter) : 'dry',
+            maxSteps: raw.values.maxSteps ? parsePositiveInt('--max-steps', raw.values.maxSteps, MAX_HOST_STEPS) : DEFAULT_MAX_STEPS,
+            dryRun: raw.dryRun,
+            timeoutMs: raw.values.timeoutMs ? parsePositiveInt('--timeout-ms', raw.values.timeoutMs) : DEFAULT_TIMEOUT_MS,
+        };
+        if (raw.values.flowId) options.flowId = raw.values.flowId;
+        if (raw.values.workerId) options.workerId = raw.values.workerId;
+        if (raw.values.model) options.model = raw.values.model;
+        if (raw.values.cwd) options.cwd = raw.values.cwd;
+        if (raw.values.traceId) options.traceId = raw.values.traceId;
+        return { command, json: raw.json, options };
+    }
+
+    if (command === 'dispatch') {
+        const consumer = requireConsumer(raw, env);
+        const fromRuntimeKey =
+            (raw.values.fromRuntimeKey ?? '').trim() || (raw.values.runtimeKey ?? '').trim() || envText(env, 'ESO_RUNTIME_KEY');
+        const toRuntimeKey = (raw.values.toRuntimeKey ?? '').trim();
+        const pattern = /^[^:\s]+:[^:\s]+$/;
+        if (!pattern.test(fromRuntimeKey)) {
+            throw new CliUsageError('--from-runtime-key must be hostId:runtimeId (or set ESO_RUNTIME_KEY)');
+        }
+        if (!pattern.test(toRuntimeKey)) {
+            throw new CliUsageError('--to-runtime-key must be hostId:runtimeId');
+        }
+        if (fromRuntimeKey === toRuntimeKey) {
+            throw new CliUsageError('--from-runtime-key and --to-runtime-key must differ');
+        }
+        const prompt = raw.values.prompt ?? '';
+        if (!prompt.trim()) throw new CliUsageError('--prompt is required');
+        const credential = resolveCredential(raw, env);
+        if (!credential.token) {
+            throw new CliUsageError('no credential: set ESO_HOST_TOKEN or ESO_OPERATOR_TOKEN/ESO_AUTH_TOKEN');
+        }
+        const remoteToken = (raw.values.remoteToken ?? '').trim() || envText(env, 'ESO_REMOTE_TOKEN');
+        if (remoteToken.length < 8) {
+            throw new CliUsageError('ESO_REMOTE_TOKEN is required for Mode B dispatch (min 8 characters, or --remote-token)');
+        }
+        const options: ParsedDispatchOptions = {
+            kind: 'dispatch',
+            baseUrl,
+            consumer,
+            fromRuntimeKey,
+            toRuntimeKey,
+            prompt,
+            authToken: credential.token,
+            authKind: credential.kind,
+            remoteToken,
+            adapter: raw.values.adapter ? parseAdapter(raw.values.adapter) : 'dry',
+            maxSteps: raw.values.maxSteps ? parsePositiveInt('--max-steps', raw.values.maxSteps, MAX_HOST_STEPS) : DEFAULT_MAX_STEPS,
+            dryRun: raw.dryRun,
+            timeoutMs: raw.values.timeoutMs ? parsePositiveInt('--timeout-ms', raw.values.timeoutMs) : DEFAULT_TIMEOUT_MS,
+            remoteTimeoutMs: raw.values.remoteTimeoutMs
+                ? parsePositiveInt('--remote-timeout-ms', raw.values.remoteTimeoutMs)
+                : DEFAULT_REMOTE_TIMEOUT_MS,
+        };
+        const remoteUrl = (raw.values.remoteUrl ?? '').trim() || envText(env, 'ESO_REMOTE_URL');
+        if (remoteUrl) options.remoteUrl = remoteUrl;
+        if (raw.values.flowId) options.flowId = raw.values.flowId;
+        if (raw.values.workerId) options.workerId = raw.values.workerId;
+        if (raw.values.model) options.model = raw.values.model;
+        if (raw.values.workspaceRepo) options.workspaceRepo = raw.values.workspaceRepo;
+        if (raw.values.workspaceBranch) options.workspaceBranch = raw.values.workspaceBranch;
+        if (raw.values.workspaceCommit) options.workspaceCommit = raw.values.workspaceCommit;
+        if (raw.values.traceId) options.traceId = raw.values.traceId;
+        return { command, json: raw.json, options };
+    }
+
+    // serve
+    const consumer = requireConsumer(raw, env);
+    const runtimeKey = (raw.values.runtimeKey ?? '').trim() || envText(env, 'ESO_RUNTIME_KEY');
     if (!/^[^:\s]+:[^:\s]+$/.test(runtimeKey)) {
-        throw new CliUsageError('--runtime-key must be hostId:runtimeId (or set ESO_RUNTIME_KEY)');
+        throw new CliUsageError('serve --runtime-key must be hostId:runtimeId (or set ESO_RUNTIME_KEY)');
     }
-    if (!prompt.trim()) throw new CliUsageError('--prompt is required');
-
-    const hostToken = (options.hostToken ?? env.ESO_HOST_TOKEN ?? '').trim();
-    const operatorToken = (options.operatorToken ?? env.ESO_OPERATOR_TOKEN ?? env.ESO_AUTH_TOKEN ?? '').trim();
-    if (!hostToken && !operatorToken) {
-        throw new CliUsageError('no credential: set ESO_HOST_TOKEN or ESO_OPERATOR_TOKEN/ESO_AUTH_TOKEN');
+    const hostToken = (raw.values.hostToken ?? '').trim() || envText(env, 'ESO_HOST_TOKEN');
+    if (!hostToken) throw new CliUsageError('serve requires ESO_HOST_TOKEN (host B scoped token)');
+    const remoteToken = (raw.values.remoteToken ?? '').trim() || envText(env, 'ESO_REMOTE_TOKEN');
+    if (remoteToken.length < 8) {
+        throw new CliUsageError('serve requires ESO_REMOTE_TOKEN (min 8 characters, or --remote-token)');
     }
-
-    const parsed: ParsedRunOptions = {
+    const options: ParsedServeOptions = {
+        kind: 'serve',
         baseUrl,
         consumer,
         runtimeKey,
-        prompt,
-        authToken: hostToken || operatorToken,
-        authKind: hostToken ? 'host' : 'operator',
-        adapter: options.adapter ? parseAdapter(options.adapter) : 'dry',
-        maxSteps: options.maxSteps ? parsePositiveInt('--max-steps', options.maxSteps, MAX_HOST_STEPS) : DEFAULT_MAX_STEPS,
-        dryRun,
-        timeoutMs: options.timeoutMs ? parsePositiveInt('--timeout-ms', options.timeoutMs) : DEFAULT_TIMEOUT_MS,
+        host: (raw.values.host ?? DEFAULT_REMOTE_HOST).trim() || DEFAULT_REMOTE_HOST,
+        port: raw.values.port ? parsePositiveInt('--port', raw.values.port, 65535) : DEFAULT_REMOTE_PORT,
+        hostToken,
+        remoteToken,
+        allowedWorkspaces: resolveAllowedWorkspaces(raw, env),
     };
-    if (options.flowId) parsed.flowId = options.flowId;
-    if (options.workerId) parsed.workerId = options.workerId;
-    if (options.model) parsed.model = options.model;
-    if (options.cwd) parsed.cwd = options.cwd;
-    if (options.traceId) parsed.traceId = options.traceId;
-
-    return { command, json, options: parsed };
+    return { command, json: raw.json, options };
 }
 
 export function toEntrypointOptions(parsed: ParsedRunOptions): EntrypointOptions {
@@ -255,6 +482,34 @@ export function toEntrypointOptions(parsed: ParsedRunOptions): EntrypointOptions
     if (parsed.model) options.model = parsed.model;
     if (parsed.cwd) options.cwd = parsed.cwd;
     if (parsed.traceId) options.traceId = parsed.traceId;
+    return options;
+}
+
+export function toDispatchOptions(parsed: ParsedDispatchOptions, log?: (line: string) => void): DispatchOptions {
+    const options: DispatchOptions = {
+        baseUrl: parsed.baseUrl,
+        authToken: parsed.authToken,
+        authKind: parsed.authKind,
+        consumer: parsed.consumer,
+        fromRuntimeKey: parsed.fromRuntimeKey,
+        toRuntimeKey: parsed.toRuntimeKey,
+        prompt: parsed.prompt,
+        adapter: parsed.adapter,
+        dryRun: parsed.dryRun,
+        maxSteps: parsed.maxSteps,
+        timeoutMs: parsed.timeoutMs,
+        remoteTimeoutMs: parsed.remoteTimeoutMs,
+        remoteToken: parsed.remoteToken,
+    };
+    if (parsed.flowId) options.flowId = parsed.flowId;
+    if (parsed.workerId) options.workerId = parsed.workerId;
+    if (parsed.model) options.model = parsed.model;
+    if (parsed.remoteUrl) options.remoteUrl = parsed.remoteUrl;
+    if (parsed.workspaceRepo) options.workspaceRepo = parsed.workspaceRepo;
+    if (parsed.workspaceBranch) options.workspaceBranch = parsed.workspaceBranch;
+    if (parsed.workspaceCommit) options.workspaceCommit = parsed.workspaceCommit;
+    if (parsed.traceId) options.traceId = parsed.traceId;
+    if (log) options.log = log;
     return options;
 }
 
@@ -284,6 +539,21 @@ export function formatReport(report: RunReport): string {
     return `${lines.join('\n')}\n`;
 }
 
+export function formatDispatchReport(report: DispatchReport): string {
+    const lines: string[] = [];
+    lines.push(`${report.ok ? 'PASS' : 'BLOCKED'}  host-runtime dispatch (Mode B)`);
+    lines.push(`  job        ${report.jobId}`);
+    lines.push(`  route      ${report.fromRuntimeKey} -> ${report.toRuntimeKey}`);
+    lines.push(`  remote     ${report.remoteUrl} (HTTP ${report.remoteHttpStatus})`);
+    lines.push(`  worker     ${report.workerId} / flow ${report.flowId}`);
+    lines.push(`  outcome    ${report.outcome}`);
+    lines.push(`  remoteObs  ${report.remoteObservationId ?? 'none'}`);
+    lines.push(`  localObs   ${report.localObservationId ?? 'none'}${report.localObservationCreated ? '' : ' (existing)'}`);
+    lines.push(`  snapshot   ${report.snapshotVersion.slice(0, 12)}… ${report.snapshotVersionValid ? 'validated' : 'NOT VALIDATED'}`);
+    lines.push(`  timing     transport=${report.transportDurationMs}ms total=${report.durationMs}ms`);
+    return `${lines.join('\n')}\n`;
+}
+
 export interface CliIo {
     stdout: (text: string) => void;
     stderr: (text: string) => void;
@@ -298,6 +568,65 @@ const defaultIo: CliIo = {
     },
 };
 
+async function serveCommand(parsed: ParsedServeOptions, json: boolean, io: CliIo): Promise<number> {
+    let handle;
+    try {
+        handle = startRemoteServer({
+            runtimeKey: parsed.runtimeKey,
+            port: parsed.port,
+            host: parsed.host,
+            secret: parsed.remoteToken,
+            esoBaseUrl: parsed.baseUrl,
+            consumer: parsed.consumer,
+            hostToken: parsed.hostToken,
+            allowedWorkspaces: parsed.allowedWorkspaces,
+            log: (line) => io.stderr(`${line}\n`),
+        });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (json) io.stdout(`${JSON.stringify({ ok: false, error: { code: 'SERVE_FAILED', message } }, null, 2)}\n`);
+        else io.stderr(`error: SERVE_FAILED: ${message}\n`);
+        return 2;
+    }
+
+    const startup = { ok: true, mode: 'B', runtimeKey: handle.runtimeKey, url: handle.url, host: handle.host, port: handle.port };
+    io.stdout(json ? `${JSON.stringify(startup)}\n` : `serving Mode B on ${handle.url} as ${handle.runtimeKey}\n`);
+
+    await new Promise<void>((resolve) => {
+        const stop = () => {
+            void handle.stop().then(() => resolve()).catch(() => resolve());
+        };
+        process.on('SIGINT', stop);
+        process.on('SIGTERM', stop);
+    });
+    io.stderr('[remote] stopped\n');
+    return 0;
+}
+
+async function dispatchCommand(parsed: ParsedDispatchOptions, json: boolean, io: CliIo): Promise<number> {
+    try {
+        const report = await runDispatch(toDispatchOptions(parsed, (line) => io.stderr(`${line}\n`)));
+        io.stdout(json ? `${JSON.stringify(report, null, 2)}\n` : formatDispatchReport(report));
+        return report.ok ? 0 : report.outcome === 'FAIL' ? 1 : 2;
+    } catch (error) {
+        if (error instanceof DispatchError) {
+            const payload = {
+                ok: false,
+                error: {
+                    code: error.code,
+                    message: error.message,
+                    ...(error.detail ? { detail: error.detail } : {}),
+                    ...(error.localObservationId ? { localObservationId: error.localObservationId } : {}),
+                },
+            };
+            if (json) io.stdout(`${JSON.stringify(payload, null, 2)}\n`);
+            else io.stderr(`error: ${error.code}: ${error.message}\n`);
+            return 2;
+        }
+        throw error;
+    }
+}
+
 export async function main(
     argv: string[],
     env: Record<string, string | undefined> = process.env,
@@ -311,7 +640,14 @@ export async function main(
             io.stdout(`${helpText()}\n`);
             return 0;
         }
-        const options = toEntrypointOptions(parsed.options!);
+        if (parsed.command === 'serve') {
+            return await serveCommand(parsed.options as ParsedServeOptions, parsed.json, io);
+        }
+        if (parsed.command === 'dispatch') {
+            return await dispatchCommand(parsed.options as ParsedDispatchOptions, parsed.json, io);
+        }
+
+        const options = toEntrypointOptions(parsed.options as ParsedRunOptions);
         options.env = env;
         options.log = (line) => io.stderr(`${line}\n`);
 

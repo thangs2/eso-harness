@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { CliUsageError, formatReport, helpText, main, parseArgs } from '../src/cli';
+import type { ParsedRunOptions } from '../src/cli';
 import type { RunReport } from '../src/entrypoint';
 
 const ENV = {
@@ -69,22 +70,24 @@ describe('cli', () => {
 
     it('fills defaults from the environment', () => {
         const parsed = parseArgs(['run', '--prompt', 'do the thing'], ENV);
+        const options = parsed.options as ParsedRunOptions;
         expect(parsed.command).toBe('run');
         expect(parsed.json).toBe(false);
-        expect(parsed.options?.baseUrl).toBe('http://127.0.0.1:8787');
-        expect(parsed.options?.consumer).toBe('testeso');
-        expect(parsed.options?.runtimeKey).toBe('cursor:cursor-agent');
-        expect(parsed.options?.adapter).toBe('dry');
-        expect(parsed.options?.maxSteps).toBe(1);
-        expect(parsed.options?.dryRun).toBe(false);
-        expect(parsed.options?.authKind).toBe('operator');
-        expect(parsed.options?.authToken).toBe('operator-token');
+        expect(options.baseUrl).toBe('http://127.0.0.1:8787');
+        expect(options.consumer).toBe('testeso');
+        expect(options.runtimeKey).toBe('cursor:cursor-agent');
+        expect(options.adapter).toBe('dry');
+        expect(options.maxSteps).toBe(1);
+        expect(options.dryRun).toBe(false);
+        expect(options.authKind).toBe('operator');
+        expect(options.authToken).toBe('operator-token');
     });
 
     it('prefers a scoped host token', () => {
         const parsed = parseArgs(['run', '--prompt', 'x'], { ...ENV, ESO_HOST_TOKEN: 'host-token' });
-        expect(parsed.options?.authKind).toBe('host');
-        expect(parsed.options?.authToken).toBe('host-token');
+        const options = parsed.options as ParsedRunOptions;
+        expect(options.authKind).toBe('host');
+        expect(options.authToken).toBe('host-token');
     });
 
     it('parses explicit flags (both --key value and --key=value)', () => {
@@ -118,7 +121,7 @@ describe('cli', () => {
             ENV,
         );
         expect(parsed.json).toBe(true);
-        expect(parsed.options).toMatchObject({
+        expect(parsed.options as ParsedRunOptions).toMatchObject({
             baseUrl: 'http://127.0.0.1:9999',
             prompt: 'pick the ticket',
             flowId: 'that-tinh-tran',
