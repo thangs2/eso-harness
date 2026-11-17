@@ -7,6 +7,9 @@ Mode A (local):
   prompt -> config snapshot (ESO, read-only) -> worker -> tier/model -> adapter -> evidence
          -> host-side flow step -> observation (ESO, append-only)
 
+Hardening (P5): offline config cache · observation retry + local buffer · persistent Mode B job
+ledger · modelTiers catalog · token-rotation-safe cache.
+
 Mode B (host A -> host B):
   host A: snapshot + placement -> signed job envelope (HMAC) -> POST /jobs to host B
   host B: verify signature -> validate workspace -> run the worker locally (Mode A path)
@@ -23,12 +26,12 @@ ESO never runs, queues, claims, advances, spawns or calls a model — and this p
 ```text
 host-runtime/
   src/
-    cli.ts               CLI (run | dispatch | serve, --help, --json, exit codes)
+    cli.ts               CLI (run | dispatch | serve | flush-observations, --help, --json)
     server.ts            `serve` entry point (Mode B remote runtime)
     entrypoint.ts        orchestrator (snapshot -> worker -> model -> adapter -> evidence -> observation)
     config-client.ts     GET /consumers/:id/config-snapshot + version hash validation
     flow-engine.ts       pure nextEdge(flow, workerId, outcome) — host-side flow semantics
-    model-resolver.ts    explicit --model -> runtime defaultModel -> MODEL_UNAVAILABLE (no fake catalog)
+    model-resolver.ts    explicit --model -> modelTiers[tier] -> defaultModel warning -> MODEL_UNAVAILABLE
     worker-policy.ts     worker selection + placement (allowedHosts runtime key)
     prompt-builder.ts    worker instructions + flow context + user prompt
     evidence.ts          PASS/FAIL/BLOCKED, bounded tails, prompt/token redaction
@@ -39,8 +42,11 @@ host-runtime/
     remote/server.ts     Bun.serve POST /jobs + GET /health (bearer + HMAC + workspace guard)
     remote/workspace.ts  workspace validation (absolute, directory, allowed roots, git commit)
     remote/dispatch.ts   A-side orchestration + local worker.remote.* observation
+    remote/job-ledger.ts persistent Mode B job ledger (atomic JSON, TTL 24h, max 200)
+    offline-cache.ts     last-valid snapshot cache (atomic write, scope-checked, no tokens)
+    observation-buffer.ts local JSONL buffer for observations that could not be written
     shims.d.ts           minimal Node/Bun ambient types (the package has zero npm dependencies)
-  test/                  bun test suites (140 tests)
+  test/                  bun test suites (180 tests)
   README.md
   integrations/cursor/README.md
   integrations/agy/README.md
@@ -62,8 +68,12 @@ TypeScript is a dev dependency for `bun run typecheck`; `node_modules/` is gitig
 | `ESO_CURSOR_AGENT_BIN` | absolute path to `cursor-agent` (otherwise resolved automatically) |
 | `ESO_AGY_BIN` | absolute path to `agy` (otherwise resolved automatically) |
 | `ESO_REMOTE_TOKEN` | Mode B shared secret (bearer + HMAC, min 8 chars) |
-| `ESO_REMOTE_ALLOWED_WS` | comma-separated workspace roots host B may run in |
+| `ESO_REMOTE_ALLOWED_WS` | **required** comma-separated workspace roots host B may run in |
 | `ESO_REMOTE_URL` | fallback remote endpoint when the snapshot has no `remoteUrl` |
+| `ESO_CONFIG_CACHE_DIR` | snapshot/cache root (default `~/.eso/host-runtime`) |
+| `ESO_OFFLINE` | `1` forces config from the local cache (`--offline` on the CLI) |
+| `ESO_OBS_BUFFER_DIR` | observation buffer dir (default `<cache>/observations`) |
+| `ESO_REMOTE_LEDGER` | persistent Mode B job ledger (default `<cache>/modeb-jobs.json`) |
 
 Credential precedence: `ESO_HOST_TOKEN` (scoped, `auth: host`) then `ESO_OPERATOR_TOKEN` /
 `ESO_AUTH_TOKEN` (`auth: operator`). ESO credentials are stripped from the child process environment
@@ -90,6 +100,26 @@ bun run src/cli.ts run \
 
 bun run src/cli.ts --help
 ```
+
+### Offline, retry and flush
+
+```bash
+# cache-only config (fails with SNAPSHOT_CACHE_MISSING/STALE/INVALID, exit 2)
+ESO_OFFLINE=1 bun run src/cli.ts run ... --offline
+
+# replay observations buffered while ESO was unreachable (idempotent)
+bun run src/cli.ts flush-observations --consumer testeso --json
+```
+
+- `ConfigClient` persists the last **version-validated** snapshot atomically, keyed by
+  `consumer + runtimeKey` (never by token). On network failure or 5xx it falls back to that cache
+  and reports `SNAPSHOT_CACHE_USED:ageMs=…`; 4xx never falls back.
+- `ObservationClient` retries network/5xx/429 up to 3 times (exponential backoff + jitter); other
+  4xx are final. If all retries fail, the observation envelope is appended to a JSONL buffer and the
+  host reports `OBSERVATIONS_BUFFERED:<id>`. Entrypoints flush the buffer at start (best effort) and
+  report `OBSERVATIONS_FLUSHED:<n>`.
+- Cache keys are token-independent: rotating/revoking a host token never invalidates the cache, and
+  neither cache nor buffer ever stores a token.
 
 ### Mode B — dispatch from host A, serve on host B
 
@@ -119,8 +149,9 @@ Mode B guarantees:
 - B runs the worker through the same Mode A entrypoint and writes its own observation with its own
   scoped host token; A writes `worker.remote.completed` / `worker.remote.failed` with
   `evidence.remoteObservationId`;
-- replaying the same `jobId` is idempotent: B returns the cached signed result and writes no second
-  observation; A's observation dedupes on its idempotency key;
+- replaying the same `jobId` is idempotent: B returns the ledger-backed signed result (persisted
+  across restarts, TTL 24h, max 200 jobs) and writes no second observation; A's observation dedupes
+  on its idempotency key;
 - prompts and tokens never appear in logs, results or observations.
 
 `--dry-run` forces the deterministic dry adapter. It does **not** skip the config snapshot, model
@@ -135,12 +166,12 @@ is what makes the path verifiable end to end without calling a model.
    `worker-build`. Missing/inactive worker or missing/denying placement blocks with an observation.
 3. Resolve the model:
    - explicit `--model` wins;
-   - else the host runtime `defaultModel`;
+   - else `runtime.modelTiers[placement.modelTier]` from the P5 ESO config (`{model, effort?}`; the
+     effort is recorded in evidence, `modelSource: 'tier'`);
+   - else the host runtime `defaultModel` with `MODEL_TIER_NOT_MAPPED`;
    - else `MODEL_UNAVAILABLE` (BLOCKED evidence).
-   **Documented gap:** `workerPlacement.modelTier` (`fast`/`balanced`/`reasoning`) is a placement
-   intent, not a model catalog. There is no tier→model mapping on the host — inventing one would fake
-   a contract ESO does not define. The resolved tier is recorded in evidence and a
-   `MODEL_TIER_NOT_MAPPED` warning is logged.
+   Hosts never invent a tier catalog: without a `modelTiers` entry the default model is used and the
+   gap is reported.
 4. Build the prompt from the worker definition + flow context + user prompt.
 5. Run the adapter on the host (spawn, timeout, capture; the only place a process is spawned).
 6. Build evidence: outcome `PASS`/`FAIL`/`BLOCKED`, exit code, duration, model, adapter, bounded
@@ -170,9 +201,9 @@ them: it never dispatches, queues, claims or runs anything.
   JSON path is the live one. `validateSnapshotVersion` still accepts the legacy Date-collapse result
   (`canonicalization: 'eso-date-collapse'`) so hosts survive a rolling upgrade against an older
   control plane; everything else in the snapshot is drift-checked.
-- **Model tier.** `workerPlacement.modelTier` has no model catalog mapping; see the model-resolution
-  section above. The gap is recorded in evidence (`tier`, `modelSource`) and logged as
-  `MODEL_TIER_NOT_MAPPED`.
+- **Model tier (pre-P5 backend).** Until the control-plane `model_tiers` config lands, snapshots
+  have no `modelTiers` map; the host then uses `defaultModel` and warns `MODEL_TIER_NOT_MAPPED`.
+  With P5 config live, the tier map wins and the warning disappears.
 - **Mode B `remoteUrl` (P4 ESO config).** The host runtime accepts `remoteUrl` from the snapshot
   `hosts[].runtimes[]` DTO. Until the control-plane P4 config lands, pass `--remote-url` (or
   `ESO_REMOTE_URL`); a missing endpoint fails with `REMOTE_URL_MISSING`.
@@ -212,7 +243,7 @@ the Cursor agent-cli folder
 
 ```bash
 cd host-runtime
-bun test                 # 140 tests
+bun test                 # 180 tests
 bun run typecheck        # tsc --noEmit
 ```
 

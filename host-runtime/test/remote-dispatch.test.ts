@@ -3,7 +3,7 @@ import { DispatchError, runDispatch } from '../src/remote/dispatch';
 import type { DispatchOptions } from '../src/remote/dispatch';
 import { startRemoteServer } from '../src/remote/server';
 import type { RemoteServerOptions } from '../src/remote/server';
-import type { ConfigSnapshot } from '../src/config-client';
+import type { ConfigSnapshot, FetchLike } from '../src/config-client';
 import {
     AGY_RUNTIME_KEY,
     A_HOST_TOKEN,
@@ -17,8 +17,19 @@ import {
 } from './remote-fixtures';
 import type { FakeEso } from './remote-fixtures';
 
+// Keep every default cache/buffer/ledger write inside a temp dir (never ~/.eso).
+const TEST_CACHE = makeTempDir('hr-dispatch-cache-');
+process.env.ESO_CONFIG_CACHE_DIR = TEST_CACHE.dir;
+process.env.ESO_OBS_BUFFER_DIR = `${TEST_CACHE.dir}/observations`;
+
 const PROMPT = 'Mode B dispatch prompt that must never be stored on host A.';
 const TRACE = 'p4-unit-dry';
+
+const TIERS = {
+    fast: { model: 'gemini-4-argon-low', effort: 'low' },
+    balanced: { model: 'gemini-4-argon-high', effort: 'high' },
+    reasoning: { model: 'gemini-4-argon-high', effort: 'xhigh' },
+};
 
 interface E2E {
     fake: FakeEso;
@@ -43,10 +54,11 @@ async function startE2E(workspace: string, options: { snapshotOverrides?: Record
         allowedWorkspaces: [workspace],
         fetchImpl: fake.fetchImpl,
         sleepImpl: async () => undefined,
+        ledgerPath: `${workspace}/.modeb-ledger.json`,
         log: (line) => logs.push(line),
         ...options.bOptions,
     });
-    const snapshot = await makeModeBSnapshot(handle.url, (options.snapshotOverrides ?? {}) as never);
+    const snapshot = await makeModeBSnapshot(handle.url, (options.snapshotOverrides ?? {}) as never, { modelTiers: TIERS });
     fake.setSnapshot(snapshot);
     return { fake, snapshot, remoteUrl: handle.url, logs, stop: () => handle.stop() };
 }
@@ -99,6 +111,13 @@ describe('Mode B dispatch (A -> B, in-process E2E)', () => {
             expect(report.workerId).toBe('worker-build');
             expect(report.flowId).toBe('that-tinh-tran');
             expect(report.snapshotVersionValid).toBe(true);
+            expect(report.snapshotSource).toBe('network');
+            // Host B resolved worker-build (balanced) from the P5 modelTiers map.
+            expect(report.model).toBe('gemini-4-argon-high');
+            expect(report.modelSource).toBe('tier');
+            expect(report.effort).toBe('high');
+            expect(report.tier).toBe('balanced');
+            expect(report.warnings).toEqual([]);
             expect(report.remoteObservationId).not.toBe(null);
             expect(report.localObservationId).toBe(`obs-remote-cursor-cursor-agent-agy-agy-${TRACE}`);
             expect(report.localObservationCreated).toBe(true);
@@ -121,7 +140,9 @@ describe('Mode B dispatch (A -> B, in-process E2E)', () => {
             expect(local.evidence.remoteRuntimeKey).toBe(AGY_RUNTIME_KEY);
             expect(local.evidence.remoteJobId).toBe(TRACE);
             expect(local.evidence.adapter).toBe('dry');
-            expect(local.evidence.model).toBe('gemini-4-argon-medium');
+            expect(local.evidence.model).toBe('gemini-4-argon-high');
+            expect(local.evidence.effort).toBe('high');
+            expect(local.evidence.tier).toBe('balanced');
             expect(local.idempotencyKey).toBe(`${TRACE}:remote:${TEST_RUNTIME_KEY}->${AGY_RUNTIME_KEY}`);
 
             const stored = JSON.stringify(e2e.fake.observations);
@@ -236,6 +257,57 @@ describe('Mode B dispatch (A -> B, in-process E2E)', () => {
         }
     });
 
+    it('dispatches from the offline config cache and buffers the local observation', async () => {
+        const workspace = makeTempDir();
+        const cache = makeTempDir('hr-dispatch-cache-');
+        const e2e = await startE2E(workspace.dir);
+        const shared = { cacheDir: cache.dir, bufferDir: `${cache.dir}/observations` };
+        try {
+            const online = await runDispatch(dispatchOptions(e2e, workspace.dir, { ...shared }));
+            expect(online.ok).toBe(true);
+            expect(online.snapshotSource).toBe('network');
+
+            const downFetch: FetchLike = async () => {
+                throw new Error('control plane down');
+            };
+            const offline = await runDispatch(
+                dispatchOptions(e2e, workspace.dir, {
+                    ...shared,
+                    offline: true,
+                    fetchImpl: downFetch,
+                    traceId: 'p4-unit-offline',
+                }),
+            );
+            expect(offline.ok).toBe(true);
+            expect(offline.snapshotSource).toBe('cache');
+            expect(offline.warnings.some((entry) => entry.startsWith('SNAPSHOT_CACHE_USED:ageMs='))).toBe(true);
+            expect(offline.warnings.some((entry) => entry.startsWith('OBSERVATIONS_BUFFERED:'))).toBe(true);
+            expect(offline.localObservationCreated).toBe(false);
+            // Host B still wrote its observation through its own (working) ESO connection.
+            expect(e2e.fake.observations.filter((row) => row.traceId === 'p4-unit-offline')).toHaveLength(1);
+        } finally {
+            await e2e.stop();
+            workspace.cleanup();
+            cache.cleanup();
+        }
+    });
+
+    it('reports MODEL_TIER_NOT_MAPPED when the target runtime has no tier map', async () => {
+        const workspace = makeTempDir();
+        const e2e = await startE2E(workspace.dir);
+        try {
+            const noTierSnapshot = await makeModeBSnapshot(e2e.remoteUrl);
+            e2e.fake.setSnapshot(noTierSnapshot);
+            const report = await runDispatch(dispatchOptions(e2e, workspace.dir, { traceId: 'p4-unit-notier' }));
+            expect(report.ok).toBe(true);
+            expect(report.modelSource).toBe('runtime-default');
+            expect(report.warnings).toContain('MODEL_TIER_NOT_MAPPED');
+        } finally {
+            await e2e.stop();
+            workspace.cleanup();
+        }
+    });
+
     it('rejects self-dispatch and a missing remote secret', async () => {
         const workspace = makeTempDir();
         const e2e = await startE2E(workspace.dir);
@@ -265,6 +337,7 @@ describe('Mode B dispatch (A -> B, in-process E2E)', () => {
             esoBaseUrl: 'http://eso.test',
             consumer: TEST_CONSUMER,
             hostToken: B_HOST_TOKEN,
+            allowedWorkspaces: [workspace.dir],
             fetchImpl: e2e.fake.fetchImpl,
             sleepImpl: async () => undefined,
             log: () => undefined,

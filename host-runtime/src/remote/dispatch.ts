@@ -8,11 +8,11 @@
  * ESO never dispatches, queues or runs anything: A and B each append their own observations.
  */
 
-import { ConfigClient, findHostRuntime, splitRuntimeKey, validateSnapshotVersion } from '../config-client';
+import { ConfigClient, ConfigClientError, findHostRuntime, splitRuntimeKey, validateSnapshotVersion } from '../config-client';
 import type { ConfigSnapshot, FetchLike, SnapshotFlow } from '../config-client';
 import { entryWorkerId } from '../flow-engine';
 import { FALLBACK_WORKER_ID, findPlacement, findWorker, placementAllows } from '../worker-policy';
-import { ObservationClient } from '../observation-client';
+import { ObservationClient, ObservationClientError } from '../observation-client';
 import { dispatchRemote, RemoteClientError } from './client';
 import { createNonce, EnvelopeError } from './envelope';
 import type { JobEnvelope, RemoteOutcome, ResultEnvelope, WorkspaceRef } from './envelope';
@@ -24,6 +24,10 @@ export const DEFAULT_DISPATCH_TIMEOUT_MS = 15 * 60 * 1000;
 export type DispatchErrorCode =
     | 'INVALID_RUNTIME_KEY'
     | 'SNAPSHOT_VERSION_MISMATCH'
+    | 'SNAPSHOT_CACHE_MISSING'
+    | 'SNAPSHOT_CACHE_INVALID'
+    | 'SNAPSHOT_CACHE_SCOPE_MISMATCH'
+    | 'SNAPSHOT_CACHE_STALE'
     | 'FLOW_NOT_FOUND'
     | 'WORKER_NOT_FOUND'
     | 'WORKER_NOT_PLACED'
@@ -75,6 +79,10 @@ export interface DispatchOptions {
     /** Remote transport fetch seam (defaults to the real fetch). */
     remoteFetchImpl?: FetchLike;
     sleepImpl?: (ms: number) => Promise<void>;
+    /** Offline mode: config must come from the local snapshot cache. */
+    offline?: boolean;
+    cacheDir?: string;
+    bufferDir?: string;
     log?: (line: string) => void;
 }
 
@@ -93,8 +101,16 @@ export interface DispatchReport {
     flowId: string;
     snapshotVersion: string;
     snapshotVersionValid: boolean;
+    snapshotSource: 'network' | 'cache';
+    /** Model resolved by host B (tier map / default / explicit). */
+    model: string | null;
+    modelSource: string | null;
+    effort: string | null;
+    tier: string | null;
     transportDurationMs: number;
     durationMs: number;
+    /** Non-fatal hardening warnings (cache fallback, buffered observations, tier gaps). */
+    warnings: string[];
 }
 
 function fail(code: DispatchErrorCode, message: string, detail?: string): never {
@@ -209,6 +225,8 @@ export async function runDispatch(options: DispatchOptions): Promise<DispatchRep
         runtimeKey: options.fromRuntimeKey,
         token: options.authToken,
         fetchImpl: options.fetchImpl,
+        cacheDir: options.cacheDir,
+        offline: options.offline,
     });
     const observationClient = new ObservationClient({
         baseUrl: options.baseUrl,
@@ -216,17 +234,44 @@ export async function runDispatch(options: DispatchOptions): Promise<DispatchRep
         token: options.authToken,
         fetchImpl: options.fetchImpl,
         sleepImpl: options.sleepImpl,
+        cacheDir: options.cacheDir,
+        bufferDir: options.bufferDir,
     });
+    const warnings: string[] = [];
+
+    try {
+        const flushed = await observationClient.flushBuffer();
+        if (flushed.flushed > 0) warnings.push(`OBSERVATIONS_FLUSHED:${flushed.flushed}`);
+        if (flushed.remaining > 0) warnings.push(`OBSERVATIONS_FLUSH_REMAINING:${flushed.remaining}`);
+    } catch {
+        warnings.push('OBSERVATIONS_FLUSH_FAILED');
+    }
 
     let snapshot: ConfigSnapshot;
     try {
         snapshot = await configClient.getSnapshot();
     } catch (error) {
+        if (error instanceof ConfigClientError && error.code.startsWith('SNAPSHOT_CACHE_')) {
+            fail(error.code as DispatchErrorCode, error.message);
+        }
         fail('DISPATCH_FAILED', `cannot read config snapshot: ${error instanceof Error ? error.message : String(error)}`);
     }
     const validation = await validateSnapshotVersion(snapshot);
     if (!validation.ok) {
         fail('SNAPSHOT_VERSION_MISMATCH', `config snapshot failed validation: ${validation.reason ?? 'unknown'}`);
+    }
+    if (configClient.lastSource === 'cache') {
+        warnings.push(`SNAPSHOT_CACHE_USED:ageMs=${configClient.lastCacheAgeMs ?? 0}`);
+        log(`[warn] SNAPSHOT_CACHE_USED ageMs=${configClient.lastCacheAgeMs ?? 0} (using cached config snapshot)`);
+    }
+    // Never refresh the offline cache from a cache-derived snapshot: that would reset its age
+    // and let stale configuration be accepted forever while ESO is unreachable.
+    if (configClient.lastSource === 'network') {
+        try {
+            configClient.saveSnapshot(snapshot);
+        } catch {
+            warnings.push('SNAPSHOT_CACHE_WRITE_FAILED');
+        }
     }
 
     const flow = selectFlow(snapshot, options.flowId);
@@ -315,7 +360,11 @@ export async function runDispatch(options: DispatchOptions): Promise<DispatchRep
                 },
             });
             localObservationId = written.observationId;
-        } catch {
+        } catch (observationError) {
+            if (observationError instanceof ObservationClientError && observationError.buffered) {
+                localObservationId = observationError.observationId ?? null;
+                warnings.push(`OBSERVATIONS_BUFFERED:${localObservationId ?? jobId}`);
+            }
             // Observation write failed too: the dispatch error is still the primary failure.
         }
         throw new DispatchError('DISPATCH_FAILED', message, detail, localObservationId);
@@ -351,6 +400,7 @@ export async function runDispatch(options: DispatchOptions): Promise<DispatchRep
                 model: result.evidence.model,
                 ...(result.evidence.modelSource ? { modelSource: result.evidence.modelSource } : {}),
                 ...(result.evidence.tier !== undefined ? { tier: result.evidence.tier } : {}),
+                ...(result.evidence.effort ? { effort: result.evidence.effort } : {}),
                 exitCode: result.evidence.exitCode,
                 durationMs: result.evidence.durationMs,
                 timedOut: result.evidence.timedOut ?? false,
@@ -361,12 +411,22 @@ export async function runDispatch(options: DispatchOptions): Promise<DispatchRep
         localObservationId = written.observationId;
         localObservationCreated = written.created;
     } catch (error) {
-        fail(
-            'DISPATCH_FAILED',
-            `remote job ${jobId} finished (${result.outcome}) but the local observation could not be written: ` +
-                `${error instanceof Error ? error.message : String(error)}`,
-        );
+        if (error instanceof ObservationClientError && error.buffered) {
+            localObservationId = error.observationId ?? null;
+            localObservationCreated = false;
+            warnings.push(`OBSERVATIONS_BUFFERED:${localObservationId ?? jobId}`);
+            log(`[warn] OBSERVATIONS_BUFFERED local observation ${localObservationId ?? jobId}`);
+        } else {
+            fail(
+                'DISPATCH_FAILED',
+                `remote job ${jobId} finished (${result.outcome}) but the local observation could not be written: ` +
+                    `${error instanceof Error ? error.message : String(error)}`,
+            );
+        }
     }
+
+    const remoteWarning = result.evidence.errorCode;
+    if (remoteWarning && !warnings.includes(remoteWarning)) warnings.push(remoteWarning);
 
     log(`[dispatch] job=${jobId} outcome=${result.outcome} remoteObservation=${result.observationId ?? 'none'} localObservation=${localObservationId ?? 'none'}`);
 
@@ -385,7 +445,13 @@ export async function runDispatch(options: DispatchOptions): Promise<DispatchRep
         flowId: flow.id,
         snapshotVersion: snapshot.version,
         snapshotVersionValid: validation.ok,
+        snapshotSource: configClient.lastSource === 'cache' ? 'cache' : 'network',
+        model: result.evidence.model,
+        modelSource: result.evidence.modelSource ?? null,
+        effort: result.evidence.effort ?? null,
+        tier: result.evidence.tier ?? null,
         transportDurationMs,
         durationMs: Date.now() - startedAt,
+        warnings,
     };
 }

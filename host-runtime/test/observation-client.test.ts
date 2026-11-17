@@ -161,7 +161,7 @@ describe('observation-client', () => {
         expect(attempts).toBe(1);
     });
 
-    it('reports an unreachable observatory after retries', async () => {
+    it('reports an unreachable observatory after retries (buffering disabled)', async () => {
         let attempts = 0;
         const fetchImpl: FetchLike = async () => {
             attempts += 1;
@@ -172,6 +172,7 @@ describe('observation-client', () => {
             consumer: 'testeso',
             fetchImpl,
             sleepImpl: async () => undefined,
+            bufferEnabled: false,
         });
         const body = buildObservationBody({
             traceId: 't-5',
@@ -188,7 +189,7 @@ describe('observation-client', () => {
         } catch (error) {
             expect((error as ObservationClientError).code).toBe('OBSERVATION_UNREACHABLE');
         }
-        expect(attempts).toBe(2);
+        expect(attempts).toBe(4);
     });
 
     it('lists observations newest first', async () => {

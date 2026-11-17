@@ -8,6 +8,8 @@
  *   GET /api/v1/consumers/:id/config-snapshot?runtimeKey=hostId:runtimeId
  */
 
+import { DEFAULT_CACHE_MAX_AGE_MS, SnapshotCache, resolveCacheDir } from './offline-cache';
+
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 
 export interface SnapshotConsumer {
@@ -32,6 +34,8 @@ export interface SnapshotHostRuntime {
     lastHeartbeat?: string | null;
     /** Mode B endpoint registered by P4 ESO config (nullable until configured). */
     remoteUrl?: string | null;
+    /** P5 model catalog: placement tier -> {model, effort?}. Absent until ESO config lands. */
+    modelTiers?: Record<string, unknown> | null;
 }
 
 export interface SnapshotHost {
@@ -133,7 +137,15 @@ export interface ConfigClientOptions {
     runtimeKey: string;
     token?: string;
     fetchImpl?: FetchLike;
+    /** Snapshot cache root (default: ESO_CONFIG_CACHE_DIR or ~/.eso/host-runtime). */
+    cacheDir?: string;
+    /** Cache-only mode (default: ESO_OFFLINE=1). */
+    offline?: boolean;
+    cacheMaxAgeMs?: number;
+    nowImpl?: () => number;
 }
+
+export type SnapshotSource = 'network' | 'cache';
 
 function canonicalize(value: unknown): unknown {
     if (Array.isArray(value)) return value.map((item) => canonicalize(item));
@@ -271,8 +283,18 @@ export class ConfigClient {
     private readonly runtimeKey: string;
     private readonly token?: string;
     private readonly fetchImpl: FetchLike;
+    private readonly cache: SnapshotCache;
+    private readonly offline: boolean;
+    private readonly cacheMaxAgeMs: number;
+    private readonly nowImpl: () => number;
     private cached: ConfigSnapshot | null = null;
     private etag: string | null = null;
+    /** Where the last getSnapshot() came from (for warnings/tests). */
+    lastSource: SnapshotSource | null = null;
+    /** Age of the cached snapshot in ms when lastSource === 'cache'. */
+    lastCacheAgeMs: number | null = null;
+    /** Warning code explaining a cache fallback, if any. */
+    lastWarning: string | null = null;
 
     constructor(options: ConfigClientOptions) {
         this.baseUrl = (options.baseUrl || '').replace(/\/+$/, '');
@@ -280,6 +302,38 @@ export class ConfigClient {
         this.runtimeKey = options.runtimeKey;
         this.token = options.token;
         this.fetchImpl = options.fetchImpl ?? ((url, init) => fetch(url, init));
+        this.nowImpl = options.nowImpl ?? (() => Date.now());
+        this.cacheMaxAgeMs = options.cacheMaxAgeMs ?? DEFAULT_CACHE_MAX_AGE_MS;
+        this.offline = options.offline ?? process.env.ESO_OFFLINE === '1';
+        const cacheDir = resolveCacheDir(options.cacheDir);
+        this.cache = new SnapshotCache(SnapshotCache.filePathFor(cacheDir, options.consumer, options.runtimeKey));
+    }
+
+    /** Persist this snapshot as the last valid offline fallback (call after version validation). */
+    saveSnapshot(snapshot: ConfigSnapshot): void {
+        this.cache.save(this.consumer, this.runtimeKey, snapshot);
+    }
+
+    cacheFilePath(): string {
+        return this.cache.filePath;
+    }
+
+    private loadCachedSnapshot(offline: boolean): ConfigSnapshot | null {
+        const loaded = this.cache.load(this.consumer, this.runtimeKey, this.nowImpl);
+        if (!loaded.ok) {
+            if (offline) throw new ConfigClientError(loaded.code, loaded.reason);
+            return null;
+        }
+        if (offline && this.cacheMaxAgeMs > 0 && loaded.ageMs > this.cacheMaxAgeMs) {
+            throw new ConfigClientError(
+                'SNAPSHOT_CACHE_STALE',
+                `cached snapshot is older than ${this.cacheMaxAgeMs} ms (age ${loaded.ageMs} ms)`,
+            );
+        }
+        this.lastSource = 'cache';
+        this.lastCacheAgeMs = loaded.ageMs;
+        this.lastWarning = `SNAPSHOT_CACHE_USED ageMs=${loaded.ageMs}`;
+        return loaded.snapshot;
     }
 
     /** Snapshot URL for this consumer/runtime (exposed for logs and tests — never includes the token). */
@@ -291,7 +345,17 @@ export class ConfigClient {
      * Fetch the snapshot. With `useEtag` the previous ETag is sent and a 304 returns the cached
      * document instead of a body.
      */
-    async getSnapshot(options: { useEtag?: boolean } = {}): Promise<ConfigSnapshot> {
+    async getSnapshot(options: { useEtag?: boolean; offline?: boolean } = {}): Promise<ConfigSnapshot> {
+        this.lastSource = null;
+        this.lastCacheAgeMs = null;
+        this.lastWarning = null;
+        const offline = options.offline ?? this.offline;
+        if (offline) {
+            const cachedSnapshot = this.loadCachedSnapshot(true);
+            if (!cachedSnapshot) throw new ConfigClientError('SNAPSHOT_CACHE_MISSING', 'no cached snapshot available');
+            return cachedSnapshot;
+        }
+
         const headers: Record<string, string> = { accept: 'application/json' };
         if (this.token) headers.authorization = `Bearer ${this.token}`;
         if (options.useEtag && this.etag) headers['if-none-match'] = this.etag;
@@ -300,6 +364,8 @@ export class ConfigClient {
         try {
             response = await this.fetchImpl(this.snapshotUrl(), { method: 'GET', headers });
         } catch (error) {
+            const cachedSnapshot = this.loadCachedSnapshot(false);
+            if (cachedSnapshot) return cachedSnapshot;
             throw new ConfigClientError(
                 'CONFIG_SNAPSHOT_UNREACHABLE',
                 `Cannot reach ESO at ${this.baseUrl}: ${error instanceof Error ? error.message : String(error)}`,
@@ -314,7 +380,13 @@ export class ConfigClient {
         }
 
         const text = await response.text();
-        if (!response.ok) throw errorFromResponse(response.status, text);
+        if (!response.ok) {
+            if (response.status >= 500) {
+                const cachedSnapshot = this.loadCachedSnapshot(false);
+                if (cachedSnapshot) return cachedSnapshot;
+            }
+            throw errorFromResponse(response.status, text);
+        }
 
         let snapshot: ConfigSnapshot;
         try {
@@ -323,6 +395,7 @@ export class ConfigClient {
             throw new ConfigClientError('CONFIG_SNAPSHOT_INVALID', 'Config snapshot body is not valid JSON', response.status);
         }
         this.cached = snapshot;
+        this.lastSource = 'network';
         const etag = response.headers?.get?.('etag') ?? null;
         this.etag = etag;
         return snapshot;

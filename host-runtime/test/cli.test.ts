@@ -51,6 +51,8 @@ const REPORT: RunReport = {
         },
     ],
     stoppedReason: 'max-steps',
+    warnings: [],
+    snapshotSource: 'network',
 };
 
 describe('cli', () => {
@@ -135,6 +137,20 @@ describe('cli', () => {
         });
     });
 
+    it('parses offline cache flags for run', () => {
+        const parsed = parseArgs(
+            ['run', '--prompt', 'x', '--offline', '--cache-dir', '/tmp/c', '--buffer-dir', '/tmp/b'],
+            ENV,
+        );
+        const options = parsed.options as ParsedRunOptions;
+        expect(options.offline).toBe(true);
+        expect(options.cacheDir).toBe('/tmp/c');
+        expect(options.bufferDir).toBe('/tmp/b');
+
+        const viaEnv = parseArgs(['run', '--prompt', 'x'], { ...ENV, ESO_OFFLINE: '1' });
+        expect((viaEnv.options as ParsedRunOptions).offline).toBe(true);
+    });
+
     it('rejects invalid usage', () => {
         const cases: Array<[string[], Record<string, string | undefined>, string]> = [
             [['run', '--prompt', 'x'], {}, '--consumer is required'],
@@ -183,5 +199,11 @@ describe('cli', () => {
         expect(text).toContain('trace-1');
         expect(text).toContain('observation=obs-worker-build-1-trace-1');
         expect(text).toContain('stopped: max-steps');
+    });
+
+    it('surfaces warnings in the run report', () => {
+        const text = formatReport({ ...REPORT, warnings: ['SNAPSHOT_CACHE_USED:ageMs=5', 'OBSERVATIONS_FLUSHED:2'] });
+        expect(text).toContain('warnings   SNAPSHOT_CACHE_USED:ageMs=5, OBSERVATIONS_FLUSHED:2');
+        expect(formatReport(REPORT)).not.toContain('warnings');
     });
 });

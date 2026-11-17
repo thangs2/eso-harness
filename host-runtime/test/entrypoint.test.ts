@@ -3,7 +3,11 @@ import { EntrypointError, MAX_HOST_STEPS, clampMaxSteps, runEntrypoint } from '.
 import type { EntrypointOptions, RunReport } from '../src/entrypoint';
 import type { AdapterRequest, AdapterResult, HostAdapter } from '../src/adapters/types';
 import type { ConfigSnapshot, FetchLike } from '../src/config-client';
+import { join } from 'node:path';
 import { makeSnapshot, TEST_CONSUMER, TEST_RUNTIME_KEY } from './fixtures';
+import { fakeEso, makeTempDir } from './remote-fixtures';
+import { SnapshotCache } from '../src/offline-cache';
+import { readFileSync } from 'node:fs';
 
 const PROMPT = 'Implement the P3 host-runtime package: entrypoint, flow engine, Mode A adapter.';
 const TOKEN = 'host-token-should-never-leak';
@@ -80,6 +84,7 @@ function harness(snapshot: ConfigSnapshot, options: { duplicate?: boolean } = {}
 }
 
 function options(harnessed: Harness, adapter: HostAdapter, overrides: Partial<EntrypointOptions> = {}): EntrypointOptions {
+    const cache = makeTempDir('hr-entry-cache-');
     return {
         baseUrl: 'http://cp.test',
         authToken: TOKEN,
@@ -96,6 +101,9 @@ function options(harnessed: Harness, adapter: HostAdapter, overrides: Partial<En
         env: { PATH: '' },
         homeDir: '/nonexistent',
         log: () => undefined,
+        sleepImpl: async () => undefined,
+        cacheDir: cache.dir,
+        bufferDir: join(cache.dir, 'observations'),
         ...overrides,
     };
 }
@@ -119,6 +127,8 @@ describe('entrypoint (dry integration, fake control plane)', () => {
         expect(report.ok).toBe(true);
         expect(report.stoppedReason).toBe('max-steps');
         expect(report.snapshotVersionValid).toBe(true);
+        expect(report.snapshotSource).toBe('network');
+        expect(report.warnings).toEqual([]);
         expect(report.flowId).toBe('that-tinh-tran');
         expect(report.auth).toBe('host');
         expect(report.steps).toHaveLength(1);
@@ -314,6 +324,68 @@ describe('entrypoint (dry integration, fake control plane)', () => {
         expect(clampMaxSteps(undefined)).toBe(1);
         expect(clampMaxSteps(3)).toBe(3);
         expect(clampMaxSteps(MAX_HOST_STEPS + 50)).toBe(MAX_HOST_STEPS);
+    });
+
+    it('serves config from the offline cache and buffers observations when ESO is down', async () => {
+        const snapshot = await makeSnapshot();
+        const fake = fakeEso(snapshot);
+        const cache = makeTempDir('hr-entry-cache-');
+        const shared = {
+            cacheDir: cache.dir,
+            bufferDir: join(cache.dir, 'observations'),
+        };
+        try {
+            const harnessed = { fetchImpl: fake.fetchImpl, posts: [], snapshotGets: [] };
+            const online = await runEntrypoint(options(harnessed, passAdapter(), { ...shared }));
+            expect(online.ok).toBe(true);
+            expect(fake.observations).toHaveLength(1);
+
+            const downFetch: FetchLike = async () => {
+                throw new Error('control plane down');
+            };
+            const cachePath = SnapshotCache.filePathFor(cache.dir, TEST_CONSUMER, TEST_RUNTIME_KEY);
+            const cachedBefore = JSON.parse(readFileSync(cachePath, 'utf8')).cachedAt;
+            const offline = await runEntrypoint(
+                options({ fetchImpl: downFetch, posts: [], snapshotGets: [] }, passAdapter(), { ...shared, offline: true }),
+            );
+            expect(offline.ok).toBe(true);
+            expect(offline.snapshotSource).toBe('cache');
+            // H1 regression: a cache-derived snapshot must never refresh its own cachedAt.
+            expect(JSON.parse(readFileSync(cachePath, 'utf8')).cachedAt).toBe(cachedBefore);
+            expect(offline.warnings.some((entry) => entry.startsWith('SNAPSHOT_CACHE_USED:ageMs='))).toBe(true);
+            expect(offline.warnings.some((entry) => entry.startsWith('OBSERVATIONS_BUFFERED:'))).toBe(true);
+            expect(offline.steps[0].observationCreated).toBe(false);
+            expect(fake.observations).toHaveLength(1);
+
+            const recovered = await runEntrypoint(options({ fetchImpl: fake.fetchImpl, posts: [], snapshotGets: [] }, passAdapter(), { ...shared }));
+            expect(recovered.warnings.some((entry) => entry.startsWith('OBSERVATIONS_FLUSHED:'))).toBe(true);
+            expect(fake.observations).toHaveLength(1); // idempotent replay: still one row
+        } finally {
+            cache.cleanup();
+        }
+    });
+
+    it('fails with a typed cache error in offline mode without a cached snapshot', async () => {
+        const cache = makeTempDir('hr-entry-cache-');
+        try {
+            const downFetch: FetchLike = async () => {
+                throw new Error('control plane down');
+            };
+            try {
+                await runEntrypoint(
+                    options({ fetchImpl: downFetch, posts: [], snapshotGets: [] }, passAdapter(), {
+                        offline: true,
+                        cacheDir: cache.dir,
+                        bufferDir: join(cache.dir, 'observations'),
+                    }),
+                );
+                throw new Error('expected offline run to fail');
+            } catch (error) {
+                expect((error as { code?: string }).code).toBe('SNAPSHOT_CACHE_MISSING');
+            }
+        } finally {
+            cache.cleanup();
+        }
     });
 
     it('exposes a typed report shape', async () => {

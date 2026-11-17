@@ -16,19 +16,32 @@ import {
 } from './remote-fixtures';
 import type { FakeEso } from './remote-fixtures';
 
+// Keep every default cache/buffer/ledger write inside a temp dir (never ~/.eso).
+const TEST_CACHE = makeTempDir('hr-server-cache-');
+process.env.ESO_CONFIG_CACHE_DIR = TEST_CACHE.dir;
+process.env.ESO_OBS_BUFFER_DIR = `${TEST_CACHE.dir}/observations`;
+
 const PROMPT = 'Server test prompt that must never appear in logs or results.';
+
+const TIERS = {
+    fast: { model: 'gemini-4-argon-low', effort: 'low' },
+    balanced: { model: 'gemini-4-argon-high', effort: 'high' },
+    reasoning: { model: 'gemini-4-argon-high', effort: 'xhigh' },
+};
 
 interface Harness {
     url: string;
     logs: string[];
     fake: FakeEso;
     workspace: string;
+    ledgerPath: string;
     stop: () => Promise<void>;
 }
 
 async function startHarness(workspace: string, overrides: Partial<RemoteServerOptions> = {}): Promise<Harness> {
-    const fake = fakeEso(await makeModeBSnapshot(null));
+    const fake = fakeEso(await makeModeBSnapshot(null, {}, { modelTiers: TIERS }));
     const logs: string[] = [];
+    const ledgerPath = overrides.ledgerPath ?? `${workspace}/.modeb-ledger.json`;
     const handle = startRemoteServer({
         runtimeKey: AGY_RUNTIME_KEY,
         port: 0,
@@ -40,10 +53,11 @@ async function startHarness(workspace: string, overrides: Partial<RemoteServerOp
         allowedWorkspaces: [workspace],
         fetchImpl: fake.fetchImpl,
         sleepImpl: async () => undefined,
+        ledgerPath,
         log: (line) => logs.push(line),
         ...overrides,
     });
-    return { url: handle.url, logs, fake, workspace, stop: () => handle.stop() };
+    return { url: handle.url, logs, fake, workspace, ledgerPath, stop: () => handle.stop() };
 }
 
 async function signedJob(workspaceRepo: string, overrides: Partial<JobEnvelope> = {}): Promise<SignedJobEnvelope> {
@@ -210,6 +224,11 @@ describe('remote server (host B)', () => {
             expect(result.jobId).toBe('job-server-1');
             expect(result.remoteRuntimeKey).toBe(AGY_RUNTIME_KEY);
             expect(result.observationId).not.toBe(null);
+            // Host B resolved the model from the P5 modelTiers map (worker-build tier = balanced).
+            expect(result.evidence.model).toBe('gemini-4-argon-high');
+            expect(result.evidence.effort).toBe('high');
+            expect(result.evidence.modelSource).toBe('tier');
+            expect(result.evidence.errorCode).toBe(undefined);
 
             expect(harness.fake.observations).toHaveLength(1);
             const observation = harness.fake.observations[0];
@@ -236,7 +255,7 @@ describe('remote server (host B)', () => {
         }
     });
 
-    it('replays a completed job from the result cache without a second run', async () => {
+    it('replays a completed job from the persistent ledger without a second run', async () => {
         const temp = makeTempDir();
         const harness = await startHarness(temp.dir);
         try {
@@ -251,6 +270,29 @@ describe('remote server (host B)', () => {
             expect(harness.logs.some((line) => line.includes('replay job=job-server-1'))).toBe(true);
         } finally {
             await harness.stop();
+            temp.cleanup();
+        }
+    });
+
+    it('replays a job from the ledger after a server restart', async () => {
+        const temp = makeTempDir();
+        const first = await startHarness(temp.dir);
+        const signedJobEnvelope = await signedJob(temp.dir);
+        const firstResponse = await postJobs(first.url, signedJobEnvelope, REMOTE_SECRET);
+        const firstPayload = await firstResponse.json();
+        const ledgerPath = first.ledgerPath;
+        await first.stop();
+
+        const fake2 = fakeEso(await makeModeBSnapshot(null, {}, { modelTiers: TIERS }));
+        const restarted = await startHarness(temp.dir, { ledgerPath, fetchImpl: fake2.fetchImpl });
+        try {
+            const replay = await postJobs(restarted.url, signedJobEnvelope, REMOTE_SECRET);
+            expect(replay.status).toBe(200);
+            expect(await replay.json()).toEqual(firstPayload);
+            expect(fake2.observations).toHaveLength(0);
+            expect(restarted.logs.some((line) => line.includes('replay job=job-server-1'))).toBe(true);
+        } finally {
+            await restarted.stop();
             temp.cleanup();
         }
     });
@@ -308,6 +350,16 @@ describe('remote server (host B)', () => {
                     hostToken: '',
                 }),
             ).toThrow();
+            expect(() =>
+                startRemoteServer({
+                    runtimeKey: AGY_RUNTIME_KEY,
+                    port: 0,
+                    secret: REMOTE_SECRET,
+                    esoBaseUrl: 'http://eso.test',
+                    consumer: TEST_CONSUMER,
+                    hostToken: B_HOST_TOKEN,
+                }),
+            ).toThrow('ESO_REMOTE_ALLOWED_WS');
         } finally {
             temp.cleanup();
         }

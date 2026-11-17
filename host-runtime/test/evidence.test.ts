@@ -81,6 +81,23 @@ describe('evidence', () => {
         expect(evidence.tier).toBe('balanced');
     });
 
+    it('records the tier effort in evidence', () => {
+        const evidence = buildEvidence({
+            adapter: 'dry',
+            model: 'gemini-4-argon-high',
+            modelSource: 'tier',
+            tier: 'reasoning',
+            effort: 'xhigh',
+            workerId: 'worker-build',
+            flowId: 'that-tinh-tran',
+            hostStep: 1,
+            exitCode: 0,
+            durationMs: 0,
+        });
+        expect(evidence.effort).toBe('xhigh');
+        expect(evidence.modelSource).toBe('tier');
+    });
+
     it('builds blocked evidence without any run', () => {
         const evidence = buildBlockedEvidence({
             adapter: 'dry',

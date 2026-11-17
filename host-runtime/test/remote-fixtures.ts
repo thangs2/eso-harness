@@ -65,6 +65,7 @@ export function fakeEso(initialSnapshot: ConfigSnapshot): FakeEso {
 export async function makeModeBSnapshot(
     remoteUrl: string | null,
     overrides: Partial<SnapshotPayload> = {},
+    options: { modelTiers?: Record<string, unknown> } = {},
 ): Promise<ConfigSnapshot> {
     const payload = snapshotPayload({
         consumer: {
@@ -136,6 +137,7 @@ export async function makeModeBSnapshot(
                         health: 'healthy',
                         lastHeartbeat: null,
                         remoteUrl,
+                        ...(options.modelTiers ? { modelTiers: options.modelTiers } : {}),
                     },
                 ],
             },

@@ -74,6 +74,7 @@ export interface RemoteEvidence {
     model: string | null;
     modelSource?: string;
     tier?: string | null;
+    effort?: string | null;
     exitCode: number | null;
     durationMs: number;
     timedOut?: boolean;
@@ -316,6 +317,8 @@ export function validateResultEnvelope(value: unknown): ResultEnvelope {
     if (modelSource) evidence.modelSource = modelSource;
     const tier = evidenceRecord.tier;
     if (tier === null || typeof tier === 'string') evidence.tier = tier as string | null;
+    const effort = optionalString(evidenceRecord, 'effort', 'result.evidence', 50);
+    if (effort) evidence.effort = effort;
     if (evidenceRecord.timedOut !== undefined) evidence.timedOut = evidenceRecord.timedOut === true;
     const errorCode = optionalString(evidenceRecord, 'errorCode', 'result.evidence', 100);
     if (errorCode) evidence.errorCode = errorCode;

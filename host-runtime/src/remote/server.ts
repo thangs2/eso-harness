@@ -18,6 +18,7 @@
 
 import { constantTimeEqual, createNonce, EnvelopeError, signResult, verifyJobSignature } from './envelope';
 import type { JobEnvelope, ResultEnvelope, SignedResultEnvelope } from './envelope';
+import { JobLedger, resolveLedgerPath } from './job-ledger';
 import { validateWorkspace } from './workspace';
 import { runEntrypoint } from '../entrypoint';
 import type { AdapterName, HostAdapter } from '../adapters/types';
@@ -26,8 +27,6 @@ import type { FetchLike } from '../config-client';
 export const DEFAULT_REMOTE_PORT = 8788;
 export const DEFAULT_REMOTE_HOST = '127.0.0.1';
 export const DEFAULT_MAX_BODY_BYTES = 512 * 1024;
-export const MAX_RESULT_CACHE = 200;
-export const RESULT_CACHE_TTL_MS = 10 * 60 * 1000;
 
 const RUNTIME_KEY_PATTERN = /^[^:\s]+:[^:\s]+$/;
 
@@ -41,7 +40,7 @@ export interface RemoteServerOptions {
     consumer: string;
     /** Host B scoped bearer token for observation writes. */
     hostToken: string;
-    /** Optional root allow-list (ESO_REMOTE_ALLOWED_WS). Empty = no root restriction (dev). */
+    /** Required root allow-list (ESO_REMOTE_ALLOWED_WS); serve refuses to start when empty. */
     allowedWorkspaces?: string[];
     maxBodyBytes?: number;
     /** ESO fetch seam for tests. */
@@ -49,6 +48,10 @@ export interface RemoteServerOptions {
     sleepImpl?: (ms: number) => Promise<void>;
     /** Test seam only: replace the adapter (production uses the job policy adapter). */
     adapterOverride?: HostAdapter;
+    /** Persistent job ledger path (default ESO_REMOTE_LEDGER or <cacheDir>/modeb-jobs.json). */
+    ledgerPath?: string;
+    cacheDir?: string;
+    ledger?: JobLedger;
     log?: (line: string) => void;
 }
 
@@ -60,15 +63,10 @@ export interface RemoteServerHandle {
     stop(): Promise<void>;
 }
 
-interface CachedResult {
-    signed: SignedResultEnvelope;
-    at: number;
-}
-
 export interface RemoteServerDeps {
     options: RemoteServerOptions;
     log: (line: string) => void;
-    cache: Map<string, CachedResult>;
+    ledger: JobLedger;
 }
 
 function json(status: number, body: unknown): Response {
@@ -92,23 +90,12 @@ function checkAuth(request: Request, secret: string): Response | null {
     return null;
 }
 
-function cacheGet(deps: RemoteServerDeps, jobId: string): SignedResultEnvelope | null {
-    const entry = deps.cache.get(jobId);
-    if (!entry) return null;
-    if (Date.now() - entry.at > RESULT_CACHE_TTL_MS) {
-        deps.cache.delete(jobId);
-        return null;
-    }
-    return entry.signed;
+function ledgerGet(deps: RemoteServerDeps, jobId: string): SignedResultEnvelope | null {
+    return deps.ledger.get(jobId);
 }
 
-function cacheSet(deps: RemoteServerDeps, jobId: string, signed: SignedResultEnvelope): void {
-    deps.cache.set(jobId, { signed, at: Date.now() });
-    while (deps.cache.size > MAX_RESULT_CACHE) {
-        const oldest = deps.cache.keys().next().value;
-        if (typeof oldest !== 'string') break;
-        deps.cache.delete(oldest);
-    }
+function ledgerSet(deps: RemoteServerDeps, jobId: string, signed: SignedResultEnvelope): void {
+    deps.ledger.set(jobId, signed);
 }
 
 function resultFromReport(
@@ -123,10 +110,13 @@ function resultFromReport(
         workerId: step?.workerId ?? job.workerId,
         adapter: step?.adapter ?? job.policy.adapter,
         model: step?.model ?? null,
+        modelSource: step?.modelSource,
+        tier: step?.tier ?? null,
         exitCode: step?.exitCode ?? null,
         durationMs: step?.durationMs ?? 0,
         timedOut: step?.timedOut ?? false,
     };
+    if (step?.effort) evidence.effort = step.effort;
     if (step?.warning) evidence.errorCode = step.warning;
     return {
         jobId: job.jobId,
@@ -187,9 +177,9 @@ async function handleJob(request: Request, deps: RemoteServerDeps): Promise<Resp
         });
     }
 
-    const cached = cacheGet(deps, job.jobId);
+    const cached = ledgerGet(deps, job.jobId);
     if (cached) {
-        log(`[remote] replay job=${job.jobId} (cached result)`);
+        log(`[remote] replay job=${job.jobId} (ledger result)`);
         return json(200, cached);
     }
 
@@ -241,7 +231,7 @@ async function handleJob(request: Request, deps: RemoteServerDeps): Promise<Resp
 
     const result = resultFromReport(job, options.runtimeKey, report);
     const signed = await signResult(result, options.secret);
-    cacheSet(deps, job.jobId, signed);
+    ledgerSet(deps, job.jobId, signed);
     log(`[remote] job=${job.jobId} outcome=${result.outcome} observation=${result.observationId ?? 'none'}`);
     return json(200, signed);
 }
@@ -254,13 +244,21 @@ export function startRemoteServer(options: RemoteServerOptions): RemoteServerHan
     if (!options.secret || options.secret.trim().length < 8) {
         throw new Error('ESO_REMOTE_TOKEN is required for serve (min 8 characters)');
     }
+    if (!options.allowedWorkspaces || options.allowedWorkspaces.length === 0) {
+        throw new Error('ESO_REMOTE_ALLOWED_WS is required for serve (at least one allowed workspace root)');
+    }
 
     const host = options.host ?? DEFAULT_REMOTE_HOST;
     const log = options.log ?? ((line: string) => process.stderr.write(`${line}\n`));
+    const ledger = options.ledger
+        ?? new JobLedger({
+            filePath: options.ledgerPath ?? resolveLedgerPath(undefined, options.cacheDir),
+            nowImpl: undefined,
+        });
     const deps: RemoteServerDeps = {
         options: { ...options, host },
         log,
-        cache: new Map<string, CachedResult>(),
+        ledger,
     };
 
     const maxBodyBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
@@ -293,7 +291,10 @@ export function startRemoteServer(options: RemoteServerOptions): RemoteServerHan
 
     const port = server.port;
     const url = `http://${host}:${port}`;
-    log(`[remote] serve runtimeKey=${options.runtimeKey} url=${url} allowedWorkspaces=${(options.allowedWorkspaces ?? []).join(',') || '(any)'}`);
+    log(
+        `[remote] serve runtimeKey=${options.runtimeKey} url=${url} ` +
+            `allowedWorkspaces=${(options.allowedWorkspaces ?? []).join(',') || '(any)'} ledger=${ledger.filePath}`,
+    );
 
     return {
         runtimeKey: options.runtimeKey,

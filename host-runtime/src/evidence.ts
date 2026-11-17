@@ -22,6 +22,7 @@ export interface AdapterRunFacts {
     model: string | null;
     modelSource: string;
     tier: string | null;
+    effort?: string | null;
     workerId: string | null;
     flowId: string | null;
     hostStep: number;
@@ -42,6 +43,7 @@ export interface WorkerEvidence {
     model: string | null;
     modelSource: string;
     tier: string | null;
+    effort?: string | null;
     adapter: string;
     workerId: string | null;
     flowId: string | null;
@@ -153,6 +155,7 @@ export function buildEvidence(input: BuildEvidenceInput): WorkerEvidence {
         promptRedacted: stdout.redacted || stderr.redacted,
         timedOut: Boolean(input.timedOut),
     };
+    if (input.effort) evidence.effort = input.effort;
     if (input.reason) evidence.reason = input.reason;
     if (input.detail) {
         const detail = redactText(input.detail, input.redaction);

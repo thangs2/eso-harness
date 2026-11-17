@@ -52,6 +52,31 @@ function readSettings(root: string): any {
     }
 }
 
+/** Map legacy bare hostIds to the first runtimeKey for that host. */
+function normalizePlacements(placements: any[], hosts: any[]): any[] {
+    const first = new Map<string, string>();
+    for (const host of hosts) {
+        for (const runtime of host.runtimes ?? []) {
+            if (!first.has(host.hostId)) first.set(host.hostId, runtime.runtimeKey ?? `${host.hostId}:${runtime.runtimeId}`);
+        }
+    }
+    const key = (value: string) => (value.includes(':') ? value : first.get(value) ?? value);
+    return placements.map((placement) => ({
+        ...placement,
+        nativeAgent: Object.fromEntries(
+            Object.entries(placement.nativeAgent ?? {}).map(([hostId, agent]) => [key(hostId), agent])
+        ),
+    }));
+}
+
+/** Read-only snapshot contract: hostId only; never expose the legacy wire field. */
+function normalizeHostBindings(bindings: any[]): any[] {
+    return bindings.map((binding) => {
+        const { hostPluginId, ...rest } = binding ?? {};
+        return { ...rest, hostId: rest.hostId ?? hostPluginId ?? null };
+    });
+}
+
 export class ConfigSnapshotService {
     constructor(
         private readonly store: PlatformStore,
@@ -93,9 +118,9 @@ export class ConfigSnapshotService {
                 }
                 : null,
             workers: Array.isArray(workerConfig?.workers) ? workerConfig.workers : [],
-            workerPlacement: placements.items,
+            workerPlacement: normalizePlacements(placements.items, hosts.items),
             hosts: hosts.items,
-            hostBindings: settings?.harness?.hostProfiles ?? [],
+            hostBindings: normalizeHostBindings(settings?.harness?.hostProfiles ?? []),
             stackVersion: activeStack,
             providerRouting: settings?.knowledge?.providers?.routing ?? {},
         };

@@ -29,12 +29,13 @@ import type { AdapterName } from './adapters/types';
 import { DEFAULT_DISPATCH_TIMEOUT_MS, DispatchError, runDispatch } from './remote/dispatch';
 import type { DispatchOptions, DispatchReport } from './remote/dispatch';
 import { DEFAULT_REMOTE_HOST, DEFAULT_REMOTE_PORT, startRemoteServer } from './remote/server';
+import { ObservationClient } from './observation-client';
 
 export const DEFAULT_BASE_URL = 'http://127.0.0.1:8787';
 export const ADAPTER_NAMES: AdapterName[] = ['dry', 'cursor', 'agy'];
 const DEFAULT_REMOTE_TIMEOUT_MS = DEFAULT_DISPATCH_TIMEOUT_MS;
 
-export type CliCommand = 'run' | 'dispatch' | 'serve' | 'help';
+export type CliCommand = 'run' | 'dispatch' | 'serve' | 'flush-observations' | 'help';
 
 export interface ParsedRunOptions {
     kind: 'run';
@@ -53,6 +54,9 @@ export interface ParsedRunOptions {
     timeoutMs: number;
     cwd?: string;
     traceId?: string;
+    offline: boolean;
+    cacheDir?: string;
+    bufferDir?: string;
 }
 
 export interface ParsedDispatchOptions {
@@ -78,6 +82,9 @@ export interface ParsedDispatchOptions {
     workspaceBranch?: string;
     workspaceCommit?: string;
     traceId?: string;
+    offline: boolean;
+    cacheDir?: string;
+    bufferDir?: string;
 }
 
 export interface ParsedServeOptions {
@@ -90,9 +97,20 @@ export interface ParsedServeOptions {
     hostToken: string;
     remoteToken: string;
     allowedWorkspaces: string[];
+    ledgerPath?: string;
 }
 
-export type ParsedOptions = ParsedRunOptions | ParsedDispatchOptions | ParsedServeOptions;
+export interface ParsedFlushOptions {
+    kind: 'flush-observations';
+    baseUrl: string;
+    consumer: string;
+    authToken?: string;
+    authKind: AuthKind;
+    cacheDir?: string;
+    bufferDir?: string;
+}
+
+export type ParsedOptions = ParsedRunOptions | ParsedDispatchOptions | ParsedServeOptions | ParsedFlushOptions;
 
 export interface ParsedCli {
     command: CliCommand;
@@ -115,6 +133,7 @@ export function helpText(): string {
         '  bun run src/cli.ts run --consumer <id> --runtime-key <hostId:runtimeId> --prompt <text> [options]',
         '  bun run src/cli.ts dispatch --consumer <id> --from-runtime-key <key> --to-runtime-key <key> --prompt <text> [options]',
         '  bun run src/server.ts serve --runtime-key <hostId:runtimeId> --port 8788 [options]',
+        '  bun run src/cli.ts flush-observations --consumer <id> [options]',
         '  bun run src/cli.ts --help',
         '',
         'RUN (Mode A, local worker)',
@@ -128,6 +147,9 @@ export function helpText(): string {
         '  --timeout-ms <n>       adapter process timeout (default: ' + DEFAULT_TIMEOUT_MS + ')',
         '  --cwd <dir>            adapter working directory (default: consumer.root, else current dir)',
         '  --trace-id <id>        reuse a trace/job id (idempotency checks)',
+        '  --offline              config must come from the local snapshot cache (env ESO_OFFLINE=1)',
+        '  --cache-dir <dir>      local cache root (env ESO_CONFIG_CACHE_DIR, default ~/.eso/host-runtime)',
+        '  --buffer-dir <dir>     buffered observation dir (env ESO_OBS_BUFFER_DIR)',
         '',
         'DISPATCH (Mode B, host A -> host B)',
         '  --from-runtime-key <k> host A runtimeKey (env ESO_RUNTIME_KEY)',
@@ -144,8 +166,12 @@ export function helpText(): string {
         '  --host <addr>          listen address (default: ' + DEFAULT_REMOTE_HOST + ')',
         '  --port <n>             listen port (default: ' + DEFAULT_REMOTE_PORT + ')',
         '  --allowed-workspace <p> repeatable allowed workspace root (env ESO_REMOTE_ALLOWED_WS, comma-separated)',
+        '  --ledger-path <p>      persistent Mode B job ledger (env ESO_REMOTE_LEDGER)',
         '  ESO_HOST_TOKEN         host B scoped bearer token for observation writes',
         '  ESO_REMOTE_TOKEN       shared Mode B secret (bearer + HMAC)',
+        '',
+        'FLUSH-OBSERVATIONS',
+        '  replay observations buffered while ESO was unavailable (idempotent)',
         '',
         'COMMON',
         '  --consumer <id>        ESO consumer (env ESO_CONSUMER)',
@@ -158,7 +184,8 @@ export function helpText(): string {
         '',
         'ENV',
         '  ESO_BASE_URL · ESO_CONSUMER · ESO_RUNTIME_KEY · ESO_HOST_TOKEN · ESO_OPERATOR_TOKEN ·',
-        '  ESO_AUTH_TOKEN · ESO_REMOTE_TOKEN · ESO_REMOTE_ALLOWED_WS · ESO_REMOTE_URL',
+        '  ESO_AUTH_TOKEN · ESO_REMOTE_TOKEN · ESO_REMOTE_ALLOWED_WS · ESO_REMOTE_URL ·',
+        '  ESO_CONFIG_CACHE_DIR · ESO_OBS_BUFFER_DIR · ESO_REMOTE_LEDGER · ESO_OFFLINE',
         '',
         'EXIT CODES',
         '  0 PASS (flow-end / max-steps) · 1 FAIL · 2 BLOCKED or usage/config error',
@@ -190,12 +217,13 @@ function parsePositiveInt(name: string, value: string, max?: number): number {
     return parsed;
 }
 
-const COMMANDS: CliCommand[] = ['run', 'dispatch', 'serve'];
+const COMMANDS: CliCommand[] = ['run', 'dispatch', 'serve', 'flush-observations'];
 
 interface RawFlags {
     values: Record<string, string>;
     lists: Record<string, string[]>;
     dryRun: boolean;
+    offline: boolean;
     json: boolean;
     help: boolean;
     command: CliCommand | null;
@@ -227,6 +255,9 @@ const VALUE_FLAGS = new Set([
     '--port',
     '--host',
     '--allowed-workspace',
+    '--cache-dir',
+    '--buffer-dir',
+    '--ledger-path',
 ]);
 
 const FLAG_KEYS: Record<string, string> = {
@@ -255,10 +286,13 @@ const FLAG_KEYS: Record<string, string> = {
     '--port': 'port',
     '--host': 'host',
     '--allowed-workspace': 'allowedWorkspace',
+    '--cache-dir': 'cacheDir',
+    '--buffer-dir': 'bufferDir',
+    '--ledger-path': 'ledgerPath',
 };
 
 function parseRaw(argv: string[]): RawFlags {
-    const raw: RawFlags = { values: {}, lists: {}, dryRun: false, json: false, help: false, command: null };
+    const raw: RawFlags = { values: {}, lists: {}, dryRun: false, offline: false, json: false, help: false, command: null };
     const positionals: string[] = [];
 
     for (let index = 0; index < argv.length; index += 1) {
@@ -278,6 +312,9 @@ function parseRaw(argv: string[]): RawFlags {
                 break;
             case '--dry-run':
                 raw.dryRun = true;
+                break;
+            case '--offline':
+                raw.offline = true;
                 break;
             default: {
                 if (!VALUE_FLAGS.has(flag)) throw new CliUsageError(`Unknown option: ${arg} (try --help)`);
@@ -373,12 +410,15 @@ export function parseArgs(argv: string[], env: Record<string, string | undefined
             maxSteps: raw.values.maxSteps ? parsePositiveInt('--max-steps', raw.values.maxSteps, MAX_HOST_STEPS) : DEFAULT_MAX_STEPS,
             dryRun: raw.dryRun,
             timeoutMs: raw.values.timeoutMs ? parsePositiveInt('--timeout-ms', raw.values.timeoutMs) : DEFAULT_TIMEOUT_MS,
+            offline: raw.offline || envText(env, 'ESO_OFFLINE') === '1',
         };
         if (raw.values.flowId) options.flowId = raw.values.flowId;
         if (raw.values.workerId) options.workerId = raw.values.workerId;
         if (raw.values.model) options.model = raw.values.model;
         if (raw.values.cwd) options.cwd = raw.values.cwd;
         if (raw.values.traceId) options.traceId = raw.values.traceId;
+        if (raw.values.cacheDir) options.cacheDir = raw.values.cacheDir;
+        if (raw.values.bufferDir) options.bufferDir = raw.values.bufferDir;
         return { command, json: raw.json, options };
     }
 
@@ -424,6 +464,7 @@ export function parseArgs(argv: string[], env: Record<string, string | undefined
             remoteTimeoutMs: raw.values.remoteTimeoutMs
                 ? parsePositiveInt('--remote-timeout-ms', raw.values.remoteTimeoutMs)
                 : DEFAULT_REMOTE_TIMEOUT_MS,
+            offline: raw.offline || envText(env, 'ESO_OFFLINE') === '1',
         };
         const remoteUrl = (raw.values.remoteUrl ?? '').trim() || envText(env, 'ESO_REMOTE_URL');
         if (remoteUrl) options.remoteUrl = remoteUrl;
@@ -434,6 +475,26 @@ export function parseArgs(argv: string[], env: Record<string, string | undefined
         if (raw.values.workspaceBranch) options.workspaceBranch = raw.values.workspaceBranch;
         if (raw.values.workspaceCommit) options.workspaceCommit = raw.values.workspaceCommit;
         if (raw.values.traceId) options.traceId = raw.values.traceId;
+        if (raw.values.cacheDir) options.cacheDir = raw.values.cacheDir;
+        if (raw.values.bufferDir) options.bufferDir = raw.values.bufferDir;
+        return { command, json: raw.json, options };
+    }
+
+    if (command === 'flush-observations') {
+        const consumer = requireConsumer(raw, env);
+        const credential = resolveCredential(raw, env);
+        if (!credential.token) {
+            throw new CliUsageError('no credential: set ESO_HOST_TOKEN or ESO_OPERATOR_TOKEN/ESO_AUTH_TOKEN');
+        }
+        const options: ParsedFlushOptions = {
+            kind: 'flush-observations',
+            baseUrl,
+            consumer,
+            authToken: credential.token,
+            authKind: credential.kind,
+        };
+        if (raw.values.cacheDir) options.cacheDir = raw.values.cacheDir;
+        if (raw.values.bufferDir) options.bufferDir = raw.values.bufferDir;
         return { command, json: raw.json, options };
     }
 
@@ -460,6 +521,7 @@ export function parseArgs(argv: string[], env: Record<string, string | undefined
         remoteToken,
         allowedWorkspaces: resolveAllowedWorkspaces(raw, env),
     };
+    if (raw.values.ledgerPath) options.ledgerPath = raw.values.ledgerPath;
     return { command, json: raw.json, options };
 }
 
@@ -475,6 +537,7 @@ export function toEntrypointOptions(parsed: ParsedRunOptions): EntrypointOptions
         maxSteps: parsed.maxSteps,
         dryRun: parsed.dryRun,
         timeoutMs: parsed.timeoutMs,
+        offline: parsed.offline,
         env: process.env,
     };
     if (parsed.flowId) options.flowId = parsed.flowId;
@@ -482,6 +545,8 @@ export function toEntrypointOptions(parsed: ParsedRunOptions): EntrypointOptions
     if (parsed.model) options.model = parsed.model;
     if (parsed.cwd) options.cwd = parsed.cwd;
     if (parsed.traceId) options.traceId = parsed.traceId;
+    if (parsed.cacheDir) options.cacheDir = parsed.cacheDir;
+    if (parsed.bufferDir) options.bufferDir = parsed.bufferDir;
     return options;
 }
 
@@ -500,6 +565,7 @@ export function toDispatchOptions(parsed: ParsedDispatchOptions, log?: (line: st
         timeoutMs: parsed.timeoutMs,
         remoteTimeoutMs: parsed.remoteTimeoutMs,
         remoteToken: parsed.remoteToken,
+        offline: parsed.offline,
     };
     if (parsed.flowId) options.flowId = parsed.flowId;
     if (parsed.workerId) options.workerId = parsed.workerId;
@@ -509,6 +575,8 @@ export function toDispatchOptions(parsed: ParsedDispatchOptions, log?: (line: st
     if (parsed.workspaceBranch) options.workspaceBranch = parsed.workspaceBranch;
     if (parsed.workspaceCommit) options.workspaceCommit = parsed.workspaceCommit;
     if (parsed.traceId) options.traceId = parsed.traceId;
+    if (parsed.cacheDir) options.cacheDir = parsed.cacheDir;
+    if (parsed.bufferDir) options.bufferDir = parsed.bufferDir;
     if (log) options.log = log;
     return options;
 }
@@ -536,6 +604,7 @@ export function formatReport(report: RunReport): string {
         );
     }
     lines.push(`  result     ${report.ok ? 'PASS' : 'BLOCKED'} — stopped: ${report.stoppedReason}`);
+    if (report.warnings.length) lines.push(`  warnings   ${report.warnings.join(', ')}`);
     return `${lines.join('\n')}\n`;
 }
 
@@ -547,10 +616,12 @@ export function formatDispatchReport(report: DispatchReport): string {
     lines.push(`  remote     ${report.remoteUrl} (HTTP ${report.remoteHttpStatus})`);
     lines.push(`  worker     ${report.workerId} / flow ${report.flowId}`);
     lines.push(`  outcome    ${report.outcome}`);
+    lines.push(`  model      ${report.model ?? 'n/a'}${report.effort ? ` (effort ${report.effort})` : ''} [${report.modelSource ?? 'n/a'}]`);
     lines.push(`  remoteObs  ${report.remoteObservationId ?? 'none'}`);
     lines.push(`  localObs   ${report.localObservationId ?? 'none'}${report.localObservationCreated ? '' : ' (existing)'}`);
     lines.push(`  snapshot   ${report.snapshotVersion.slice(0, 12)}… ${report.snapshotVersionValid ? 'validated' : 'NOT VALIDATED'}`);
     lines.push(`  timing     transport=${report.transportDurationMs}ms total=${report.durationMs}ms`);
+    if (report.warnings.length) lines.push(`  warnings   ${report.warnings.join(', ')}`);
     return `${lines.join('\n')}\n`;
 }
 
@@ -580,6 +651,7 @@ async function serveCommand(parsed: ParsedServeOptions, json: boolean, io: CliIo
             consumer: parsed.consumer,
             hostToken: parsed.hostToken,
             allowedWorkspaces: parsed.allowedWorkspaces,
+            ...(parsed.ledgerPath ? { ledgerPath: parsed.ledgerPath } : {}),
             log: (line) => io.stderr(`${line}\n`),
         });
     } catch (error) {
@@ -601,6 +673,32 @@ async function serveCommand(parsed: ParsedServeOptions, json: boolean, io: CliIo
     });
     io.stderr('[remote] stopped\n');
     return 0;
+}
+
+async function flushCommand(parsed: ParsedFlushOptions, json: boolean, io: CliIo): Promise<number> {
+    const client = new ObservationClient({
+        baseUrl: parsed.baseUrl,
+        consumer: parsed.consumer,
+        token: parsed.authToken,
+        cacheDir: parsed.cacheDir,
+        bufferDir: parsed.bufferDir,
+    });
+    try {
+        const result = await client.flushBuffer();
+        const ok = result.remaining === 0;
+        if (json) {
+            io.stdout(`${JSON.stringify({ ok, flushed: result.flushed, remaining: result.remaining, bufferPath: client.bufferPath() }, null, 2)}\n`);
+        } else {
+            io.stdout(`flushed ${result.flushed}, remaining ${result.remaining} (${client.bufferPath()})\n`);
+        }
+        return ok ? 0 : 2;
+    } catch (error) {
+        const code = typeof (error as { code?: unknown })?.code === 'string' ? String((error as { code: string }).code) : 'FLUSH_FAILED';
+        const message = error instanceof Error ? error.message : String(error);
+        if (json) io.stdout(`${JSON.stringify({ ok: false, error: { code, message } }, null, 2)}\n`);
+        else io.stderr(`error: ${code}: ${message}\n`);
+        return 2;
+    }
 }
 
 async function dispatchCommand(parsed: ParsedDispatchOptions, json: boolean, io: CliIo): Promise<number> {
@@ -645,6 +743,9 @@ export async function main(
         }
         if (parsed.command === 'dispatch') {
             return await dispatchCommand(parsed.options as ParsedDispatchOptions, parsed.json, io);
+        }
+        if (parsed.command === 'flush-observations') {
+            return await flushCommand(parsed.options as ParsedFlushOptions, parsed.json, io);
         }
 
         const options = toEntrypointOptions(parsed.options as ParsedRunOptions);

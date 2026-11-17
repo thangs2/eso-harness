@@ -50,6 +50,7 @@ export const HOST_RUNTIME_DDL = `CREATE TABLE IF NOT EXISTS platform.host_runtim
     health          text not null default 'unknown' check (health in ('unknown','healthy','degraded','offline')),
     last_heartbeat  timestamptz,
     remote_url      text,
+    model_tiers     jsonb not null default '{}'::jsonb,
     created_at      timestamptz not null default now(),
     updated_at      timestamptz not null default now(),
     primary key (host_id, runtime_id)
@@ -57,6 +58,8 @@ export const HOST_RUNTIME_DDL = `CREATE TABLE IF NOT EXISTS platform.host_runtim
 
 /** Idempotent column add for databases created before the remote endpoint existed. */
 export const HOST_RUNTIME_REMOTE_URL_DDL = `ALTER TABLE platform.host_runtime ADD COLUMN IF NOT EXISTS remote_url text`;
+/** Idempotent column add for databases created before the model-tier mapping existed. */
+export const HOST_RUNTIME_MODEL_TIERS_DDL = `ALTER TABLE platform.host_runtime ADD COLUMN IF NOT EXISTS model_tiers jsonb NOT NULL DEFAULT '{}'::jsonb`;
 
 /**
  * Scoped bearer token for one host runtime + consumer. Only the SHA-256 hash is stored; the
@@ -159,6 +162,7 @@ export const PLATFORM_DDL: readonly string[] = [
     HOST_DDL,
     HOST_RUNTIME_DDL,
     HOST_RUNTIME_REMOTE_URL_DDL,
+    HOST_RUNTIME_MODEL_TIERS_DDL,
     `CREATE INDEX IF NOT EXISTS idx_host_runtime_health
         ON platform.host_runtime (health)`,
     HOST_TOKEN_DDL,

@@ -10,6 +10,7 @@ import {
 } from '../src/config-client';
 import type { FetchLike, SnapshotPayload } from '../src/config-client';
 import { makeSnapshot, snapshotPayload, TEST_RUNTIME_KEY } from './fixtures';
+import { makeTempDir } from './remote-fixtures';
 
 describe('config-client', () => {
     it('computes the same version regardless of object key order', async () => {
@@ -117,16 +118,25 @@ describe('config-client', () => {
     });
 
     it('reports an unreachable control plane', async () => {
+        const temp = makeTempDir('hr-cfg-');
         const fetchImpl: FetchLike = async () => {
             throw new Error('connection refused');
         };
-        const client = new ConfigClient({ baseUrl: 'http://cp.test', consumer: 'testeso', runtimeKey: TEST_RUNTIME_KEY, fetchImpl });
+        const client = new ConfigClient({
+            baseUrl: 'http://cp.test',
+            consumer: 'testeso',
+            runtimeKey: TEST_RUNTIME_KEY,
+            fetchImpl,
+            cacheDir: temp.dir,
+        });
         try {
             await client.getSnapshot();
             throw new Error('expected getSnapshot to throw');
         } catch (error) {
             expect(error instanceof ConfigClientError).toBe(true);
             expect((error as ConfigClientError).code).toBe('CONFIG_SNAPSHOT_UNREACHABLE');
+        } finally {
+            temp.cleanup();
         }
     });
 });

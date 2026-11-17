@@ -60,7 +60,7 @@ export interface PlatformStore {
     listHostRuntimes(): Promise<any[]>;
     getHostRuntime(hostId: string, runtimeId: string): Promise<any>;
     upsertHostRuntime(runtime: any): Promise<any>;
-    heartbeatHostRuntime(hostId: string, runtimeId: string, patch: { health?: string; models?: string[]; defaultModel?: string }): Promise<any>;
+    heartbeatHostRuntime(hostId: string, runtimeId: string, patch: { health?: string; models?: string[]; defaultModel?: string; modelTiers?: any }): Promise<any>;
     createHostToken(token: any): Promise<any>;
     getHostTokenByHash(tokenHash: string): Promise<any>;
     touchHostToken(tokenId: string): Promise<any>;
@@ -348,6 +348,7 @@ export class MemoryPlatformStore implements PlatformStore {
             health: runtime.health || current?.health || 'unknown',
             last_heartbeat: current?.last_heartbeat ?? null,
             remote_url: runtime.remoteUrl ?? null,
+            model_tiers: clone(runtime.modelTiers ?? current?.model_tiers ?? {}),
             created_at: current?.created_at ?? now,
             updated_at: now,
         };
@@ -355,7 +356,7 @@ export class MemoryPlatformStore implements PlatformStore {
         return clone(row);
     }
 
-    async heartbeatHostRuntime(hostId: string, runtimeId: string, patch: { health?: string; models?: string[]; defaultModel?: string }): Promise<any> {
+    async heartbeatHostRuntime(hostId: string, runtimeId: string, patch: { health?: string; models?: string[]; defaultModel?: string; modelTiers?: any }): Promise<any> {
         const key = `${hostId}:${runtimeId}`;
         const current = this.hostRuntimes.get(key);
         if (!current) return null;
@@ -365,6 +366,7 @@ export class MemoryPlatformStore implements PlatformStore {
             health: patch.health || current.health,
             models: patch.models ? clone(patch.models) : current.models,
             default_model: patch.defaultModel !== undefined ? patch.defaultModel : current.default_model,
+            model_tiers: patch.modelTiers !== undefined ? clone(patch.modelTiers) : current.model_tiers,
             last_heartbeat: now,
             updated_at: now,
         };
@@ -648,6 +650,28 @@ function normalizeTextArray(value: unknown): string[] {
     return [];
 }
 
+/** Normalize a stored modelTiers jsonb value to a plain object (no validation; lenient for reads). */
+function normalizeModelTiersValue(value: unknown): Record<string, any> {
+    let raw: any = value;
+    if (typeof raw === 'string') {
+        try {
+            raw = JSON.parse(raw);
+        } catch {
+            return {};
+        }
+    }
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+    const result: Record<string, any> = {};
+    for (const [tier, entry] of Object.entries(raw)) {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+        const model = typeof (entry as any).model === 'string' ? (entry as any).model : '';
+        if (!model) continue;
+        const effort = (entry as any).effort;
+        result[tier] = typeof effort === 'string' ? { model, effort } : { model };
+    }
+    return result;
+}
+
 /** Normalize a jsonb array value that Bun may return as an array or JSON text. */
 function normalizeJsonArray(value: unknown): any[] {
     if (Array.isArray(value)) return value;
@@ -699,6 +723,29 @@ export class BunSqlPlatformStore implements PlatformStore {
         for (const statement of PLATFORM_DDL) {
             await this.sql.unsafe(statement);
         }
+        await this.normalizeJsonbEncoding('platform');
+    }
+
+    /**
+     * Early P0/P1 writes passed JSON.stringify(x) into `$n::jsonb`, which stores a JSON *string*
+     * instead of an object/array. Rewrite those values in place, idempotently.
+     */
+    private async normalizeJsonbEncoding(schema: string): Promise<void> {
+        const columns = await this.sql.unsafe(
+            `SELECT table_name, column_name FROM information_schema.columns
+             WHERE table_schema=$1 AND data_type='jsonb'`,
+            [schema]
+        );
+        for (const column of columns) {
+            const table = `"${schema}"."${String(column.table_name).replace(/"/g, '""')}"`;
+            const name = `"${String(column.column_name).replace(/"/g, '""')}"`;
+            await this.sql.unsafe(
+                `UPDATE ${table} SET ${name} = (${name} #>> '{}')::jsonb
+                 WHERE jsonb_typeof(${name}) = 'string'
+                   AND (${name} #>> '{}') ~ '^[\[{]'
+                   AND pg_input_is_valid(${name} #>> '{}', 'jsonb')`
+            );
+        }
     }
 
     private async migrateHostRegistry(): Promise<void> {
@@ -728,6 +775,7 @@ export class BunSqlPlatformStore implements PlatformStore {
                     legacyColumns.has('health') ? 'health' : `'unknown' AS health`,
                     legacyColumns.has('last_heartbeat') ? 'last_heartbeat' : 'NULL::timestamptz AS last_heartbeat',
                     legacyColumns.has('remote_url') ? 'remote_url' : 'NULL::text AS remote_url',
+                    legacyColumns.has('model_tiers') ? 'model_tiers' : `'{}'::jsonb AS model_tiers`,
                     legacyColumns.has('created_at') ? 'created_at' : 'now() AS created_at',
                     legacyColumns.has('updated_at') ? 'updated_at' : 'now() AS updated_at',
                 ].join(',');
@@ -761,6 +809,7 @@ export class BunSqlPlatformStore implements PlatformStore {
                         health: normalizeHealth(row.health),
                         lastHeartbeat: row.last_heartbeat ?? null,
                         remoteUrl: row.remote_url ?? null,
+                        modelTiers: normalizeModelTiersValue(row.model_tiers),
                         createdAt: row.created_at ?? new Date(),
                         updatedAt: row.updated_at ?? new Date(),
                     });
@@ -775,12 +824,12 @@ export class BunSqlPlatformStore implements PlatformStore {
                 for (const runtime of runtimes.values()) {
                     await tx.unsafe(
                         `INSERT INTO platform.host_runtime
-                         (host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,remote_url,created_at,updated_at)
-                         VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7,$8,$9,$10,$11)
+                         (host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,remote_url,model_tiers,created_at,updated_at)
+                         VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7,$8,$9,$10::jsonb,$11,$12)
                          ON CONFLICT (host_id,runtime_id) DO NOTHING`,
-                        [runtime.hostId, runtime.runtimeId, runtime.runtimeKind, JSON.stringify(runtime.models),
+                        [runtime.hostId, runtime.runtimeId, runtime.runtimeKind, runtime.models,
                          runtime.defaultModel, runtime.leadEligible, runtime.health, runtime.lastHeartbeat,
-                         runtime.remoteUrl, runtime.createdAt, runtime.updatedAt]
+                         runtime.remoteUrl, runtime.modelTiers ?? {}, runtime.createdAt, runtime.updatedAt]
                     );
                 }
             }
@@ -827,16 +876,25 @@ export class BunSqlPlatformStore implements PlatformStore {
             if (!firstKey.has(hostId)) firstKey.set(hostId, `${hostId}:${row.runtime_id}`);
         }
         const rows = await this.sql.unsafe(
-            `SELECT worker_id, allowed_hosts FROM ${quoteSchema(schemaName)}.knowledge_worker_host_policy`
+            `SELECT worker_id, allowed_hosts, native_agent FROM ${quoteSchema(schemaName)}.knowledge_worker_host_policy`
         );
+        const keyFor = (hostId: string) => (hostId.includes(':') ? hostId : (firstKey.get(hostId) ?? hostId));
         for (const row of rows) {
             const current = normalizeTextArray(row.allowed_hosts);
-            const next = current.map((hostId) => (String(hostId).includes(':') ? String(hostId) : (firstKey.get(String(hostId)) ?? String(hostId))));
-            if (JSON.stringify(next) === JSON.stringify(current)) continue;
+            const next = current.map(keyFor);
+            let native: Record<string, any> = {};
+            try {
+                native = typeof row.native_agent === 'string' ? JSON.parse(row.native_agent) : (row.native_agent ?? {});
+            } catch {
+                native = {};
+            }
+            const nextNative: Record<string, any> = {};
+            for (const [key, value] of Object.entries(native)) nextNative[keyFor(key)] = value;
+            if (JSON.stringify(next) === JSON.stringify(current) && JSON.stringify(nextNative) === JSON.stringify(native)) continue;
             await this.sql.unsafe(
                 `UPDATE ${quoteSchema(schemaName)}.knowledge_worker_host_policy
-                 SET allowed_hosts = $2::text[], updated_at = now() WHERE worker_id = $1`,
-                [row.worker_id, pgTextArray(next)]
+                 SET allowed_hosts = $2::text[], native_agent = $3::jsonb, updated_at = now() WHERE worker_id = $1`,
+                [row.worker_id, pgTextArray(next), nextNative]
             );
         }
     }
@@ -880,6 +938,7 @@ export class BunSqlPlatformStore implements PlatformStore {
         }
         // Placement policy stores runtimeKeys now; rewrite legacy bare hostIds idempotently.
         await this.migrateWorkerHostPolicyRuntimeKeys(consumerId);
+        await this.normalizeJsonbEncoding(schemaNameFor(consumerId));
     }
 
     async dropSchema(consumerId: string): Promise<void> {
@@ -992,7 +1051,7 @@ export class BunSqlPlatformStore implements PlatformStore {
                 event.actorKind,
                 event.actorLabel,
                 event.at,
-                JSON.stringify(event.detail || {}),
+                event.detail || {},
             ]
         );
         return mapEvent(rows[0]);
@@ -1030,7 +1089,7 @@ export class BunSqlPlatformStore implements PlatformStore {
                     `INSERT INTO platform.harness_stack_version
                      (consumer_id, version, status, layers, published_at, created_at)
                      VALUES ($1,$2,$3,$4::jsonb,$5,$6)`,
-                    [consumerId, version.version, version.status, JSON.stringify(version.layers || []), version.publishedAt, version.createdAt]
+                    [consumerId, version.version, version.status, version.layers || [], version.publishedAt, version.createdAt]
                 );
             }
         });
@@ -1066,14 +1125,14 @@ export class BunSqlPlatformStore implements PlatformStore {
 
     async listHostRuntimes(): Promise<any[]> {
         return await this.sql.unsafe(
-            `SELECT host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,remote_url,created_at,updated_at
+            `SELECT host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,remote_url,model_tiers,created_at,updated_at
              FROM platform.host_runtime ORDER BY host_id, runtime_id`
         );
     }
 
     async getHostRuntime(hostId: string, runtimeId: string): Promise<any> {
         const rows = await this.sql.unsafe(
-            `SELECT host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,remote_url,created_at,updated_at
+            `SELECT host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,remote_url,model_tiers,created_at,updated_at
              FROM platform.host_runtime WHERE host_id=$1 AND runtime_id=$2`,
             [hostId, runtimeId]
         );
@@ -1083,34 +1142,37 @@ export class BunSqlPlatformStore implements PlatformStore {
     async upsertHostRuntime(runtime: any): Promise<any> {
         const rows = await this.sql.unsafe(
             `INSERT INTO platform.host_runtime
-             (host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,remote_url,updated_at)
-             VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7,NULL,$9,now())
+             (host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,remote_url,model_tiers,updated_at)
+             VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7,NULL,$9,$10::jsonb,now())
              ON CONFLICT (host_id,runtime_id) DO UPDATE SET
                runtime_kind=EXCLUDED.runtime_kind,
                models=EXCLUDED.models, default_model=EXCLUDED.default_model,
                lead_eligible=EXCLUDED.lead_eligible,
                health=CASE WHEN $8 THEN EXCLUDED.health ELSE platform.host_runtime.health END,
                remote_url=EXCLUDED.remote_url,
+               model_tiers=EXCLUDED.model_tiers,
                updated_at=now()
-             RETURNING host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,remote_url,created_at,updated_at`,
-            [runtime.hostId, runtime.runtimeId, runtime.runtimeKind, JSON.stringify(runtime.models || []),
+             RETURNING host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,remote_url,model_tiers,created_at,updated_at`,
+            [runtime.hostId, runtime.runtimeId, runtime.runtimeKind, runtime.models || [],
              runtime.defaultModel || '', Boolean(runtime.leadEligible), runtime.health || 'unknown',
-             Boolean(runtime.healthExplicit), runtime.remoteUrl ?? null]
+             Boolean(runtime.healthExplicit), runtime.remoteUrl ?? null, runtime.modelTiers ?? {}]
         );
         return rows[0] || null;
     }
 
-    async heartbeatHostRuntime(hostId: string, runtimeId: string, patch: { health?: string; models?: string[]; defaultModel?: string }): Promise<any> {
+    async heartbeatHostRuntime(hostId: string, runtimeId: string, patch: { health?: string; models?: string[]; defaultModel?: string; modelTiers?: any }): Promise<any> {
         const rows = await this.sql.unsafe(
             `UPDATE platform.host_runtime
              SET health=COALESCE($3,health),
                  models=COALESCE($4::jsonb,models),
                  default_model=COALESCE($5,default_model),
+                 model_tiers=COALESCE($6::jsonb,model_tiers),
                  last_heartbeat=now(), updated_at=now()
              WHERE host_id=$1 AND runtime_id=$2
-             RETURNING host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,remote_url,created_at,updated_at`,
-            [hostId, runtimeId, patch.health || null, patch.models ? JSON.stringify(patch.models) : null,
-             patch.defaultModel !== undefined ? patch.defaultModel : null]
+             RETURNING host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,remote_url,model_tiers,created_at,updated_at`,
+            [hostId, runtimeId, patch.health || null, patch.models ?? null,
+             patch.defaultModel !== undefined ? patch.defaultModel : null,
+             patch.modelTiers ?? null]
         );
         return rows[0] || null;
     }
@@ -1164,7 +1226,7 @@ export class BunSqlPlatformStore implements PlatformStore {
              RETURNING observation_id,trace_id,host_id,runtime_key,worker_id,event,outcome,evidence,at,idempotency_key,received_at`,
             [observation.observationId, observation.traceId, observation.hostId, observation.runtimeKey,
              observation.workerId ?? null, observation.event, observation.outcome ?? null,
-             JSON.stringify(observation.evidence ?? {}), observation.at ?? null, observation.idempotencyKey]
+             observation.evidence ?? {}, observation.at ?? null, observation.idempotencyKey]
         );
         if (rows.length) return { observation: rows[0], created: true };
         const existing = await this.sql.unsafe(
@@ -1214,7 +1276,7 @@ export class BunSqlPlatformStore implements PlatformStore {
                native_agent=EXCLUDED.native_agent, fallback=EXCLUDED.fallback, updated_at=now()
              RETURNING worker_id,allowed_hosts,model_tier,native_agent,fallback,updated_at`,
             [workerId, pgTextArray(config.allowedHosts || []), config.modelTier || 'balanced',
-             JSON.stringify(config.nativeAgent || {}), config.fallback || 'block']
+             config.nativeAgent || {}, config.fallback || 'block']
         );
         return rows[0] || null;
     }
@@ -1250,7 +1312,7 @@ export class BunSqlPlatformStore implements PlatformStore {
                     `INSERT INTO knowledge_worker
                      (worker_id, name, role, layer, scope, status, file_path, content_hash, capabilities, verbs, bar, escalation, indexed_at)
                      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::text[],$10::text[],$11,$12,now())`,
-                    [worker.workerId, worker.name, worker.role, worker.layer, worker.scope, worker.status, worker.filePath, worker.contentHash, pgTextArray(worker.capabilities), pgTextArray(worker.verbs), JSON.stringify(worker.bar), worker.escalation]
+                    [worker.workerId, worker.name, worker.role, worker.layer, worker.scope, worker.status, worker.filePath, worker.contentHash, pgTextArray(worker.capabilities), pgTextArray(worker.verbs), worker.bar, worker.escalation]
                 );
                 for (const hostBindingId of worker.hostBindingIds) {
                     await tx.unsafe(
@@ -1284,7 +1346,7 @@ export class BunSqlPlatformStore implements PlatformStore {
                      (flow_id,version,name,status,is_default,definition,source_hash,updated_at,published_at)
                      VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9)`,
                     [flow.flowId, flow.version, flow.name, flow.status, flow.isDefault,
-                     JSON.stringify(flow.definition || {}), flow.sourceHash,
+                     flow.definition || {}, flow.sourceHash,
                      flow.updatedAt || new Date().toISOString(), flow.publishedAt || null]
                 );
             }
@@ -1306,7 +1368,7 @@ export class BunSqlPlatformStore implements PlatformStore {
              (edge_id,seq,provenance,source,claim,at)
              VALUES ($1,$2,$3,$4,$5::jsonb,$6)`,
             [claim.edgeId, claim.seq || 1, claim.provenance || 'declared', claim.source || null,
-             JSON.stringify(claim.claim || {}), claim.at || new Date().toISOString()]
+             claim.claim || {}, claim.at || new Date().toISOString()]
         );
     }
 
@@ -1351,7 +1413,7 @@ export class BunSqlPlatformStore implements PlatformStore {
                enabled=EXCLUDED.enabled, config=EXCLUDED.config, secret_refs=EXCLUDED.secret_refs,
                health=EXCLUDED.health, last_checked_at=now(), updated_at=now()
              RETURNING consumer_id,plugin_id,enabled,config,secret_refs,health,last_checked_at,updated_at`,
-            [consumerId, pluginId, Boolean(patch.enabled), JSON.stringify(patch.config || {}), JSON.stringify(patch.secretRefs || {}), patch.health || 'unknown']
+            [consumerId, pluginId, Boolean(patch.enabled), patch.config || {}, patch.secretRefs || {}, patch.health || 'unknown']
         );
         return rows[0] || null;
     }
@@ -1374,8 +1436,8 @@ export class BunSqlPlatformStore implements PlatformStore {
                config_schema=EXCLUDED.config_schema, source=EXCLUDED.source, updated_at=now()
              RETURNING *`,
             [manifest.id, manifest.label, manifest.type, manifest.category || 'other', manifest.version || '1.0.0',
-             JSON.stringify(manifest.capabilities || []), manifest.status || 'installed', manifest.description || '',
-             JSON.stringify(manifest.configSchema || {}), manifest.source || 'custom']
+             manifest.capabilities || [], manifest.status || 'installed', manifest.description || '',
+             manifest.configSchema || {}, manifest.source || 'custom']
         );
         return rows[0] || null;
     }
@@ -1393,7 +1455,7 @@ export class BunSqlPlatformStore implements PlatformStore {
                      (consumer_id,provider_id,external_id,kind,title,status,url,payload)
                      VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb)`,
                     [consumerId, providerId, record.externalId, record.kind, record.title, record.status || null,
-                     record.url || null, JSON.stringify(record.payload || {})]
+                     record.url || null, record.payload || {}]
                 );
             }
         });
@@ -1444,7 +1506,7 @@ export class BunSqlPlatformStore implements PlatformStore {
                      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15::jsonb,now())`,
                     [doc.docId, doc.path, doc.type, doc.status, doc.owner, doc.representation, doc.origin,
                      doc.custodian, doc.liveness, doc.ktState, doc.sourcePointer, doc.humanSotPointer,
-                     doc.title, doc.contentHash, JSON.stringify(doc.header || {})]
+                     doc.title, doc.contentHash, doc.header || {}]
                 );
             }
             for (const doc of payload.docs || []) {
@@ -1504,14 +1566,14 @@ export class BunSqlPlatformStore implements PlatformStore {
                 await tx.unsafe(
                     `INSERT INTO knowledge_finding (doc_id,severity,code,detail)
                      VALUES ($1,$2,$3,$4::jsonb)`,
-                    [finding.docId || null, finding.severity || 'warning', finding.code, JSON.stringify(finding.detail || {})]
+                    [finding.docId || null, finding.severity || 'warning', finding.code, finding.detail || {}]
                 );
             }
             for (const run of payload.runs || []) {
                 await tx.unsafe(
                     `INSERT INTO knowledge_index_build (build_id,source_hash,status,stats,started_at,finished_at)
                      VALUES ($1,$2,$3,$4::jsonb,now(),now())`,
-                    [run.buildId, run.sourceHash, run.status, JSON.stringify(run.stats || {})]
+                    [run.buildId, run.sourceHash, run.status, run.stats || {}]
                 );
             }
             for (const manifest of payload.manifests || []) {
@@ -1520,7 +1582,7 @@ export class BunSqlPlatformStore implements PlatformStore {
                      (manifest_id,build_id,manifest_version,generator_version,source_hash,payload)
                      VALUES ($1,$2,$3,$4,$5,$6::jsonb)`,
                     [manifest.manifestId, manifest.buildId || null, manifest.manifestVersion || 1,
-                     manifest.generatorVersion || 'eso-indexer@1', manifest.sourceHash, JSON.stringify(manifest.payload)]
+                     manifest.generatorVersion || 'eso-indexer@1', manifest.sourceHash, manifest.payload]
                 );
             }
             await tx.unsafe(
@@ -1548,7 +1610,7 @@ export class BunSqlPlatformStore implements PlatformStore {
              (worker_id,event,verb,path,decision,reasons,evidence,trace_id,span_id,parent_span_id,host_binding_id,flow_edge_id,duration_ms)
              VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,$9,$10,$11,$12,$13)`,
             [event.workerId, event.event, event.verb || null, event.path || null,
-             event.decision, JSON.stringify(event.reasons || []), JSON.stringify(event.evidence || []),
+             event.decision, event.reasons || [], event.evidence || [],
              event.traceId || null, event.spanId || null, event.parentSpanId || null,
              event.hostBindingId || null, event.flowEdgeId || null, event.durationMs ?? null]
         );
@@ -1561,7 +1623,7 @@ export class BunSqlPlatformStore implements PlatformStore {
              (source_file,source_hash,source_type,worker_id,action,detail)
              VALUES ($1,$2,$3,$4,$5,$6::jsonb)`,
             [record.sourceFile, record.sourceHash, record.sourceType || 'unknown',
-             record.workerId, record.action || 'import', JSON.stringify(record.detail || {})]
+             record.workerId, record.action || 'import', record.detail || {}]
         );
     }
 
@@ -1582,7 +1644,7 @@ export class BunSqlPlatformStore implements PlatformStore {
              (handoff_id,from_worker_id,to_worker_id,condition,status,work,evidence)
              VALUES ($1,$2,$3,$4,'pending',$5::jsonb,$6::jsonb)`,
             [handoff.handoffId, handoff.fromWorkerId, handoff.toWorkerId, handoff.condition || null,
-             JSON.stringify(handoff.work || {}), JSON.stringify(handoff.evidence || [])]
+             handoff.work || {}, handoff.evidence || []]
         );
     }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { CliUsageError, formatDispatchReport, helpText, main, parseArgs } from '../src/cli';
-import type { ParsedDispatchOptions, ParsedServeOptions } from '../src/cli';
+import type { ParsedDispatchOptions, ParsedFlushOptions, ParsedServeOptions } from '../src/cli';
 import type { DispatchReport } from '../src/remote/dispatch';
 
 const ENV = {
@@ -43,8 +43,14 @@ const REPORT: DispatchReport = {
     flowId: 'that-tinh-tran',
     snapshotVersion: 'a'.repeat(64),
     snapshotVersionValid: true,
+    snapshotSource: 'network',
+    model: 'gemini-4-argon-high',
+    modelSource: 'tier',
+    effort: 'high',
+    tier: 'reasoning',
     transportDurationMs: 12,
     durationMs: 20,
+    warnings: [],
 };
 
 describe('cli — Mode B dispatch', () => {
@@ -100,6 +106,11 @@ describe('cli — Mode B dispatch', () => {
                 '--trace-id',
                 'p4-dry',
                 '--dry-run',
+                '--offline',
+                '--cache-dir',
+                '/tmp/cache',
+                '--buffer-dir',
+                '/tmp/buffer',
                 '--json',
             ],
             ENV,
@@ -120,6 +131,9 @@ describe('cli — Mode B dispatch', () => {
             workspaceCommit: 'abc123',
             traceId: 'p4-dry',
             dryRun: true,
+            offline: true,
+            cacheDir: '/tmp/cache',
+            bufferDir: '/tmp/buffer',
         });
     });
 
@@ -168,10 +182,14 @@ describe('cli — Mode B serve', () => {
     });
 
     it('honours explicit host and port', () => {
-        const parsed = parseArgs(['serve', '--runtime-key', 'agy:agy', '--host', '0.0.0.0', '--port', '9100'], SERVE_ENV);
+        const parsed = parseArgs(
+            ['serve', '--runtime-key', 'agy:agy', '--host', '0.0.0.0', '--port', '9100', '--ledger-path', '/tmp/ledger.json'],
+            SERVE_ENV,
+        );
         const options = parsed.options as ParsedServeOptions;
         expect(options.host).toBe('0.0.0.0');
         expect(options.port).toBe(9100);
+        expect(options.ledgerPath).toBe('/tmp/ledger.json');
     });
 
     it('rejects invalid serve usage', () => {
@@ -183,6 +201,49 @@ describe('cli — Mode B serve', () => {
         expectUsage(() => parseArgs(['serve', '--runtime-key', 'agy'], SERVE_ENV), 'serve --runtime-key');
         expectUsage(() => parseArgs(['serve', '--runtime-key', 'agy:agy', '--port', '0'], SERVE_ENV), '--port must be');
         expectUsage(() => parseArgs(['serve', '--runtime-key', 'agy:agy', '--port', '70000'], SERVE_ENV), '--port must be');
+    });
+});
+
+describe('cli — flush buffered observations', () => {
+    it('parses flush-observations with cache/buffer dirs', () => {
+        const parsed = parseArgs(
+            ['flush-observations', '--consumer', 'testeso', '--cache-dir', '/tmp/cache', '--buffer-dir', '/tmp/buffer', '--json'],
+            ENV,
+        );
+        expect(parsed.command).toBe('flush-observations');
+        expect(parsed.json).toBe(true);
+        const options = parsed.options as ParsedFlushOptions;
+        expect(options.kind).toBe('flush-observations');
+        expect(options.consumer).toBe('testeso');
+        expect(options.cacheDir).toBe('/tmp/cache');
+        expect(options.bufferDir).toBe('/tmp/buffer');
+        expect(options.authToken).toBe('operator-token');
+    });
+
+    it('requires a consumer and a credential', () => {
+        expectUsage(() => parseArgs(['flush-observations'], {}), '--consumer is required');
+        expectUsage(
+            () => parseArgs(['flush-observations', '--consumer', 'testeso'], { ESO_CONSUMER: 'testeso' }),
+            'no credential',
+        );
+    });
+
+    it('returns exit code 2 with a JSON error when used without a credential', async () => {
+        const out: string[] = [];
+        const code = await main(
+            ['flush-observations', '--consumer', 'testeso', '--json'],
+            { ESO_CONSUMER: 'testeso' },
+            { stdout: (text) => out.push(text), stderr: () => undefined },
+        );
+        expect(code).toBe(2);
+        const payload = JSON.parse(out.join('')) as { ok: boolean; error: { message: string } };
+        expect(payload.ok).toBe(false);
+        expect(payload.error.message).toContain('no credential');
+    });
+
+    it('documents flush-observations in --help', () => {
+        expect(helpText()).toContain('flush-observations');
+        expect(helpText()).toContain('--offline');
     });
 });
 
@@ -230,7 +291,16 @@ describe('cli — Mode B entry points', () => {
         const text = formatDispatchReport(REPORT);
         expect(text).toContain('PASS  host-runtime dispatch (Mode B)');
         expect(text).toContain('route      cursor:cursor-agent -> agy:agy');
+        expect(text).toContain('model      gemini-4-argon-high (effort high) [tier]');
         expect(text).toContain('remoteObs  obs-worker-build-1-p4-dry');
         expect(text).toContain('localObs   obs-remote-cursor-cursor-agent-agy-agy-p4-dry');
+    });
+
+    it('surfaces hardening warnings in the dispatch report', () => {
+        const text = formatDispatchReport({
+            ...REPORT,
+            warnings: ['SNAPSHOT_CACHE_USED:ageMs=1200', 'OBSERVATIONS_BUFFERED:obs-x'],
+        });
+        expect(text).toContain('warnings   SNAPSHOT_CACHE_USED:ageMs=1200, OBSERVATIONS_BUFFERED:obs-x');
     });
 });

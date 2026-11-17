@@ -10,6 +10,7 @@ declare const process: {
     argv: string[];
     env: Record<string, string | undefined>;
     exitCode: number | undefined;
+    pid: number;
     cwd(): string;
     exit(code?: number): never;
     platform: string;
@@ -57,6 +58,11 @@ declare module 'node:fs' {
 
     export function existsSync(path: string): boolean;
     export function statSync(path: string): StatsLike;
+    export function readFileSync(path: string, encoding: 'utf8'): string;
+    export function writeFileSync(path: string, data: string, encoding?: 'utf8'): void;
+    export function appendFileSync(path: string, data: string, encoding?: 'utf8'): void;
+    export function renameSync(oldPath: string, newPath: string): void;
+    export function readdirSync(path: string): string[];
     export function realpathSync(path: string): string;
     export function mkdtempSync(prefix: string): string;
     export function mkdirSync(path: string, options?: { recursive?: boolean }): string | undefined;

@@ -1,31 +1,37 @@
 /**
  * Model resolution — host-side only.
  *
- * ESO never maps models and never calls them. The snapshot carries two different things:
- *   - `workerPlacement.modelTier`  : a placement intent (fast | balanced | reasoning)
- *   - `hostRuntimes[].defaultModel`: the model the host runtime reported for itself
- *
- * There is deliberately NO tier→model catalog on the host: inventing one would fake a mapping ESO
- * does not define. This module resolves the concrete model and reports the gap in evidence.
+ * ESO never maps models and never calls them. The snapshot carries three different things:
+ *   - `workerPlacement.modelTier`    : a placement intent (fast | balanced | reasoning)
+ *   - `hostRuntime.modelTiers`       : P5 host-reported catalog {tier: {model, effort?}}
+ *   - `hostRuntime.defaultModel`     : the host runtime's plain default model
  *
  * Resolution order:
  *   1. explicit `--model` (wins)
- *   2. host runtime `defaultModel` (tier is recorded but NOT mapped; warned as MODEL_TIER_NOT_MAPPED)
- *   3. block with MODEL_UNAVAILABLE
+ *   2. host runtime `modelTiers[placement.modelTier]` (model + optional effort recorded)
+ *   3. host runtime `defaultModel` (warning MODEL_TIER_NOT_MAPPED when a tier was requested)
+ *   4. block with MODEL_UNAVAILABLE
  */
 
 import type { SnapshotHostRuntime, SnapshotPlacement } from './config-client';
 
 export interface ModelResolution {
     model: string;
-    source: 'explicit' | 'runtime-default';
-    /** Placement tier the worker asked for, if any (recorded, not mapped). */
+    source: 'explicit' | 'tier' | 'runtime-default';
+    /** Placement tier the worker asked for, if any. */
     tier: string | null;
-    /** True only when a real catalog mapped the tier — always false today. */
+    /** True when a tier entry mapped the tier to a concrete model. */
     tierMapped: boolean;
+    /** Effort advertised by the tier map (fast/medium/high/...), recorded in evidence. */
+    effort?: string;
     /** Whether the resolved model appears in the host runtime's reported model list. */
     modelKnownOnRuntime: boolean;
     warning?: string;
+}
+
+export interface ModelTierEntry {
+    model: string;
+    effort?: string;
 }
 
 export class ModelUnavailableError extends Error {
@@ -48,10 +54,29 @@ export interface ResolveModelInput {
     runtimeKey: string;
 }
 
+/** Normalize a tier entry: `"model"` or `{model, effort?}`. Invalid entries are ignored. */
+export function tierEntry(value: unknown): ModelTierEntry | null {
+    if (typeof value === 'string') {
+        const model = value.trim();
+        return model ? { model } : null;
+    }
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+        const record = value as Record<string, unknown>;
+        const model = typeof record.model === 'string' ? record.model.trim() : '';
+        if (!model) return null;
+        const effortRaw = record.effort;
+        const effort = typeof effortRaw === 'string' && effortRaw.trim() ? effortRaw.trim() : undefined;
+        return effort ? { model, effort } : { model };
+    }
+    return null;
+}
+
 export function resolveModel(input: ResolveModelInput): ModelResolution {
     const tier = (input.placement?.modelTier ?? '').trim() || null;
     const runtimeModels = Array.isArray(input.runtime?.models) ? input.runtime!.models! : [];
     const explicit = (input.explicitModel ?? '').trim();
+    const tierMap = input.runtime?.modelTiers;
+    const mapped = tier && tierMap && typeof tierMap === 'object' ? tierEntry(tierMap[tier]) : null;
 
     if (explicit) {
         return {
@@ -59,11 +84,24 @@ export function resolveModel(input: ResolveModelInput): ModelResolution {
             source: 'explicit',
             tier,
             tierMapped: false,
-            modelKnownOnRuntime: runtimeModels.includes(explicit),
-            warning: runtimeModels.length && !runtimeModels.includes(explicit)
-                ? 'MODEL_NOT_IN_RUNTIME_MODELS'
-                : undefined,
+            modelKnownOnRuntime: runtimeModels.length === 0 || runtimeModels.includes(explicit),
+            warning: runtimeModels.length && !runtimeModels.includes(explicit) ? 'MODEL_NOT_IN_RUNTIME_MODELS' : undefined,
         };
+    }
+
+    if (mapped) {
+        const resolution: ModelResolution = {
+            model: mapped.model,
+            source: 'tier',
+            tier,
+            tierMapped: true,
+            modelKnownOnRuntime: runtimeModels.length === 0 || runtimeModels.includes(mapped.model),
+        };
+        if (mapped.effort) resolution.effort = mapped.effort;
+        if (runtimeModels.length && !runtimeModels.includes(mapped.model)) {
+            resolution.warning = 'MODEL_NOT_IN_RUNTIME_MODELS';
+        }
+        return resolution;
     }
 
     const defaultModel = (input.runtime?.defaultModel ?? '').trim();
@@ -74,13 +112,12 @@ export function resolveModel(input: ResolveModelInput): ModelResolution {
             tier,
             tierMapped: false,
             modelKnownOnRuntime: runtimeModels.length === 0 || runtimeModels.includes(defaultModel),
-            // Documented gap: placement tier is not a model catalog. Recorded in evidence, never faked.
             warning: tier ? 'MODEL_TIER_NOT_MAPPED' : undefined,
         };
     }
 
     throw new ModelUnavailableError(
-        `No model available for runtime ${input.runtimeKey}: no --model and the host runtime reports no defaultModel`,
+        `No model available for runtime ${input.runtimeKey}: no --model, no modelTiers entry and no defaultModel`,
         { runtimeKey: input.runtimeKey, tier },
     );
 }

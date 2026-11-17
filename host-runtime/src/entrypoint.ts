@@ -19,7 +19,7 @@ import type { ModelResolution } from './model-resolver';
 import { buildPrompt } from './prompt-builder';
 import { buildBlockedEvidence, buildEvidence, eventForOutcome } from './evidence';
 import type { EvidenceRedaction, Outcome, WorkerEvidence } from './evidence';
-import { ObservationClient, buildObservationBody } from './observation-client';
+import { ObservationClient, ObservationClientError, buildObservationBody } from './observation-client';
 import { DryAdapter } from './adapters/dry';
 import { CursorAdapter } from './adapters/cursor';
 import { AgyAdapter } from './adapters/agy';
@@ -50,6 +50,10 @@ export interface EntrypointOptions {
     traceId?: string;
     fetchImpl?: FetchLike;
     sleepImpl?: (ms: number) => Promise<void>;
+    /** Offline mode: config must come from the local snapshot cache. */
+    offline?: boolean;
+    cacheDir?: string;
+    bufferDir?: string;
     /** Test seam: use this adapter instead of constructing one by name. */
     adapterOverride?: HostAdapter;
     env?: Record<string, string | undefined>;
@@ -62,6 +66,9 @@ export interface StepReport {
     workerId: string | null;
     adapter: string;
     model: string | null;
+    modelSource?: string;
+    tier?: string | null;
+    effort?: string | null;
     outcome: Outcome;
     event: 'worker.completed' | 'worker.failed';
     observationId: string;
@@ -87,6 +94,9 @@ export interface RunReport {
     snapshotVersionValid: boolean;
     steps: StepReport[];
     stoppedReason: string;
+    /** Non-fatal hardening warnings (cache fallback, buffered observations, tier gaps). */
+    warnings: string[];
+    snapshotSource: 'network' | 'cache';
 }
 
 export type EntrypointErrorCode =
@@ -166,6 +176,8 @@ export async function runEntrypoint(options: EntrypointOptions): Promise<RunRepo
         runtimeKey,
         token: options.authToken,
         fetchImpl: options.fetchImpl,
+        cacheDir: options.cacheDir,
+        offline: options.offline,
     });
     const observationClient = new ObservationClient({
         baseUrl: options.baseUrl,
@@ -173,7 +185,25 @@ export async function runEntrypoint(options: EntrypointOptions): Promise<RunRepo
         token: options.authToken,
         fetchImpl: options.fetchImpl,
         sleepImpl: options.sleepImpl,
+        cacheDir: options.cacheDir,
+        bufferDir: options.bufferDir,
     });
+
+    const warnings: string[] = [];
+
+    // Best-effort replay of observations buffered by earlier offline runs.
+    try {
+        const flushed = await observationClient.flushBuffer();
+        if (flushed.flushed > 0) {
+            warnings.push(`OBSERVATIONS_FLUSHED:${flushed.flushed}`);
+            log(`[info] flushed ${flushed.flushed} buffered observation(s)`);
+        }
+        if (flushed.remaining > 0) {
+            warnings.push(`OBSERVATIONS_FLUSH_REMAINING:${flushed.remaining}`);
+        }
+    } catch {
+        warnings.push('OBSERVATIONS_FLUSH_FAILED');
+    }
 
     const snapshot = await configClient.getSnapshot();
     const validation = await validateSnapshotVersion(snapshot);
@@ -182,6 +212,21 @@ export async function runEntrypoint(options: EntrypointOptions): Promise<RunRepo
             'SNAPSHOT_VERSION_MISMATCH',
             `Config snapshot failed validation: ${validation.reason ?? 'unknown'} (expected ${validation.expected || 'n/a'}, got ${validation.actual || 'n/a'})`,
         );
+    }
+
+    if (configClient.lastSource === 'cache') {
+        const age = configClient.lastCacheAgeMs ?? 0;
+        warnings.push(`SNAPSHOT_CACHE_USED:ageMs=${age}`);
+        log(`[warn] SNAPSHOT_CACHE_USED ageMs=${age} (control plane unavailable; using last valid snapshot)`);
+    }
+    // Never refresh the offline cache from a cache-derived snapshot: that would reset its age
+    // and let stale configuration be accepted forever while ESO is unreachable.
+    if (configClient.lastSource === 'network') {
+        try {
+            configClient.saveSnapshot(snapshot);
+        } catch {
+            warnings.push('SNAPSHOT_CACHE_WRITE_FAILED');
+        }
     }
 
     if (validation.canonicalization === 'eso-date-collapse') {
@@ -224,25 +269,41 @@ export async function runEntrypoint(options: EntrypointOptions): Promise<RunRepo
             outcome,
             evidence: input.evidence,
         });
-        const written = await observationClient.append(body);
+        let written: { created: boolean; observation: { observationId: string } } | null = null;
+        let buffered = false;
+        try {
+            written = await observationClient.append(body);
+        } catch (error) {
+            if (error instanceof ObservationClientError && error.buffered) {
+                buffered = true;
+                warnings.push(`OBSERVATIONS_BUFFERED:${body.observationId}`);
+                log(`[warn] OBSERVATIONS_BUFFERED observation=${body.observationId} (will replay later)`);
+            } else {
+                throw error;
+            }
+        }
         const step: StepReport = {
             hostStep: input.hostStep,
             workerId: input.workerId,
             adapter: input.evidence.adapter,
             model: input.evidence.model,
+            modelSource: input.evidence.modelSource,
+            tier: input.evidence.tier,
             outcome,
             event,
-            observationId: written.observation.observationId,
-            observationCreated: written.created,
+            observationId: written?.observation.observationId ?? body.observationId,
+            observationCreated: written?.created ?? false,
             exitCode: input.evidence.exitCode,
             durationMs: input.evidence.durationMs,
             timedOut: input.evidence.timedOut,
             nextWorkerId: input.nextWorkerId ?? null,
         };
+        if (input.evidence.effort) step.effort = input.evidence.effort;
         if (input.warning) step.warning = input.warning;
+        if (buffered) step.warning = step.warning ? `${step.warning},OBSERVATIONS_BUFFERED` : 'OBSERVATIONS_BUFFERED';
         log(
             `[step ${input.hostStep}] worker=${input.workerId ?? 'n/a'} outcome=${outcome} ` +
-                `observation=${step.observationId}${written.created ? '' : ' (existing)'}`,
+                `observation=${step.observationId}${written && !written.created ? ' (existing)' : ''}`,
         );
         return step;
     };
@@ -347,6 +408,7 @@ export async function runEntrypoint(options: EntrypointOptions): Promise<RunRepo
             model: resolution.model,
             modelSource: resolution.source,
             tier: resolution.tier,
+            effort: resolution.effort,
             workerId: current.worker.id,
             flowId: flow.id,
             hostStep,
@@ -429,6 +491,8 @@ export async function runEntrypoint(options: EntrypointOptions): Promise<RunRepo
             snapshotVersionValid: validation.ok,
             steps,
             stoppedReason: reason,
+            warnings,
+            snapshotSource: configClient.lastSource === 'cache' ? 'cache' : 'network',
         };
     }
 }
