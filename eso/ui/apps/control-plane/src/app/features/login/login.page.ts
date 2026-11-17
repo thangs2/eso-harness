@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -47,6 +47,7 @@ export class LoginPage {
     private readonly auth = inject(AuthService);
     private readonly config = inject(AppConfigService);
     private readonly router = inject(Router);
+    private readonly route = inject(ActivatedRoute);
 
     private readonly isDev = this.config.environment() === 'development';
 
@@ -70,7 +71,8 @@ export class LoginPage {
                 return;
             }
             this.auth.setAuthorization(authorization);
-            await this.router.navigateByUrl('/consumers');
+            const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
+            await this.router.navigateByUrl(returnUrl && /^\/(?!\/)/.test(returnUrl) ? returnUrl : '/consumers');
         } catch {
             this.error.set('AUTH_INVALID: Unable to reach control plane');
         } finally {

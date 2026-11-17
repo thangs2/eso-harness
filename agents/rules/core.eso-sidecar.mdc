@@ -1,0 +1,58 @@
+---
+description: ESO is sidecar/config/observatory only — never run, execute, chat, spawn, or call models
+alwaysApply: true
+---
+
+# ESO sidecar invariant
+
+**Prerequisite:** `core.law-gate.mdc` (`AGENTS.md` Read this session). This rule is the authoritative statement
+of the ESO sidecar invariant; it is not a mirror of an `AGENTS.md` section.
+
+## The rule
+
+```text
+ESO = config + sidecar + observatory + control plane
+ESO ≠ runtime
+```
+
+ESO **NEVER**:
+
+```text
+run
+execute
+chat
+start / queue / claim / advance a run
+spawn a host process
+call a model
+hold host credentials
+```
+
+Host **OWNS**:
+
+```text
+user prompt
+conversation
+execution
+model selection
+CLI / ACP / native agent
+workspace
+observation + evidence
+```
+
+## Forbidden terms in `eso/**`
+
+```
+flow_run · flow-runs · run-requests · claim · advance
+worker_run · run_id · execution endpoint · chat endpoint
+```
+
+If activity must be shown, model it as **observation/evidence**, not as ESO run/execution.
+
+Exception: `claim` in the sense of a documentation/evidence claim (e.g. `knowledge_edge_claim`) is not an
+execution claim and is allowed.
+
+## Check
+
+`review` — any new route, table, type, UI control, or doc sentence that gives ESO a run/execution/chat concept ⇒
+**reject**. The agent must move it to the host side or remove it.
+

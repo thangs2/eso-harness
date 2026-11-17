@@ -8,7 +8,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { ConsumerProfileService } from '../../../core/consumers/consumer-profile.service.js';
-import type { ConsumerProfile, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, McpProviderDto, WorkerConfigDto, EvidenceRequirementDto, FlowSummaryDto, FlowDefinitionDto } from '../../../../../../../libs/api-client/types.js';
+import type { ConsumerProfile, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, McpProviderDto, WorkerConfigDto, EvidenceRequirementDto, FlowSummaryDto, FlowDefinitionDto, HostRuntimeDto, WorkerPlacementDto, WorkerModelTier, WorkerPlacementFallback } from '../../../../../../../libs/api-client/types.js';
 
 type LayerId = 'multiAgent' | 'rules' | 'skills' | 'hooks' | 'memory' | 'codeGraph' | 'documentGraph' | 'topology';
 
@@ -154,8 +154,8 @@ function defaultPlugins(): PluginEntry[] {
                     <h1>{{ name() || route.snapshot.paramMap.get('id') }}</h1>
                     <p class="subtitle">Define the canonical stack; bind host runtimes to developers and published stack versions.</p>
                 </div>
-                <button mat-stroked-button type="button" (click)="back()">Back to consumer</button>
             </header>
+
 
             @if (error(); as message) { <p class="form-error" role="alert">{{ message }}</p> }
             @if (saved()) { <p class="saved-banner" role="status">Settings saved.</p> }
@@ -229,8 +229,8 @@ function defaultPlugins(): PluginEntry[] {
                                             @for (layer of agentLayers(); track layer.id) {
                                                 <article class="layer-row" [class.layer-disabled]="!layer.enabled">
                                                     <div class="layer-ident"><span class="layer-no">{{ layer.n }}</span><div><strong>{{ layer.label }}</strong><small>{{ layer.description }}</small></div></div>
-                                                    <div class="layer-cell"><span>{{ layer.id === 'multiAgent' ? 'Worker policy' : 'Files' }}</span></div>
-                                                    <div class="layer-cell layer-config">
+                                                    <div class="layer-cell" data-label="Mechanism"><span>{{ layer.id === 'multiAgent' ? 'Worker policy' : 'Files' }}</span></div>
+                                                    <div class="layer-cell layer-config" data-label="Configuration">
                                                         @switch (layer.id) {
                                                             @case ('multiAgent') { <span>{{ workers().length }} workers · {{ workerRoleCount() }} roles</span> }
                                                             @case ('rules') { <span>{{ ruleFiles().length }} rule{{ ruleFiles().length === 1 ? '' : 's' }} · {{ ruleMdcCount() }} .mdc · {{ ruleMdCount() }} .md</span> }
@@ -238,7 +238,7 @@ function defaultPlugins(): PluginEntry[] {
                                                             @case ('hooks') { <span>{{ materialCounts().hooks }} files · host hook plugin</span> }
                                                         }
                                                     </div>
-                                                    <div class="layer-state"><mat-slide-toggle [ngModel]="layer.enabled" [disabled]="!isStackEditable()" (ngModelChange)="updateLayer(layer.id, 'enabled', $event)"></mat-slide-toggle></div>
+                                                    <div class="layer-state" data-label="State"><mat-slide-toggle [ngModel]="layer.enabled" [disabled]="!isStackEditable()" (ngModelChange)="updateLayer(layer.id, 'enabled', $event)"></mat-slide-toggle></div>
                                                 </article>
                                             }
                                         </div>
@@ -294,9 +294,7 @@ function defaultPlugins(): PluginEntry[] {
                                     </section>
                                 </div>
 
-                            </section>
-
-                            <section class="rules-material">
+                                <section class="rules-material">
                                 <header class="rules-material-head">
                                     <div><p class="eyebrow">Rules material</p><h3>Rules source · .mdc / .md</h3><p>Both are canonical under <code>agents/rules/</code>. <code>.mdc</code> is Cursor format; <code>.md</code> is Markdown format. Host trees are projections elsewhere.</p></div>
                                     <div class="rules-actions">
@@ -351,16 +349,17 @@ function defaultPlugins(): PluginEntry[] {
                                     <p class="muted">No .mdc rules yet. Import a Cursor rule or folder.</p>
                                 } @else {
                                     <div class="worker-table-wrap">
-                                        <table class="worker-table">
+                                        <table class="worker-table rules-table">
                                             <thead><tr><th>Rule</th><th>Description</th><th>Globs</th><th>Always apply</th><th></th></tr></thead>
                                             <tbody>
                                                 @for (rule of ruleFiles(); track rule.id) {
-                                                    <tr><td><strong>{{ rule.id }}</strong><br><code>{{ rule.sourceFile || 'agents/rules/' + rule.id + '.mdc' }}</code></td><td>{{ rule.description || '—' }}</td><td><code>{{ rule.globs || '—' }}</code></td><td>{{ rule.alwaysApply ? 'yes' : 'no' }}</td><td><button mat-button type="button" (click)="deleteRule(rule)">Remove</button></td></tr>
+                                                    <tr><td data-label="Rule"><strong>{{ rule.id }}</strong><br><code>{{ rule.sourceFile || 'agents/rules/' + rule.id + '.mdc' }}</code></td><td data-label="Description">{{ rule.description || '—' }}</td><td data-label="Globs"><code>{{ rule.globs || '—' }}</code></td><td data-label="Always apply">{{ rule.alwaysApply ? 'yes' : 'no' }}</td><td data-label="Action"><button mat-button type="button" (click)="deleteRule(rule)">Remove</button></td></tr>
                                                 }
                                             </tbody>
                                         </table>
                                     </div>
                                 }
+                                </section>
                             </section>
                         }
 
@@ -369,7 +368,8 @@ function defaultPlugins(): PluginEntry[] {
                                 <header class="tab-intro">
                                     <p class="eyebrow">Host bindings</p>
                                     <h2>Who uses which host runtime</h2>
-                                    <p>A host binding connects one developer, one host runtime, and one published Stack version. It answers where the stack runs and how Memory and Code graph resolve on that host. ESO is optional: unbound tools keep working unchanged.</p>
+                                    <p>A host binding connects one developer, one <strong>registered host runtime</strong>, and one published Stack version. It answers where the stack runs and how Memory and Code graph resolve on that host. ESO is optional: unbound tools keep working unchanged.</p>
+                                    <p class="host-source-note">Hosts are registered in <button mat-button type="button" (click)="openHosts()">Hosts</button>. This tab only assigns a registered host; it does not create a host.</p>
                                     <div class="actor-grid">
                                         <div><span>Who acts</span><strong>Operator / repository owner</strong></div>
                                         <div><span>Decision</span><strong>Developer × host runtime × Stack version</strong></div>
@@ -385,7 +385,7 @@ function defaultPlugins(): PluginEntry[] {
                                 </div>
 
                                 <section class="hosts-section">
-                                    <header class="hosts-section-head"><div><h3>Active bindings</h3><p class="muted">Developer → host runtime × pinned Stack version.</p></div><div class="developer-actions"><button mat-stroked-button type="button" (click)="openBulkUpgrade()">Bulk upgrade</button><button mat-flat-button color="primary" type="button" (click)="startNewBinding()">New host binding</button></div></header>
+                                    <header class="hosts-section-head"><div><h3>Active bindings</h3><p class="muted">Developer → host runtime × pinned Stack version.</p></div><div class="developer-actions"><button mat-stroked-button type="button" (click)="openBulkUpgrade()">Bulk upgrade</button><button mat-flat-button color="primary" type="button" [disabled]="activeHostRuntimes().length === 0" (click)="startNewBinding()">New host binding</button></div></header>
                                     @if (bulkUpgradeOpen()) {
                                         <div class="bulk-upgrade-panel">
                                             <mat-form-field appearance="outline"><mat-label>Target Stack version</mat-label>
@@ -406,7 +406,7 @@ function defaultPlugins(): PluginEntry[] {
                                                     <header class="developer-head">
                                                         <div><h3>{{ developer }}</h3><span>{{ hostProfileCount(developer) }}</span></div>
                                                         <div class="developer-actions">
-                                                            <button mat-stroked-button type="button" (click)="startAddHost(developer)">Add host binding</button>
+                                                            <button mat-stroked-button type="button" [disabled]="activeHostRuntimes().length === 0" (click)="startAddHost(developer)">Add host binding</button>
                                                             <button mat-stroked-button color="warn" type="button" (click)="askRemoveDeveloper(developer)">Remove developer</button>
                                                         </div>
                                                     </header>
@@ -425,8 +425,8 @@ function defaultPlugins(): PluginEntry[] {
                                                                 <thead><tr><th>Host</th><th>Stack</th><th>Sources</th><th>Resolution</th><th class="actions-col">Actions</th></tr></thead>
                                                                 <tbody>
                                                                     @for (profile of managedProfilesFor(developer); track profile.id) {
-                                                                        <tr class="host-row">
-                                                                            <td><div class="host-name"><strong>{{ hostLabel(profile.hostPluginId) }}</strong><small>managed</small></div></td>
+                                                                        <tr class="host-row" [class.host-unavailable]="!hostAvailable(profile.hostPluginId)">
+                                                                            <td><div class="host-name"><strong>{{ hostLabel(profile.hostPluginId) }}</strong><small>{{ hostAvailable(profile.hostPluginId) ? hostHealth(profile.hostPluginId) : 'host unavailable' }}</small></div></td>
                                                                             <td>v{{ profile.stackVersion }}@if (profile.flowId) { <small class="flow-pin">flow {{ profile.flowId }} · v{{ profile.flowVersion || 1 }}</small> }</td>
                                                                             <td class="host-sources">{{ hostSourcesSummary(profile) }}</td>
                                                                             <td class="host-overrides">{{ resolutionSummary(profile) }}</td>
@@ -466,14 +466,21 @@ function defaultPlugins(): PluginEntry[] {
                                                     @if (addingHostFor()) {
                                                         <div class="host-add-panel">
                                                             <div class="host-add-heading">{{ editingProfile() ? 'Edit host binding' : 'New host binding' }}</div>
+                                                            @if (activeHostRuntimes().length === 0) {
+                                                                <div class="host-add-blocked" role="alert">
+                                                                    <span>No active host runtime. Register one in Hosts before creating a binding.</span>
+                                                                    <button mat-stroked-button type="button" (click)="openHosts()">Open Hosts</button>
+                                                                </div>
+                                                            }
                                                             <div class="host-add-row">
                                                                 <mat-form-field appearance="outline"><mat-label>Developer / user</mat-label>
                                                                     <input matInput [ngModel]="bindingDeveloper()" [disabled]="addingHostFor() !== '__new' || !!editingProfile()" (ngModelChange)="bindingDeveloper.set($event)" placeholder="dev1">
                                                                 </mat-form-field>
-                                                                <mat-form-field appearance="outline"><mat-label>Host plugin</mat-label>
+                                                                <mat-form-field appearance="outline"><mat-label>Registered host</mat-label>
                                                                     <mat-select [ngModel]="newHostPluginId()" [disabled]="!!editingProfile()" (ngModelChange)="changeHostPlugin($event)">
-                                                                        @for (plugin of hostPlugins(); track plugin.id) { <mat-option [value]="plugin.id">{{ plugin.label }}</mat-option> }
+                                                                        @for (host of activeHostRuntimes(); track host.hostId) { <mat-option [value]="host.hostId">{{ host.hostId }} · {{ hostTypeFor(host.hostId) }} · {{ host.runtimeId }}</mat-option> }
                                                                     </mat-select>
+                                                                    <mat-hint>Only active registered hosts are assignable.</mat-hint>
                                                                 </mat-form-field>
                                                                 <mat-form-field appearance="outline"><mat-label>Stack version</mat-label>
                                                                     <mat-select [ngModel]="newStackVersion()" (ngModelChange)="newStackVersion.set($event)">
@@ -620,7 +627,7 @@ function defaultPlugins(): PluginEntry[] {
                                             @for (host of unmanagedHosts(); track host.hostPluginId) {
                                                 <article class="detected-card">
                                                     <div><strong>{{ host.label }}</strong><code>{{ host.markers.join(', ') }}</code></div>
-                                                    <button mat-stroked-button type="button" (click)="manageDetectedHost(host.hostPluginId)">Bind with ESO</button>
+                                                    <button mat-stroked-button type="button" (click)="manageDetectedHost(host.hostPluginId)">{{ hostAvailable(host.hostPluginId) ? 'Bind with ESO' : 'Register in Hosts' }}</button>
                                                 </article>
                                             }
                                         </div>
@@ -637,22 +644,6 @@ function defaultPlugins(): PluginEntry[] {
                             </section>
                         }
 
-                        @case ('plugins') {
-                            <section class="tab-panel" role="tabpanel">
-                                <p class="section-hint">Hosts, sources, providers, and MCP are plugins. The UI reads this registry instead of hardcoding host names.</p>
-                                <div class="plugin-table-wrap">
-                                    <table class="plugin-table">
-                                        <thead><tr><th>Plugin</th><th>Type</th><th>Version</th><th>Capabilities</th><th>Status</th></tr></thead>
-                                        <tbody>
-                                            @for (plugin of plugins(); track plugin.id) {
-                                                <tr><td><strong>{{ plugin.label }}</strong><br><code>{{ plugin.id }}</code></td><td>{{ plugin.type }}</td><td>{{ plugin.version }}</td><td><span class="cap-list">{{ plugin.capabilities.join(' · ') }}</span></td><td><span class="badge" [class.badge-warn]="plugin.status !== 'installed'">{{ plugin.status }}</span></td></tr>
-                                            }
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </section>
-                        }
-
                         @case ('workers') {
                             <section class="tab-panel" role="tabpanel">
                                 <header class="tab-intro">
@@ -664,10 +655,10 @@ function defaultPlugins(): PluginEntry[] {
                                 <section class="slp-orchestration">
                                     <div class="orchestration-node supervisor"><span>Supervisor</span><strong>Operator</strong><small>approve · escalate · sign Done</small></div>
                                     <span class="orchestration-arrow">→</span>
-                                    <div class="orchestration-node lead"><span>Lead</span><strong>Main chat agent</strong><small>split · spawn · roll up</small></div>
+                                    <div class="orchestration-node lead"><span>Lead</span><strong>Main chat agent</strong><small>split · dispatch · roll up</small></div>
                                     <span class="orchestration-arrow">→</span>
                                     <div class="orchestration-node workers"><span>Workers</span><strong>7 positions</strong><small>peer · gate</small></div>
-                                    <p>Lead is not a worker; no layer; not spawnable. Workers below are the only rows with peer/gate.</p>
+                                    <p>Lead is not a worker; no layer; not dispatchable. Workers below are the only rows with peer/gate.</p>
                                 </section>
 
                                 <div class="agent-stats worker-stats">
@@ -781,7 +772,7 @@ function defaultPlugins(): PluginEntry[] {
                                                 @for (worker of workers(); track worker.id) {
                                                     <button type="button" class="worker-card" [class.active]="selectedWorker()?.id === worker.id" (click)="selectWorker(worker.id)">
                                                         <span class="worker-avatar">{{ worker.name.slice(0, 1).toUpperCase() }}</span>
-                                                        <span class="worker-card-copy"><strong>{{ worker.name }}</strong><small>{{ worker.role }} · {{ worker.layer }}</small><small>{{ worker.hostBindingIds.length === 0 ? 'Not deployed' : worker.hostBindingIds.length + ' binding' + (worker.hostBindingIds.length === 1 ? '' : 's') }}</small></span>
+                                                        <span class="worker-card-copy"><strong>{{ worker.name }}</strong><small>{{ worker.role }} · {{ worker.layer }}</small><small>{{ worker.hostBindingIds.length === 0 ? 'Not deployed' : worker.hostBindingIds.length + ' binding' + (worker.hostBindingIds.length === 1 ? '' : 's') }}</small><small class="worker-placement-summary">{{ placementSummary(worker.id) }}</small></span>
                                                         <span class="badge" [class.badge-warn]="worker.layer === 'gate'">{{ worker.status }}</span>
                                                     </button>
                                                 }
@@ -817,10 +808,10 @@ function defaultPlugins(): PluginEntry[] {
                                                     <details class="instructions-panel" [open]="!!worker.instructions">
                                                         <summary>Instructions — prompt body @if (worker.instructions) { <span class="badge">set</span> }</summary>
                                                         <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full"><mat-label>Prompt body</mat-label><textarea matInput rows="4" [ngModel]="worker.instructions || ''" (ngModelChange)="updateWorkerField(worker.id, 'instructions', $event)"></textarea></mat-form-field>
-                                                        <p class="field-help">Imported subagent prompt. Kept in the worker file; not shown to the host until the worker is spawned.</p>
+                                                        <p class="field-help">Imported subagent prompt. Kept in the worker file; not shown to the host until a host runtime executes it.</p>
                                                     </details>
                                                     @if (worker.status !== 'active') {
-                                                        <div class="worker-status-hint"><span>Declared workers cannot be checked or spawned.</span><button mat-stroked-button type="button" (click)="activateWorker(worker.id)">Activate worker</button></div>
+                                                        <div class="worker-status-hint"><span>Declared workers cannot be checked or executed.</span><button mat-stroked-button type="button" (click)="activateWorker(worker.id)">Activate worker</button></div>
                                                     }
                                                 </section>
                                                 <section class="inspector-block policy-block">
@@ -945,6 +936,68 @@ function defaultPlugins(): PluginEntry[] {
                                                         </mat-form-field>
                                                     }
                                                 </section>
+                                                <section class="inspector-block placement-block">
+                                                    <div class="inspector-block-head">
+                                                        <h4>Host placement</h4>
+                                                        <p>Where this worker may be hosted, which model tier it requests, and the native agent each allowed host should use. ESO stores the placement policy; the host applies it.</p>
+                                                    </div>
+                                                    @if (hostRuntimes().length === 0) {
+                                                        <div class="formation-empty compact">
+                                                            <div><strong>No host runtimes registered</strong><span>Register a host runtime before placing this worker.</span></div>
+                                                            <button mat-stroked-button type="button" (click)="openHosts()">Open Hosts</button>
+                                                        </div>
+                                                    } @else {
+                                                        <div class="policy-field">
+                                                            <span class="field-label">Allowed hosts — {{ placementDraftFor(worker.id).allowedHosts.length }} selected</span>
+                                                            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full">
+                                                                <mat-select multiple [ngModel]="placementDraftFor(worker.id).allowedHosts" (ngModelChange)="setPlacementHosts(worker.id, $event)">
+                                                                    @for (host of hostRuntimes(); track host.hostId) {
+                                                                        <mat-option [value]="host.hostId">{{ host.hostId }} · {{ host.runtimeId }} · {{ host.health }}</mat-option>
+                                                                    }
+                                                                </mat-select>
+                                                            </mat-form-field>
+                                                            <p class="field-help">Empty means this worker has no allowed host.</p>
+                                                        </div>
+                                                        <div class="placement-grid">
+                                                            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                                                                <mat-label>Model tier</mat-label>
+                                                                <mat-select [ngModel]="placementDraftFor(worker.id).modelTier" (ngModelChange)="setPlacementModelTier(worker.id, $event)">
+                                                                    <mat-option value="fast">Fast — cheapest capable model</mat-option>
+                                                                    <mat-option value="balanced">Balanced — default</mat-option>
+                                                                    <mat-option value="reasoning">Reasoning — deepest model</mat-option>
+                                                                </mat-select>
+                                                            </mat-form-field>
+                                                            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                                                                <mat-label>Fallback</mat-label>
+                                                                <mat-select [ngModel]="placementDraftFor(worker.id).fallback" (ngModelChange)="setPlacementFallback(worker.id, $event)">
+                                                                    <mat-option value="block">Block — do not fall back</mat-option>
+                                                                    <mat-option value="next-host">Next host — try another allowed host</mat-option>
+                                                                    <mat-option value="next-tier">Next tier — drop to a cheaper tier</mat-option>
+                                                                </mat-select>
+                                                            </mat-form-field>
+                                                        </div>
+                                                        <div class="policy-field">
+                                                            <span class="field-label">Native agent mapping — per allowed host</span>
+                                                            @if (placementDraftFor(worker.id).allowedHosts.length === 0) {
+                                                                <span class="tag-empty">Select at least one allowed host to map a native agent.</span>
+                                                            } @else {
+                                                                @for (hostId of placementDraftFor(worker.id).allowedHosts; track hostId) {
+                                                                    <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full">
+                                                                        <mat-label>Native agent · {{ hostId }}</mat-label>
+                                                                        <input matInput [ngModel]="placementDraftFor(worker.id).nativeAgent[hostId] || ''" (ngModelChange)="setNativeAgent(worker.id, hostId, $event)" placeholder="cursor / agy / claude">
+                                                                    </mat-form-field>
+                                                                }
+                                                            }
+                                                            <p class="field-help">Host-native agent name this host uses for the worker — Cursor, AGY, or another installed agent id.</p>
+                                                        </div>
+                                                        @if (placementNotice(); as message) { <p class="placement-feedback" role="status">{{ message }}</p> }
+                                                        @if (placementError(); as message) { <p class="field-error" role="alert">{{ message }}</p> }
+                                                        <div class="placement-actions">
+                                                            <button mat-stroked-button type="button" [disabled]="!placementDirty(worker.id)" (click)="resetPlacement(worker.id)">Reset</button>
+                                                            <button mat-flat-button color="primary" type="button" [disabled]="placementSaving() || !placementDirty(worker.id)" (click)="savePlacement(worker.id)">{{ placementSaving() ? 'Saving…' : 'Save placement' }}</button>
+                                                        </div>
+                                                    }
+                                                </section>
                                                 <section class="inspector-actions">
                                                     <button mat-stroked-button type="button" [disabled]="worker.status !== 'active'" (click)="openPolicyCheck(worker)">Test policy</button>
                                                     <button mat-stroked-button type="button" (click)="removeWorker(worker.id)">Remove</button>
@@ -1019,19 +1072,62 @@ function defaultPlugins(): PluginEntry[] {
 
                         @case ('knowledge') {
                             <section class="tab-panel knowledge-page" role="tabpanel">
-                                <header class="tab-intro">
-                                    <p class="eyebrow">Knowledge &amp; Artifact Governance</p>
-                                    <h2>How project knowledge is governed</h2>
-                                    <p>SDLC is optional. Knowledge base holds artifacts; document graph indexes their relationships; providers such as Jira, Notion, or Confluence are optional sources of truth — never required.</p>
-                                    <div class="actor-grid">
-                                        <div><span>Who acts</span><strong>Operator / project owner</strong></div>
-                                        <div><span>Decision</span><strong>SDLC mode · artifacts · providers</strong></div>
-                                        <div><span>For whom</span><strong>Developers, auditors, hosts, and future readers</strong></div>
-                                        <div><span>Result</span><strong>Knowledge is owned, classified, and traceable</strong></div>
+                                <header class="knowledge-hero">
+                                    <div>
+                                        <p class="eyebrow">Knowledge &amp; Artifact Governance</p>
+                                        <h2>Make project knowledge findable, owned, and traceable</h2>
+                                        <p>Files are the source. The index and graph are derived. Providers are optional and selected per work area.</p>
+                                        <div class="knowledge-hero-meta">
+                                            <span><strong>{{ knowledgeSummary()?.docs || 0 }}</strong> documents</span>
+                                            <span><strong>{{ knowledgeSummary()?.edges || 0 }}</strong> graph edges</span>
+                                            <span><strong>{{ knowledgeSummary()?.findings || 0 }}</strong> open findings</span>
+                                            <span><strong>{{ knowledgeEmbeddingStatus()?.embedded || 0 }}/{{ knowledgeEmbeddingStatus()?.chunks || 0 }}</strong> embedded</span>
+                                        </div>
+                                    </div>
+                                    <div class="knowledge-hero-actions">
+                                        <button mat-stroked-button type="button" [disabled]="knowledgeChecking()" (click)="runKnowledgeCheck()">{{ knowledgeChecking() ? 'Checking…' : 'Run check' }}</button>
+                                        <button mat-flat-button color="primary" type="button" [disabled]="knowledgeIndexing()" (click)="indexKnowledge()">{{ knowledgeIndexing() ? 'Indexing…' : 'Index now' }}</button>
                                     </div>
                                 </header>
 
-                                <section class="knowledge-index-panel">
+                                <nav class="knowledge-nav" role="tablist" aria-label="Knowledge sections">
+                                    <button type="button" role="tab" [attr.aria-selected]="knowledgeSection() === 'overview'" [class.active]="knowledgeSection() === 'overview'" (click)="showKnowledgeSection('overview')">Overview</button>
+                                    <button type="button" role="tab" [attr.aria-selected]="knowledgeSection() === 'sources'" [class.active]="knowledgeSection() === 'sources'" (click)="showKnowledgeSection('sources')">Sources</button>
+                                    <button type="button" role="tab" [attr.aria-selected]="knowledgeSection() === 'contract'" [class.active]="knowledgeSection() === 'contract'" (click)="showKnowledgeSection('contract')">Contract</button>
+                                    <button type="button" role="tab" [attr.aria-selected]="knowledgeSection() === 'index'" [class.active]="knowledgeSection() === 'index'" (click)="showKnowledgeSection('index')">Index &amp; health</button>
+                                    <button type="button" role="tab" [attr.aria-selected]="knowledgeSection() === 'manifest'" [class.active]="knowledgeSection() === 'manifest'" (click)="showKnowledgeSection('manifest')">Manifest</button>
+                                </nav>
+
+                                @if (knowledgeSection() === 'overview') {
+                                    <section class="knowledge-overview">
+                                        <div class="knowledge-overview-cards">
+                                            <button type="button" class="knowledge-card" (click)="showKnowledgeSection('sources')"><span class="eyebrow">Sources</span><strong>{{ providerRouteSummary() }}</strong><small>Files first; providers optional</small></button>
+                                            <button type="button" class="knowledge-card" (click)="showKnowledgeSection('contract')"><span class="eyebrow">Contract</span><strong>{{ sdlcEnabled() ? 'SDLC enforced' : 'Lightweight' }}</strong><small>{{ governanceEnabledCount() }} governance checks</small></button>
+                                            <button type="button" class="knowledge-card" (click)="showKnowledgeSection('index')"><span class="eyebrow">Index &amp; health</span><strong>{{ knowledgeSummary()?.docs || 0 }} docs · {{ knowledgeSummary()?.findings || 0 }} findings</strong><small>{{ knowledgeEmbeddingStatus()?.embedded || 0 }}/{{ knowledgeEmbeddingStatus()?.chunks || 0 }} chunks embedded</small></button>
+                                            <button type="button" class="knowledge-card" (click)="showKnowledgeSection('manifest')"><span class="eyebrow">Manifest</span><strong>{{ manifestEnabled() ? 'Emit enabled' : 'Manifest off' }}</strong><small>Machine-readable contract</small></button>
+                                        </div>
+                                        <div class="knowledge-overview-grid">
+                                            <section class="knowledge-section">
+                                                <header class="knowledge-section-head"><div><h3>Preflight</h3><p>Checks that must pass before the index is trusted.</p></div>@if (knowledgeCheck(); as check) { <span class="badge" [class.badge-warn]="check.status === 'FAIL'">{{ check.status }}</span> }</header>
+                                                @if (knowledgeCheck(); as check) {
+                                                    @for (item of check.checks.slice(0, 4); track item.id) { <div class="knowledge-overview-row"><span>{{ item.id }}</span><strong>{{ item.label }}</strong><span class="badge" [class.badge-warn]="item.status === 'FAIL'">{{ item.status }}</span></div> }
+                                                } @else {
+                                                    <div class="knowledge-rule-row"><b>01</b><span>Links resolve</span><small>no dangling document reference</small></div>
+                                                    <div class="knowledge-rule-row"><b>02</b><span>Derived sources labelled</span><small>manifest and graph are not sources</small></div>
+                                                    <div class="knowledge-rule-row"><b>03</b><span>Provider boundaries respected</span><small>optional providers never become required</small></div>
+                                                }
+                                            </section>
+                                            <section class="knowledge-section">
+                                                <header class="knowledge-section-head"><div><h3>Current source routing</h3><p>No provider means files are managed directly.</p></div><button mat-button type="button" (click)="openConsumerPlugins()">Providers</button></header>
+                                                <div class="knowledge-route-row"><span>Work management</span><strong>{{ providerRouting().work === 'md' ? '.md files' : providerRouting().work }}</strong></div>
+                                                <div class="knowledge-route-row"><span>Design management</span><strong>{{ providerRouting().design === 'md' ? '.md files' : providerRouting().design }}</strong></div>
+                                                <div class="knowledge-route-row"><span>Content management</span><strong>{{ providerRouting().content === 'md' ? '.md files' : providerRouting().content }}</strong></div>
+                                            </section>
+                                        </div>
+                                    </section>
+                                }
+
+                                <section class="knowledge-index-panel" [class.zone-hidden]="knowledgeSection() !== 'index'">
                                     <div>
                                         <span class="eyebrow">Knowledge index</span>
                                         <strong>{{ knowledgeSummary()?.docs || 0 }} docs · {{ knowledgeSummary()?.edges || 0 }} edges · {{ knowledgeSummary()?.findings || 0 }} findings</strong>
@@ -1040,12 +1136,10 @@ function defaultPlugins(): PluginEntry[] {
                                     </div>
                                     <div class="knowledge-index-actions">
                                         <button mat-stroked-button type="button" [disabled]="knowledgeEmbedding() || !knowledgeEmbeddingStatus()?.chunks || (knowledgeEmbeddingStatus()?.embedded || 0) >= (knowledgeEmbeddingStatus()?.chunks || 0)" (click)="embedKnowledge()">{{ knowledgeEmbedding() ? 'Embedding…' : ((knowledgeEmbeddingStatus()?.embedded || 0) >= (knowledgeEmbeddingStatus()?.chunks || 0) ? 'Embedded' : 'Embed pending') }}</button>
-                                        <button mat-stroked-button type="button" [disabled]="knowledgeChecking()" (click)="runKnowledgeCheck()">{{ knowledgeChecking() ? 'Checking…' : 'Run check' }}</button>
-                                        <button mat-flat-button color="primary" type="button" [disabled]="knowledgeIndexing()" (click)="indexKnowledge()">{{ knowledgeIndexing() ? 'Indexing…' : 'Index now' }}</button>
                                     </div>
                                 </section>
                                 @if (knowledgeCheck(); as check) {
-                                    <section class="knowledge-check-result" [class.check-fail]="check.status === 'FAIL'">
+                                    <section class="knowledge-check-result" [class.check-fail]="check.status === 'FAIL'" [class.zone-hidden]="knowledgeSection() !== 'index'">
                                         <header><strong>Preflight · {{ check.status }}</strong><span>{{ check.checks.length }} checks</span></header>
                                         @for (item of check.checks; track item.id) {
                                             <div><span class="badge" [class.badge-warn]="item.status === 'FAIL'">{{ item.status }}</span><strong>{{ item.label }}</strong><small>{{ item.detail }}</small></div>
@@ -1053,9 +1147,9 @@ function defaultPlugins(): PluginEntry[] {
                                     </section>
                                 }
 
-                                <section class="knowledge-index-detail">
+                                <section class="knowledge-index-detail" [class.zone-hidden]="knowledgeSection() !== 'index'">
                                     <header class="knowledge-detail-head">
-                                        <div><h3>Indexed documents</h3><p>Read from Postgres. Content remains in files.</p></div>
+                                        <div><h3>Indexed documents · {{ knowledgeDocs().length }}</h3><p>Read from Postgres. Content remains in files. All rows shown.</p></div>
                                         <div class="knowledge-search">
                                             <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Search indexed docs</mat-label><input matInput [ngModel]="knowledgeQuery()" (ngModelChange)="knowledgeQuery.set($event)" (keyup.enter)="searchKnowledge()" placeholder="requirement, manifest…"></mat-form-field>
                                             <button mat-stroked-button type="button" (click)="searchKnowledge()">Search</button>
@@ -1142,9 +1236,9 @@ function defaultPlugins(): PluginEntry[] {
                                     }
                                 </section>
 
-                                <div class="knowledge-layout">
+                                <div class="knowledge-layout" [class.zone-hidden]="knowledgeSection() === 'overview' || knowledgeSection() === 'index'" [class.knowledge-layout-single]="knowledgeSection() === 'sources'">
                                     <div class="knowledge-main">
-                                        <section class="knowledge-section knowledge-selectable" [class.active]="selectedKnowledgeTopic() === 'pipeline'" (click)="selectKnowledgeTopic('pipeline')">
+                                        <section class="knowledge-section knowledge-selectable knowledge-contract-section" [class.zone-hidden]="knowledgeSection() !== 'contract'" [class.active]="selectedKnowledgeTopic() === 'pipeline'" (click)="selectKnowledgeTopic('pipeline')">
                                             <header class="knowledge-section-head"><div><h3>Project mode</h3><p>Choose whether this consumer follows an SDLC artifact contract.</p></div><span class="scope-badge" [class.muted-badge]="!sdlcEnabled()">{{ sdlcEnabled() ? 'SDLC' : 'Lightweight' }}</span></header>
                                             <div class="project-mode-grid">
                                                 <div class="project-mode-item">
@@ -1170,7 +1264,7 @@ function defaultPlugins(): PluginEntry[] {
                                             <p class="knowledge-note">{{ sdlcEnabled() ? 'SDLC artifact contract applies. Root: sdlc/ (managed artifacts).' : 'No sdlc/ folder. Knowledge base still indexes README, docs, and decisions.' }}</p>
                                         </section>
 
-                                        <section class="knowledge-section knowledge-selectable" [class.active]="selectedKnowledgeTopic() === 'document-status' || selectedKnowledgeTopic() === 'open-register' || selectedKnowledgeTopic() === 'cross-check' || selectedKnowledgeTopic() === 'build-enforcement' || selectedKnowledgeTopic() === 'preflight' || selectedKnowledgeTopic() === 'go-no-go' || selectedKnowledgeTopic() === 'pipeline-contract'">
+                                        <section class="knowledge-section knowledge-selectable knowledge-contract-section" [class.zone-hidden]="knowledgeSection() !== 'contract'" [class.active]="selectedKnowledgeTopic() === 'document-status' || selectedKnowledgeTopic() === 'open-register' || selectedKnowledgeTopic() === 'cross-check' || selectedKnowledgeTopic() === 'build-enforcement' || selectedKnowledgeTopic() === 'preflight' || selectedKnowledgeTopic() === 'go-no-go' || selectedKnowledgeTopic() === 'pipeline-contract'">
                                             <header class="knowledge-section-head"><div><h3>Governance</h3><p>What must be true before work moves forward.</p></div><span class="scope-badge" [class.muted-badge]="!sdlcEnabled()">{{ sdlcEnabled() ? 'enforced' : 'off' }}</span></header>
                                             <div class="governance-controls">
                                                 <div class="governance-row" [class.active]="selectedKnowledgeTopic() === 'document-status'" (click)="selectKnowledgeTopic('document-status')">
@@ -1205,7 +1299,7 @@ function defaultPlugins(): PluginEntry[] {
                                             <p class="knowledge-note">Lifecycle: <code>raw → proposed → approved → retired</code>. Catalogue index says 47 checks; the file title says 29 — title is stale and must be fixed.</p>
                                         </section>
 
-                                        <section class="knowledge-section knowledge-selectable" [class.active]="selectedKnowledgeTopic() === 'quartet'" (click)="selectKnowledgeTopic('quartet')">
+                                        <section class="knowledge-section knowledge-selectable knowledge-contract-section" [class.zone-hidden]="knowledgeSection() !== 'contract'" [class.active]="selectedKnowledgeTopic() === 'quartet'" (click)="selectKnowledgeTopic('quartet')">
                                             <header class="knowledge-section-head"><div><h3>Task quartet</h3><p>Task decomposition for work management. Provider-independent.</p></div></header>
                                             <mat-form-field appearance="outline"><mat-label>Quartet profile</mat-label>
                                                 <mat-select [ngModel]="quartetProfile()" (ngModelChange)="quartetProfile.set($event)">
@@ -1225,7 +1319,7 @@ function defaultPlugins(): PluginEntry[] {
                                             <p class="knowledge-note">BA is OUT when acceptance criteria are clear. Jira is optional; tasks can live in the repo.</p>
                                         </section>
 
-                                        <section class="knowledge-section knowledge-selectable" [class.active]="selectedKnowledgeTopic() === 'knowledge-base'" (click)="selectKnowledgeTopic('knowledge-base')">
+                                        <section class="knowledge-section knowledge-selectable knowledge-source-section" [class.zone-hidden]="knowledgeSection() !== 'sources'" [class.active]="selectedKnowledgeTopic() === 'knowledge-base'" (click)="selectKnowledgeTopic('knowledge-base')">
                                             <header class="knowledge-section-head"><div><h3>Knowledge base</h3><p>Artifacts held for this consumer, by kind and reader.</p></div></header>
                                             <div class="knowledge-block">
                                                 <span class="control-label">Artifact kinds</span>
@@ -1246,93 +1340,123 @@ function defaultPlugins(): PluginEntry[] {
                                             </div>
                                         </section>
 
-                                        <section class="knowledge-section knowledge-selectable" [class.active]="selectedKnowledgeTopic() === 'agent-manifests'" (click)="selectKnowledgeTopic('agent-manifests')">
-                                            <header class="knowledge-section-head"><div><h3>Agent manifest</h3><p>Machine-readable contract for this consumer's document structure.</p></div><span class="scope-badge">AI zone</span></header>
+                                        <section class="knowledge-section knowledge-selectable manifest-section knowledge-manifest-section" [class.zone-hidden]="knowledgeSection() !== 'manifest'" [class.active]="selectedKnowledgeTopic() === 'agent-manifests'" (click)="selectKnowledgeTopic('agent-manifests')">
+                                            <header class="knowledge-section-head"><div><h3>Agent manifest</h3><p>Machine-readable contract for this consumer's document structure.</p></div><span class="badge" [class.badge-warn]="!manifestEnabled()">{{ manifestEnabled() ? 'Emit enabled' : 'Emit off' }}</span></header>
                                             <div class="agent-stats">
-                                                <div><strong>7</strong><span>facets</span></div>
-                                                <div><strong>6</strong><span>relations</span></div>
-                                                <div><strong>6</strong><span>shared keys</span></div>
-                                                <div><strong>5</strong><span>checks</span></div>
+                                                <div><strong>{{ manifestFacetCount() }}</strong><span>facets</span></div>
+                                                <div><strong>{{ manifestRelationCount() }}</strong><span>relations</span></div>
+                                                <div><strong>{{ manifestSharedKeys() }}</strong><span>shared keys</span></div>
+                                                <div><strong>{{ manifestCheckCount() }}</strong><span>checks</span></div>
                                             </div>
-                                            <div class="manifest-controls">
+                                            <div class="manifest-emit">
                                                 <mat-slide-toggle [ngModel]="manifestEnabled()" (ngModelChange)="manifestEnabled.set($event)">Emit manifest</mat-slide-toggle>
-                                                <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Manifest path</mat-label><input matInput [ngModel]="manifestPath()" (ngModelChange)="manifestPath.set($event)" placeholder=".harness/manifest.json"></mat-form-field>
+                                                <mat-form-field appearance="outline" subscriptSizing="dynamic" class="manifest-path"><mat-label>Manifest path</mat-label><input matInput [ngModel]="manifestPath()" (ngModelChange)="manifestPath.set($event)" placeholder=".harness/manifest.json"><mat-hint>Relative to the consumer root; generated, never hand-edited.</mat-hint></mat-form-field>
                                             </div>
-                                            <div class="knowledge-block">
-                                                <span class="control-label">HUMAN header</span>
-                                                <div class="knowledge-chips">
-                                                    @for (key of manifestHumanHeaderOptions; track key) {
-                                                        <button type="button" class="source-pill" [class.active]="manifestHumanHeaderKeys().includes(key)" (click)="toggleManifestHumanHeader(key); $event.stopPropagation()">{{ key }}</button>
-                                                    }
-                                                </div>
-                                            </div>
-                                            <div class="knowledge-block">
-                                                <span class="control-label">AI header</span>
-                                                <div class="knowledge-chips">
-                                                    @for (key of manifestAiHeaderOptions; track key) {
-                                                        <button type="button" class="source-pill" [class.active]="manifestAiHeaderKeys().includes(key)" (click)="toggleManifestAiHeader(key); $event.stopPropagation()">{{ key }}</button>
-                                                    }
-                                                </div>
-                                            </div>
-                                            <div class="knowledge-block">
-                                                <span class="control-label">Facets</span>
-                                                <div class="knowledge-chips">
-                                                    @for (facet of manifestFacetOptions; track facet) {
-                                                        <button type="button" class="source-pill" [class.active]="manifestFacets().includes(facet)" (click)="toggleManifestFacet(facet); $event.stopPropagation()">{{ facet }}</button>
-                                                    }
-                                                </div>
-                                            </div>
-                                            <div class="knowledge-block">
-                                                <span class="control-label">Relations</span>
-                                                <div class="knowledge-chips">
-                                                    @for (relation of manifestRelationOptions; track relation) {
-                                                        <button type="button" class="source-pill" [class.active]="manifestRelations().includes(relation)" (click)="toggleManifestRelation(relation); $event.stopPropagation()">{{ relation }}</button>
-                                                    }
-                                                </div>
-                                            </div>
-                                            <div class="knowledge-block">
-                                                <span class="control-label">Checks</span>
-                                                <div class="knowledge-chips">
-                                                    @for (check of manifestCheckOptions; track check) {
-                                                        <button type="button" class="source-pill" [class.active]="manifestChecks().includes(check)" (click)="toggleManifestCheck(check); $event.stopPropagation()">{{ check }}</button>
-                                                    }
-                                                </div>
+                                            <div class="manifest-groups">
+                                                <section class="manifest-group">
+                                                    <div class="manifest-group-head"><span>HUMAN header</span><small>{{ manifestHumanHeaderKeys().length }} selected · required shape for people</small></div>
+                                                    <div class="knowledge-chips">
+                                                        @for (key of manifestHumanHeaderOptions; track key) {
+                                                            <button type="button" class="source-pill" [class.active]="manifestHumanHeaderKeys().includes(key)" (click)="toggleManifestHumanHeader(key); $event.stopPropagation()">{{ key }}</button>
+                                                        }
+                                                    </div>
+                                                </section>
+                                                <section class="manifest-group">
+                                                    <div class="manifest-group-head"><span>AI header</span><small>{{ manifestAiHeaderKeys().length }} selected · extra keys for agents</small></div>
+                                                    <div class="knowledge-chips">
+                                                        @for (key of manifestAiHeaderOptions; track key) {
+                                                            <button type="button" class="source-pill" [class.active]="manifestAiHeaderKeys().includes(key)" (click)="toggleManifestAiHeader(key); $event.stopPropagation()">{{ key }}</button>
+                                                        }
+                                                    </div>
+                                                </section>
+                                                <section class="manifest-group">
+                                                    <div class="manifest-group-head"><span>Facets</span><small>{{ manifestFacets().length }} selected · classification dimensions</small></div>
+                                                    <div class="knowledge-chips">
+                                                        @for (facet of manifestFacetOptions; track facet) {
+                                                            <button type="button" class="source-pill" [class.active]="manifestFacets().includes(facet)" (click)="toggleManifestFacet(facet); $event.stopPropagation()">{{ facet }}</button>
+                                                        }
+                                                    </div>
+                                                </section>
+                                                <section class="manifest-group">
+                                                    <div class="manifest-group-head"><span>Relations</span><small>{{ manifestRelations().length }} selected · allowed edge kinds</small></div>
+                                                    <div class="knowledge-chips">
+                                                        @for (relation of manifestRelationOptions; track relation) {
+                                                            <button type="button" class="source-pill" [class.active]="manifestRelations().includes(relation)" (click)="toggleManifestRelation(relation); $event.stopPropagation()">{{ relation }}</button>
+                                                        }
+                                                    </div>
+                                                </section>
+                                                <section class="manifest-group">
+                                                    <div class="manifest-group-head"><span>Checks</span><small>{{ manifestChecks().length }} selected · validation before publish</small></div>
+                                                    <div class="knowledge-chips">
+                                                        @for (check of manifestCheckOptions; track check) {
+                                                            <button type="button" class="source-pill" [class.active]="manifestChecks().includes(check)" (click)="toggleManifestCheck(check); $event.stopPropagation()">{{ check }}</button>
+                                                        }
+                                                    </div>
+                                                </section>
                                             </div>
                                             <p class="knowledge-note">Configured for this consumer. <code>sdlc/01.agent-manifests</code> is a study sample, not testeso data.</p>
                                         </section>
 
-                                        <section class="knowledge-section knowledge-selectable" [class.active]="selectedKnowledgeTopic() === 'docgraph'" (click)="selectKnowledgeTopic('docgraph')">
+                                        <section class="knowledge-section knowledge-selectable knowledge-source-section" [class.zone-hidden]="knowledgeSection() !== 'sources'" [class.active]="selectedKnowledgeTopic() === 'docgraph'" (click)="selectKnowledgeTopic('docgraph')">
                                             <header class="knowledge-section-head"><div><h3>Document graph</h3><p>Derived index of document relationships. Never the source of content.</p></div><mat-slide-toggle [ngModel]="docgraphIndex()" (ngModelChange)="docgraphIndex.set($event)">Index</mat-slide-toggle></header>
                                             <mat-form-field appearance="outline" class="full-width"><mat-label>Index scope</mat-label><input matInput [ngModel]="docgraphScope()" (ngModelChange)="docgraphScope.set($event)" placeholder="docs/**, sdlc/**, agents/**"></mat-form-field>
                                             <p class="knowledge-note">Generated files and provider copies are excluded by default.</p>
                                         </section>
 
-                                        <section class="knowledge-section knowledge-selectable" [class.active]="selectedKnowledgeTopic() === 'providers'" (click)="selectKnowledgeTopic('providers')">
-                                            <header class="knowledge-section-head"><div><h3>Providers</h3><p>Optional sources of truth. Each artifact kind has at most one provider.</p></div><span class="scope-badge muted-badge">optional</span></header>
-                                            <div class="provider-list">
-                                                <article class="provider-row">
-                                                    <div><strong>Jira</strong><small>Task · story · bug</small></div>
-                                                    <span class="provider-kind">task</span>
-                                                    <mat-slide-toggle [ngModel]="jiraEnabled()" (ngModelChange)="jiraEnabled.set($event)">{{ jiraEnabled() ? 'connected' : 'not connected' }}</mat-slide-toggle>
-                                                </article>
-                                                @if (jiraEnabled()) {
-                                                    <div class="provider-config">
-                                                        <mat-form-field appearance="outline"><mat-label>Project key</mat-label><input matInput [ngModel]="jiraProject()" (ngModelChange)="jiraProject.set($event)" placeholder="FIN"></mat-form-field>
-                                                        <mat-form-field appearance="outline"><mat-label>Sync mode</mat-label>
-                                                            <mat-select [ngModel]="jiraSyncMode()" (ngModelChange)="jiraSyncMode.set($event)">
-                                                                @for (mode of jiraModes; track mode) { <mat-option [value]="mode">{{ mode }}</mat-option> }
-                                                            </mat-select>
-                                                        </mat-form-field>
+                                        <section class="knowledge-section knowledge-selectable knowledge-source-section" [class.zone-hidden]="knowledgeSection() !== 'sources'" [class.active]="selectedKnowledgeTopic() === 'providers'" (click)="selectKnowledgeTopic('providers')">
+                                            <header class="knowledge-section-head"><div><h3>Provider routing</h3><p>One provider per work area. No provider means manage directly in <code>.md</code> files.</p></div><span class="scope-badge muted-badge">optional</span></header>
+                                            <div class="provider-routing">
+                                                <article class="provider-domain">
+                                                    <div class="provider-domain-copy"><strong>Work management</strong><small>Tasks · stories · bugs</small></div>
+                                                    <div class="provider-options">
+                                                        <button type="button" class="source-pill" [class.active]="providerRouting().work === 'jira'" (click)="setProviderRoute('work', 'jira'); $event.stopPropagation()">Jira</button>
+                                                        <button type="button" class="source-pill" [class.active]="providerRouting().work === 'md'" (click)="setProviderRoute('work', 'md'); $event.stopPropagation()">None · .md</button>
                                                     </div>
-                                                }
-                                                <article class="provider-row"><div><strong>Notion</strong><small>Knowledge · documents</small></div><span class="provider-kind">document</span><span class="provider-status">not connected</span></article>
-                                                <article class="provider-row"><div><strong>Confluence</strong><small>Knowledge · documents</small></div><span class="provider-kind">document</span><span class="provider-status">not connected</span></article>
-                                                <article class="provider-row"><div><strong>Figma</strong><small>Design · artifacts</small></div><span class="provider-kind">design</span><span class="provider-status">not connected</span></article>
+                                                    <div class="provider-route-state">
+                                                        @if (providerRouting().work === 'jira') { <span class="badge" [class.badge-warn]="providerStatus('jira') !== 'configured'">{{ providerStatus('jira') }}</span><button mat-button type="button" (click)="openConsumerPlugins(); $event.stopPropagation()">Configure Jira</button> } @else { <span class="muted">repo files</span> }
+                                                    </div>
+                                                </article>
+                                                <article class="provider-domain">
+                                                    <div class="provider-domain-copy"><strong>Design management</strong><small>Design artifacts · specs</small></div>
+                                                    <div class="provider-options">
+                                                        <button type="button" class="source-pill" [class.active]="providerRouting().design === 'figma'" (click)="setProviderRoute('design', 'figma'); $event.stopPropagation()">Figma</button>
+                                                        <button type="button" class="source-pill" [class.active]="providerRouting().design === 'penpot'" (click)="setProviderRoute('design', 'penpot'); $event.stopPropagation()">Penpot</button>
+                                                        <button type="button" class="source-pill" [class.active]="providerRouting().design === 'md'" (click)="setProviderRoute('design', 'md'); $event.stopPropagation()">None · .md</button>
+                                                    </div>
+                                                    <div class="provider-route-state">
+                                                        @if (providerRouting().design === 'md') { <span class="muted">repo files</span> } @else { <span class="badge" [class.badge-warn]="providerStatus(providerRouting().design) !== 'configured'">{{ providerStatus(providerRouting().design) }}</span><button mat-button type="button" (click)="openConsumerPlugins(); $event.stopPropagation()">Configure</button> }
+                                                    </div>
+                                                </article>
+                                                <article class="provider-domain">
+                                                    <div class="provider-domain-copy"><strong>Content management</strong><small>Knowledge · documents</small></div>
+                                                    <div class="provider-options">
+                                                        <button type="button" class="source-pill" [class.active]="providerRouting().content === 'notion'" (click)="setProviderRoute('content', 'notion'); $event.stopPropagation()">Notion</button>
+                                                        <button type="button" class="source-pill" [class.active]="providerRouting().content === 'confluence'" (click)="setProviderRoute('content', 'confluence'); $event.stopPropagation()">Confluence</button>
+                                                        <button type="button" class="source-pill" [class.active]="providerRouting().content === 'md'" (click)="setProviderRoute('content', 'md'); $event.stopPropagation()">None · .md</button>
+                                                    </div>
+                                                    <div class="provider-route-state">
+                                                        @if (providerRouting().content === 'md') { <span class="muted">repo files</span> } @else { <span class="badge" [class.badge-warn]="providerStatus(providerRouting().content) !== 'configured'">{{ providerStatus(providerRouting().content) }}</span><button mat-button type="button" (click)="openConsumerPlugins(); $event.stopPropagation()">Configure</button> }
+                                                    </div>
+                                                </article>
                                             </div>
+                                            <p class="knowledge-note">Provider availability and credentials live in <button mat-button type="button" (click)="openConsumerPlugins(); $event.stopPropagation()">Plugins</button>.</p>
+                                        </section>
+
+                                        <section class="knowledge-section knowledge-selectable knowledge-source-section" [class.zone-hidden]="knowledgeSection() !== 'sources'">
+                                            <header class="knowledge-section-head"><div><h3>External references</h3><p>Read-only projection from providers. Files remain the source of content.</p></div><button mat-button type="button" (click)="openConsumerPlugins()">Manage providers</button></header>
+                                            @if (referenceSummary().length === 0) {
+                                                <p class="muted">No provider references yet. Enable a provider and run Sync.</p>
+                                            } @else {
+                                                <div class="reference-list">
+                                                    @for (reference of referenceSummary(); track reference.id) {
+                                                        <div class="reference-row"><div><strong>{{ reference.label }}</strong><small>{{ reference.id }}</small></div><span>{{ reference.count }} records</span><span class="muted">{{ reference.lastSyncedAt ? 'last sync ' + reference.lastSyncedAt : 'not synced' }}</span></div>
+                                                    }
+                                                </div>
+                                            }
                                         </section>
                                     </div>
 
-                                    <aside class="knowledge-detail" aria-live="polite">
+                                    <aside class="knowledge-detail" aria-live="polite" [class.zone-hidden]="knowledgeSection() !== 'contract' && knowledgeSection() !== 'manifest'">
                                         @if (knowledgeDetail(); as detail) {
                                             <p class="eyebrow">{{ detail.eyebrow }}</p>
                                             <h3>{{ detail.title }}</h3>
@@ -1467,16 +1591,8 @@ function defaultPlugins(): PluginEntry[] {
                                                     </div>
                                                 </section>
                                                 <section class="detail-section">
-                                                    <h4>HUMAN header</h4>
-                                                    <div class="knowledge-chips">
-                                                        @for (key of manifestHumanHeaderKeys(); track key) { <span class="source-pill active">{{ key }}</span> }
-                                                    </div>
-                                                </section>
-                                                <section class="detail-section">
-                                                    <h4>AI header</h4>
-                                                    <div class="knowledge-chips">
-                                                        @for (key of manifestAiHeaderKeys(); track key) { <span class="source-pill active">{{ key }}</span> }
-                                                    </div>
+                                                    <h4>Emitted shape</h4>
+                                                    <pre class="manifest-preview">{{ manifestPreview() }}</pre>
                                                 </section>
                                                 <section class="detail-section">
                                                     <h4>Study reference</h4>
@@ -1546,7 +1662,7 @@ function defaultPlugins(): PluginEntry[] {
         .page-header h1 { margin: 0 0 var(--space-1); }
         .eyebrow { color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-size: var(--text-xs); margin: 0 0 var(--space-1); }
         .subtitle { color: var(--muted); margin: 0; }
-        .settings-tabs { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); min-width: 0; gap: 2px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); overflow: hidden; }
+        .settings-tabs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); min-width: 0; gap: 2px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); overflow: hidden; }
         .settings-tab { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border: 0; border-right: 1px solid var(--line); background: transparent; color: var(--muted); font: inherit; text-align: left; cursor: pointer; }
         .settings-tab-copy { display: grid; gap: 2px; min-width: 0; }
         .settings-tab-copy strong { color: var(--ink); font-size: var(--text-sm); font-weight: 650; line-height: 1.2; }
@@ -1557,7 +1673,7 @@ function defaultPlugins(): PluginEntry[] {
         .settings-tab:hover:not(.active) { background: color-mix(in srgb, var(--surface) 88%, var(--brand)); color: var(--ink); }
         .settings-tab:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
         .settings-step-no { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; border: 1px solid currentColor; font-size: var(--text-xs); font-weight: 700; flex: none; }
-        .settings-tab-content { border: 1px solid var(--line); border-top: 0; border-radius: 0 0 var(--radius-md) var(--radius-md); background: var(--surface); }
+        .settings-tab-content { border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); }
         .tab-panel { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: var(--space-4); padding: var(--space-5); }
         .section-hint { color: var(--muted); margin: 0; }
         .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
@@ -1638,14 +1754,13 @@ export class ConsumerSettingsPage implements OnInit {
     readonly tabs = [
         { id: 'profile', n: 1, label: 'Profile', hint: 'Identity & metadata' },
         { id: 'stack', n: 2, label: 'Stack', hint: 'Policy & versions' },
-        { id: 'hosts', n: 3, label: 'Host bindings', hint: 'Developer × host runtime' },
-        { id: 'workers', n: 4, label: 'Multi-Agent (Workers)', hint: 'Agent identities & roles' },
+        { id: 'hosts', n: 3, label: 'Host Bindings', hint: 'Developer × host runtime' },
+        { id: 'workers', n: 4, label: 'Agent Workers', hint: 'Agent identities & roles' },
         { id: 'knowledge', n: 5, label: 'Knowledge', hint: 'Knowledge & Artifact Governance' },
-        { id: 'plugins', n: 6, label: 'Plugins', hint: 'Registry & adapters' },
-        { id: 'observation', n: 7, label: 'Observatory', hint: 'Evidence capture' },
+        { id: 'observation', n: 6, label: 'Observatory', hint: 'Evidence capture' },
     ];
 
-    private readonly consumerId = this.route.snapshot.paramMap.get('id') || 'unknown';
+    readonly consumerId = this.route.snapshot.paramMap.get('id') || 'unknown';
     private readonly hydrated = signal(false);
     private readonly draftEffect = effect(() => {
         if (!this.hydrated()) return;
@@ -1722,6 +1837,12 @@ export class ConsumerSettingsPage implements OnInit {
     readonly selectedWorker = computed(() =>
         this.workers().find((worker) => worker.id === this.selectedWorkerId()) || this.workers()[0] || null
     );
+    readonly hostRuntimes = signal<HostRuntimeDto[]>([]);
+    readonly workerPlacements = signal<Record<string, WorkerPlacementDto>>({});
+    readonly placementDrafts = signal<Record<string, WorkerPlacementDto>>({});
+    readonly placementSaving = signal(false);
+    readonly placementNotice = signal('');
+    readonly placementError = signal('');
 
     readonly workerValidationErrors = computed(() => {
         const errors: string[] = [];
@@ -1787,6 +1908,9 @@ export class ConsumerSettingsPage implements OnInit {
     readonly newCodeGraphSource = signal('eso-native');
     readonly newCodeGraphProvider = signal('');
     readonly jiraEnabled = signal(false);
+    readonly providerRouting = signal<Record<'work' | 'design' | 'content', string>>({ work: 'md', design: 'md', content: 'md' });
+    readonly consumerPlugins = signal<any[]>([]);
+    readonly knowledgeProviderRecords = signal<any[]>([]);
     readonly jiraProject = signal('');
     readonly jiraSyncMode = signal('off');
     readonly sdlcEnabled = signal(false);
@@ -1823,6 +1947,7 @@ export class ConsumerSettingsPage implements OnInit {
     readonly manifestRelations = signal<string[]>(['derived_from', 'source_of_truth', 'human_sot', 'blocks', 'owns_kinds', 'references']);
     readonly manifestChecks = signal<string[]>(['links resolve', 'header shape', 'derived ⊆ source', 'no orphan document', 'kind has owner']);
     readonly selectedKnowledgeTopic = signal('pipeline');
+    readonly knowledgeSection = signal<'overview' | 'sources' | 'contract' | 'index' | 'manifest'>('overview');
     readonly openDiagram = signal<'main' | 'cr' | 'intent' | 'workers' | null>(null);
     readonly consent = signal(true);
     readonly events = signal<string[]>(['prompt.submitted', 'turn.completed', 'tool.called']);
@@ -1866,19 +1991,36 @@ export class ConsumerSettingsPage implements OnInit {
     ngOnInit(): void {
         const id = this.route.snapshot.paramMap.get('id')!;
         const requestedTab = this.route.snapshot.queryParamMap.get('tab');
+        if (requestedTab === 'plugins') {
+            void this.router.navigate(['/consumers', id, 'plugins'], { replaceUrl: true });
+            return;
+        }
         const tab = requestedTab === 'jira' ? 'knowledge' : requestedTab;
         if (tab && this.tabs.some((item) => item.id === tab)) this.activeTab.set(tab);
+        this.route.queryParamMap.subscribe((params) => {
+            const next = params.get('tab');
+            if (next && this.tabs.some((item) => item.id === next)) this.activeTab.set(next);
+        });
+        const requestedSection = this.route.snapshot.queryParamMap.get('section');
+        if (tab === 'knowledge' && ['overview', 'sources', 'contract', 'index', 'manifest'].includes(requestedSection || '')) {
+            this.knowledgeSection.set(requestedSection as 'overview' | 'sources' | 'contract' | 'index' | 'manifest');
+        }
         Promise.all([
             this.service.get(id),
             this.service.getMcp(id).catch(() => ({ consumerId: id, root: '', sources: [], providers: [], warnings: [] })),
             this.service.getHosts(id).catch(() => ({ consumerId: id, root: '', detected: [] })),
             this.service.getStackVersions(id).catch(() => ({ consumerId: id, versions: [] })),
+            this.service.getHostRuntimes().catch(() => [] as HostRuntimeDto[]),
         ])
-            .then(([profile, mcp, hosts, versions]) => {
+            .then(([profile, mcp, hosts, versions, hostRuntimes]) => {
                 this.mcpProviders.set(mcp.providers);
                 this.mcpSources.set(mcp.sources);
                 this.mcpWarnings.set(mcp.warnings);
                 this.detectedHosts.set(hosts.detected);
+                this.hostRuntimes.set(hostRuntimes);
+                if (!hostRuntimes.some((host) => host.hostId === this.newHostPluginId()) && hostRuntimes.length > 0) {
+                    this.newHostPluginId.set(hostRuntimes.find((host) => host.health !== 'offline')?.hostId || hostRuntimes[0].hostId);
+                }
                 this.remoteStackVersions.set(versions.versions.map((item: any) => ({
                     version: Number(item.version) || 1,
                     status: item.status,
@@ -2003,6 +2145,18 @@ export class ConsumerSettingsPage implements OnInit {
     }
 
     hostPlugins(): PluginEntry[] { return this.plugins().filter((plugin) => plugin.type === 'host'); }
+    activeHostRuntimes(): HostRuntimeDto[] { return this.hostRuntimes().filter((host) => host.health !== 'offline'); }
+    hostAvailable(hostId: string): boolean { return this.hostRuntimes().some((host) => host.hostId === hostId && host.health !== 'offline'); }
+    hostHealth(hostId: string): string { return this.hostRuntimes().find((host) => host.hostId === hostId)?.health || 'unregistered'; }
+    hostTypeFor(hostId: string): string {
+        const runtimeId = this.hostRuntimes().find((host) => host.hostId === hostId)?.runtimeId || hostId;
+        const value = String(runtimeId || hostId).toLowerCase();
+        if (value.includes('cursor')) return 'cursor';
+        if (value.includes('agy') || value.includes('antigravity')) return 'agy';
+        if (value.includes('dsh')) return 'dsh';
+        if (value.includes('claude')) return 'claude';
+        return hostId;
+    }
     enabledLayerCount(): number { return this.stackLayers().filter((layer) => layer.enabled).length; }
     agentLayers(): StackLayer[] { return this.stackLayers().filter((layer) => ['multiAgent', 'rules', 'skills', 'hooks'].includes(layer.id)); }
     knowledgeLayers(): StackLayer[] { return this.stackLayers().filter((layer) => ['memory', 'codeGraph', 'documentGraph', 'topology'].includes(layer.id)); }
@@ -2041,7 +2195,11 @@ export class ConsumerSettingsPage implements OnInit {
     mcpSource(providerId: string | undefined): string {
         return this.plugins().find((plugin) => plugin.id === providerId)?.mcpSource || 'host MCP config';
     }
-    hostLabel(pluginId: string): string { return this.plugins().find((plugin) => plugin.id === pluginId)?.label || pluginId; }
+    hostLabel(pluginId: string): string {
+        const host = this.hostRuntimes().find((item) => item.hostId === pluginId);
+        if (host) return `${host.hostId} · ${this.hostTypeFor(host.hostId)}`;
+        return this.plugins().find((plugin) => plugin.id === pluginId)?.label || pluginId;
+    }
 
     normalizeWorker(worker: any): WorkerEntry {
         const hostBindingIds = Array.isArray(worker?.hostBindingIds)
@@ -2368,6 +2526,8 @@ export class ConsumerSettingsPage implements OnInit {
         this.selectedWorkerId.set(id);
         this.newEvidenceValue.set('85');
         this.evidenceInputError.set('');
+        this.placementNotice.set('');
+        this.placementError.set('');
     }
 
     updateWorkerField<K extends 'name' | 'role' | 'layer' | 'scope' | 'escalation' | 'instructions'>(id: string, key: K, value: WorkerEntry[K]): void {
@@ -2610,6 +2770,7 @@ export class ConsumerSettingsPage implements OnInit {
     }
 
     manageDetectedHost(hostPluginId: string): void {
+        if (!this.hostAvailable(hostPluginId)) { this.error.set('No active host runtime. Register it in Hosts first.'); this.openHosts(); return; }
         const userId = this.developers()[0] || 'operator';
         this.developers.update((developers) => (developers.includes(userId) ? developers : [...developers, userId]));
         if (this.hostProfiles().some((profile) => profile.userId === userId && profile.hostPluginId === hostPluginId)) return;
@@ -2623,6 +2784,7 @@ export class ConsumerSettingsPage implements OnInit {
     }
 
     startNewBinding(): void {
+        if (this.activeHostRuntimes().length === 0) { this.error.set('Register an active host runtime in Hosts first.'); return; }
         this.editingProfile.set(null);
         this.addingHostFor.set('__new');
         this.bindingDeveloper.set('');
@@ -2633,6 +2795,7 @@ export class ConsumerSettingsPage implements OnInit {
     }
 
     startAddHost(userId: string): void {
+        if (this.activeHostRuntimes().length === 0) { this.error.set('Register an active host runtime in Hosts first.'); return; }
         this.editingProfile.set(null);
         this.addingHostFor.set(userId);
         this.bindingDeveloper.set(userId);
@@ -2692,6 +2855,7 @@ export class ConsumerSettingsPage implements OnInit {
     }
 
     saveHostBinding(): void {
+        if (!this.hostAvailable(this.newHostPluginId())) { this.error.set('Selected host is not registered or offline.'); return; }
         const editing = this.editingProfile();
         const developer = this.bindingDeveloper().trim();
         if (!developer) return;
@@ -2728,7 +2892,7 @@ export class ConsumerSettingsPage implements OnInit {
             const provider = source === 'market' ? this.marketProviders(id === 'memory' ? 'memory' : 'codeGraph')[0]?.id : undefined;
             return { source, provider };
         };
-        const memory = resolve('memory', hostPluginId === 'dsh');
+        const memory = resolve('memory', this.hostTypeFor(hostPluginId) === 'dsh');
         const codeGraph = resolve('codeGraph', false);
         return {
             memorySource: memory.source,
@@ -2775,6 +2939,7 @@ export class ConsumerSettingsPage implements OnInit {
     }
 
     mcpSourceForHost(hostPluginId: string): string {
+        const hostType = this.hostTypeFor(hostPluginId);
         const sources: Record<string, string> = {
             cursor: '.cursor/mcp.json',
             agy: '.agents/mcp_config.json',
@@ -2783,12 +2948,13 @@ export class ConsumerSettingsPage implements OnInit {
             paseo: 'plugin config',
             orca: 'plugin config',
         };
-        return sources[hostPluginId] || 'host config';
+        return sources[hostType] || sources[hostPluginId] || 'host config';
     }
 
     addHostToDeveloper(userId: string): void {
         const hostPluginId = this.newHostPluginId();
         if (!hostPluginId) return;
+        if (!this.hostAvailable(hostPluginId)) { this.error.set('Selected host is not registered or offline.'); return; }
         const exists = this.hostProfiles().some((profile) => profile.userId === userId && profile.hostPluginId === hostPluginId);
         if (exists) return;
         this.hostProfiles.update((profiles) => [...profiles, {
@@ -2824,6 +2990,20 @@ export class ConsumerSettingsPage implements OnInit {
     selectTab(id: string): void {
         this.activeTab.set(id);
         this.router.navigate([], { relativeTo: this.route, queryParams: { tab: id }, queryParamsHandling: 'merge', replaceUrl: true });
+    }
+
+    openConsumerPlugins(): void {
+        void this.router.navigate(['/consumers', this.consumerId, 'plugins']);
+    }
+
+    setProviderRoute(area: 'work' | 'design' | 'content', provider: string): void {
+        this.providerRouting.update((routing) => ({ ...routing, [area]: provider }));
+        if (area === 'work') this.jiraEnabled.set(provider === 'jira');
+    }
+
+    providerStatus(providerId: string): string {
+        const plugin = this.consumerPlugins().find((item) => item.id === providerId);
+        return plugin?.health || (plugin?.enabled ? 'enabled' : 'not configured');
     }
 
     openFlows(): void {
@@ -2878,6 +3058,27 @@ export class ConsumerSettingsPage implements OnInit {
         ];
     }
 
+    manifestFacetCount(): number { return this.manifestFacets().length; }
+    manifestRelationCount(): number { return this.manifestRelations().length; }
+    manifestCheckCount(): number { return this.manifestChecks().length; }
+
+    manifestSharedKeys(): number {
+        const ai = new Set(this.manifestAiHeaderKeys());
+        return this.manifestHumanHeaderKeys().filter((key) => ai.has(key)).length;
+    }
+
+    manifestPreview(): string {
+        return JSON.stringify({
+            enabled: this.manifestEnabled(),
+            path: this.manifestPath(),
+            human_header: this.manifestHumanHeaderKeys(),
+            ai_header: this.manifestAiHeaderKeys(),
+            facets: this.manifestFacets(),
+            relations: this.manifestRelations(),
+            checks: this.manifestChecks(),
+        }, null, 2);
+    }
+
     toggleManifestHumanHeader(key: string): void {
         this.manifestHumanHeaderKeys.update((items) => items.includes(key) ? items.filter((item) => item !== key) : [...items, key]);
     }
@@ -2916,7 +3117,7 @@ export class ConsumerSettingsPage implements OnInit {
             case 'pipeline-contract':
             case 'build-enforcement':
                 return [
-                    { label: 'Pain', value: 'P4 — decision before execution' },
+                    { label: 'Pain', value: 'P4 — decision before build' },
                     { label: 'Goal', value: 'G-K — verdict before write' },
                     { label: 'Objective', value: 'No objective registered — gap to close' },
                     { label: 'BRD', value: 'BR-10 · BR-11 · BR-12' },
@@ -3003,6 +3204,42 @@ export class ConsumerSettingsPage implements OnInit {
         }
     }
 
+    referenceSummary(): Array<{ id: string; label: string; count: number; lastSyncedAt: string | null }> {
+        const groups = new Map<string, any[]>();
+        for (const record of this.knowledgeProviderRecords()) {
+            const list = groups.get(record.provider_id) || [];
+            list.push(record);
+            groups.set(record.provider_id, list);
+        }
+        return [...groups.entries()].map(([id, records]) => {
+            const plugin = this.consumerPlugins().find((item) => item.id === id);
+            const dates = records.map((record) => record.synced_at).filter(Boolean).sort();
+            return {
+                id,
+                label: plugin?.label || id,
+                count: records.length,
+                lastSyncedAt: dates.length ? new Date(dates[dates.length - 1]).toLocaleString() : null,
+            };
+        });
+    }
+
+    providerRouteSummary(): string {
+        const routing = this.providerRouting();
+        const selected = [routing.work, routing.design, routing.content].filter((value) => value !== 'md');
+        return selected.length === 0 ? 'Files (.md)' : selected.join(' · ');
+    }
+
+    governanceEnabledCount(): number {
+        return [this.documentStatusRequired(), this.openRegisterRequired(), this.crossCheckRequired(), this.buildEnforcementRequired(), this.preflightRequired(), this.goNoGoRequired(), this.pipelineContractRequired()].filter(Boolean).length;
+    }
+
+    showKnowledgeSection(section: 'overview' | 'sources' | 'contract' | 'index' | 'manifest'): void {
+        this.knowledgeSection.set(section);
+        if (section === 'contract') this.selectedKnowledgeTopic.set('pipeline');
+        if (section === 'manifest') this.selectedKnowledgeTopic.set('agent-manifests');
+        if (section === 'sources') this.selectedKnowledgeTopic.set('knowledge-base');
+    }
+
     selectKnowledgeTopic(topic: string): void {
         this.selectedKnowledgeTopic.set(topic);
     }
@@ -3063,12 +3300,12 @@ export class ConsumerSettingsPage implements OnInit {
                 return {
                     eyebrow: 'Governance · preflight',
                     title: 'Preflight before a slice',
-                    description: 'Checks one slice before execution. It is narrower than Go/No-Go, which covers the whole increment.',
+                    description: 'Checks one slice before implementation. It is narrower than Go/No-Go, which covers the whole increment.',
                     items: [
                         { label: 'Scope', value: 'one slice / one work package' },
                         { label: 'Reads', value: 'document status · BIP/FIP · SCN · marks' },
                         { label: 'Pass', value: 'all required slots OK or P with an open id' },
-                        { label: 'Fail', value: 'no execution; gap must be named' },
+                        { label: 'Fail', value: 'no work proceeds; gap must be named' },
                     ],
                 };
             case 'go-no-go':
@@ -3293,17 +3530,162 @@ export class ConsumerSettingsPage implements OnInit {
     }
 
     private loadWorkerFiles(id: string): void {
-        this.service.getWorkers(id)
-            .then((config) => {
-                if (Array.isArray(config.workers) && config.workers.length > 0) {
+        Promise.all([
+            this.service.getWorkers(id).catch(() => null),
+            this.service.getWorkerPlacement(id).catch(() => [] as WorkerPlacementDto[]),
+        ])
+            .then(([config, placements]) => {
+                if (config && Array.isArray(config.workers) && config.workers.length > 0) {
                     this.workers.set(config.workers.map((worker) => this.normalizeWorker(worker)));
                 }
+                this.applyWorkerPlacements(placements);
                 this.pruneWorkerBindings();
                 this.loadWorkerImports();
             })
             .catch(() => {
                 // No worker files yet; the default formation remains visible.
             });
+    }
+
+    private applyWorkerPlacements(placements: WorkerPlacementDto[]): void {
+        const saved: Record<string, WorkerPlacementDto> = {};
+        for (const placement of placements) {
+            if (placement && typeof placement.workerId === 'string' && placement.workerId) {
+                saved[placement.workerId] = this.normalizePlacement(placement);
+            }
+        }
+        this.workerPlacements.set(saved);
+        // Pre-seed every worker's draft so template reads keep a stable object identity between
+        // change-detection passes (a new object per pass loops Material select writeValue).
+        const drafts: Record<string, WorkerPlacementDto> = {};
+        for (const worker of this.workers()) drafts[worker.id] = saved[worker.id] || this.defaultPlacement(worker.id);
+        this.placementDrafts.set(drafts);
+        this.placementNotice.set('');
+        this.placementError.set('');
+    }
+
+    private normalizePlacement(placement: WorkerPlacementDto): WorkerPlacementDto {
+        const tiers: WorkerModelTier[] = ['fast', 'balanced', 'reasoning'];
+        const fallbacks: WorkerPlacementFallback[] = ['block', 'next-host', 'next-tier'];
+        const nativeAgent: Record<string, string> = {};
+        if (placement.nativeAgent && typeof placement.nativeAgent === 'object') {
+            for (const [hostId, agent] of Object.entries(placement.nativeAgent)) {
+                if (typeof agent === 'string' && agent.trim()) nativeAgent[hostId] = agent.trim();
+            }
+        }
+        return {
+            workerId: placement.workerId,
+            allowedHosts: Array.isArray(placement.allowedHosts) ? placement.allowedHosts.filter((hostId): hostId is string => typeof hostId === 'string' && hostId.length > 0) : [],
+            modelTier: tiers.includes(placement.modelTier) ? placement.modelTier : 'balanced',
+            nativeAgent,
+            fallback: fallbacks.includes(placement.fallback) ? placement.fallback : 'block',
+        };
+    }
+
+    private readonly placementDefaults = new Map<string, WorkerPlacementDto>();
+
+    private defaultPlacement(workerId: string): WorkerPlacementDto {
+        const cached = this.placementDefaults.get(workerId);
+        if (cached) return cached;
+        const created: WorkerPlacementDto = { workerId, allowedHosts: [], modelTier: 'balanced', nativeAgent: {}, fallback: 'block' };
+        this.placementDefaults.set(workerId, created);
+        return created;
+    }
+
+    placementDraftFor(workerId: string): WorkerPlacementDto {
+        return this.placementDrafts()[workerId] || this.workerPlacements()[workerId] || this.defaultPlacement(workerId);
+    }
+
+    private placementSignature(placement: WorkerPlacementDto): string {
+        return JSON.stringify({
+            allowedHosts: [...placement.allowedHosts].sort(),
+            modelTier: placement.modelTier,
+            fallback: placement.fallback,
+            nativeAgent: Object.entries(placement.nativeAgent)
+                .filter(([hostId]) => placement.allowedHosts.includes(hostId))
+                .sort(([left], [right]) => left.localeCompare(right)),
+        });
+    }
+
+    placementDirty(workerId: string): boolean {
+        const saved = this.workerPlacements()[workerId] || this.defaultPlacement(workerId);
+        return this.placementSignature(this.placementDraftFor(workerId)) !== this.placementSignature(saved);
+    }
+
+    placementSummary(workerId: string): string {
+        const saved = this.workerPlacements()[workerId];
+        if (!saved) return 'No placement';
+        if (saved.allowedHosts.length === 0) return `Not placed · ${saved.modelTier}`;
+        return `${saved.allowedHosts.length} host${saved.allowedHosts.length === 1 ? '' : 's'} · ${saved.modelTier}`;
+    }
+
+    private patchPlacementDraft(workerId: string, patch: Partial<WorkerPlacementDto>): void {
+        this.placementDrafts.update((drafts) => ({
+            ...drafts,
+            [workerId]: { ...this.placementDraftFor(workerId), ...patch, workerId },
+        }));
+        this.placementNotice.set('');
+        this.placementError.set('');
+    }
+
+    setPlacementHosts(workerId: string, allowedHosts: string[]): void {
+        const current = this.placementDraftFor(workerId);
+        const nativeAgent: Record<string, string> = {};
+        for (const hostId of allowedHosts) {
+            const agent = current.nativeAgent[hostId];
+            if (agent) nativeAgent[hostId] = agent;
+        }
+        this.patchPlacementDraft(workerId, { allowedHosts: [...allowedHosts], nativeAgent });
+    }
+
+    setPlacementModelTier(workerId: string, tier: WorkerModelTier): void {
+        this.patchPlacementDraft(workerId, { modelTier: tier });
+    }
+
+    setPlacementFallback(workerId: string, fallback: WorkerPlacementFallback): void {
+        this.patchPlacementDraft(workerId, { fallback });
+    }
+
+    setNativeAgent(workerId: string, hostId: string, value: string): void {
+        const nativeAgent = { ...this.placementDraftFor(workerId).nativeAgent };
+        if (value.trim()) nativeAgent[hostId] = value.trim();
+        else delete nativeAgent[hostId];
+        this.patchPlacementDraft(workerId, { nativeAgent });
+    }
+
+    resetPlacement(workerId: string): void {
+        this.placementDrafts.update((drafts) => {
+            const next = { ...drafts };
+            delete next[workerId];
+            return next;
+        });
+        this.placementNotice.set('');
+        this.placementError.set('');
+    }
+
+    savePlacement(workerId: string): void {
+        if (this.placementSaving()) return;
+        const placement: WorkerPlacementDto = { ...this.placementDraftFor(workerId), workerId };
+        this.placementSaving.set(true);
+        this.placementNotice.set('');
+        this.placementError.set('');
+        this.service.saveWorkerPlacement(this.consumerId, workerId, placement)
+            .then((saved) => {
+                const normalized = this.normalizePlacement({ ...placement, ...saved, workerId });
+                this.workerPlacements.update((placements) => ({ ...placements, [workerId]: normalized }));
+                this.placementDrafts.update((drafts) => {
+                    const next = { ...drafts };
+                    delete next[workerId];
+                    return next;
+                });
+                this.placementNotice.set(`Host placement saved for ${this.workerName(workerId)}.`);
+            })
+            .catch((err) => this.placementError.set(err?.detail || err?.message || 'Could not save host placement'))
+            .finally(() => this.placementSaving.set(false));
+    }
+
+    openHosts(): void {
+        void this.router.navigate(['/hosts']);
     }
 
     save(navigateAfter = false): void {
@@ -3342,7 +3724,7 @@ export class ConsumerSettingsPage implements OnInit {
                         relations: this.manifestRelations(),
                         checks: this.manifestChecks(),
                     },
-                    providers: { jira: { enabled: this.jiraEnabled(), projectKey: this.jiraProject().trim(), syncMode: this.jiraSyncMode() } },
+                    providers: { jira: { enabled: this.jiraEnabled(), projectKey: this.jiraProject().trim(), syncMode: this.jiraSyncMode() }, routing: this.providerRouting() },
                 },
             },
         };
@@ -3413,6 +3795,12 @@ export class ConsumerSettingsPage implements OnInit {
         this.tags.set((settings.general?.tags || []).join(', '));
         this.description.set(prof.description || settings.general?.description || '');
         this.jiraEnabled.set(settings.jira?.enabled ?? false);
+        const routing = settings.knowledge?.providers?.routing;
+        if (routing && typeof routing === 'object') {
+            this.providerRouting.set({ work: routing.work || 'md', design: routing.design || 'md', content: routing.content || 'md' });
+        } else {
+            this.providerRouting.set({ work: this.jiraEnabled() ? 'jira' : 'md', design: 'md', content: 'md' });
+        }
         this.jiraProject.set(settings.jira?.projectKey || '');
         this.jiraSyncMode.set(settings.jira?.syncMode || 'off');
         const knowledge = settings.knowledge || {};
@@ -3491,6 +3879,8 @@ export class ConsumerSettingsPage implements OnInit {
         void this.loadDefaultFlow(profile.id);
         void this.loadRuleFiles(profile.id);
         void this.loadFlowSummaries(profile.id);
+        this.service.getConsumerPlugins(profile.id).then((plugins) => this.consumerPlugins.set(plugins)).catch(() => this.consumerPlugins.set([]));
+        this.service.getProviderRecords(profile.id).then((records) => this.knowledgeProviderRecords.set(records)).catch(() => this.knowledgeProviderRecords.set([]));
         void this.loadKnowledgeIndex(profile.id);
     }
 

@@ -160,6 +160,56 @@ export interface WorkerSourceStatusDto {
     drift: Array<{ file: string; kind: string }>;
 }
 
+export interface PluginPropertyDto {
+    type: string;
+    label: string;
+    enum?: string[];
+    format?: string;
+    secret?: boolean;
+    help?: string;
+}
+
+export interface PluginManifestDto {
+    id: string;
+    label: string;
+    type: 'host' | 'provider' | 'capability' | 'source';
+    category: 'host' | 'work' | 'design' | 'content' | 'other';
+    version: string;
+    capabilities: string[];
+    status: 'installed' | 'available';
+    installed: boolean;
+    description: string;
+    source?: string;
+    configSchema: { required: string[]; properties: Record<string, PluginPropertyDto> };
+}
+
+export interface JiraProjectDto {
+    id: string;
+    key: string;
+    name: string;
+    type: string;
+}
+
+export interface ProviderRecordDto {
+    consumer_id: string;
+    provider_id: string;
+    external_id: string;
+    kind: string;
+    title: string;
+    status: string | null;
+    url: string | null;
+    payload: any;
+    synced_at: string;
+}
+
+export interface ConsumerPluginDto extends PluginManifestDto {
+    enabled: boolean;
+    config: Record<string, any>;
+    secretRefs: Record<string, string>;
+    health: string;
+    lastCheckedAt: string | null;
+}
+
 export interface FlowNodeDto {
     workerId: string;
     x: number;
@@ -353,6 +403,36 @@ export interface WorkerConfigDto {
     bindings?: WorkerBindingDto[];
 }
 
+export type HostRuntimeKind = 'ide-native' | 'cli' | 'acp';
+
+export type HostRuntimeHealth = 'unknown' | 'healthy' | 'degraded' | 'offline';
+
+/** A globally registered host runtime. Hosts are shared across consumers and carry no workspace. */
+export interface HostRuntimeDto {
+    hostId: string;
+    runtimeId: string;
+    runtimeKind: HostRuntimeKind;
+    models: string[];
+    defaultModel?: string;
+    leadEligible: boolean;
+    health: HostRuntimeHealth;
+    lastHeartbeat: string | null;
+}
+
+export type WorkerModelTier = 'fast' | 'balanced' | 'reasoning';
+
+export type WorkerPlacementFallback = 'block' | 'next-host' | 'next-tier';
+
+/** How a worker is placed: allowed host runtimes, model tier, native agent map, fallback. */
+export interface WorkerPlacementDto {
+    workerId: string;
+    allowedHosts: string[];
+    modelTier: WorkerModelTier;
+    /** hostId → host-native agent name, e.g. `{ host-a: 'cursor', host-b: 'agy' }`. */
+    nativeAgent: Record<string, string>;
+    fallback: WorkerPlacementFallback;
+}
+
 export interface ConsumerListResponse {
     items: ConsumerSummary[];
 }
@@ -436,6 +516,11 @@ export interface FsBrowseResponse {
     path: string;
     parent: string | null;
     directories: FsDirectoryEntry[];
+}
+
+export interface FsResolveDirectoryResponse {
+    name: string;
+    matches: string[];
 }
 
 export interface McpProviderDto {

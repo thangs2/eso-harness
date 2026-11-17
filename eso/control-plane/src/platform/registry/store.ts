@@ -5,6 +5,8 @@ import {
     CONSUMER_ID_PATTERN,
     CONSUMER_TABLE,
     CONSUMER_EVENT_TABLE,
+    HOST_RUNTIME_DDL,
+    HOST_RUNTIME_LEGACY_TABLE,
     PLATFORM_DDL,
     quoteSchema,
     schemaNameFor,
@@ -47,6 +49,13 @@ export interface PlatformStore {
     listEvents(consumerId: string, limit?: number): Promise<ConsumerEvent[]>;
     listStackVersions(consumerId: string): Promise<StackVersionRecord[]>;
     replaceStackVersions(consumerId: string, versions: StackVersionRecord[]): Promise<void>;
+    listHostRuntimes(): Promise<any[]>;
+    getHostRuntime(hostId: string): Promise<any>;
+    upsertHostRuntime(runtime: any): Promise<any>;
+    heartbeatHostRuntime(hostId: string, patch: { health?: string; models?: string[]; defaultModel?: string }): Promise<any>;
+    listWorkerHostPolicies(consumerId: string): Promise<any[]>;
+    getWorkerHostPolicy(consumerId: string, workerId: string): Promise<any>;
+    upsertWorkerHostPolicy(consumerId: string, workerId: string, config: any): Promise<any>;
     replaceWorkerIndex(
         consumerId: string,
         workers: Array<{
@@ -81,6 +90,13 @@ export interface PlatformStore {
     recordEdgeClaim(consumerId: string, claim: any): Promise<void>;
     knowledgeEdgeClaims(consumerId: string, edgeId?: string): Promise<any[]>;
     knowledgeExternalRefs(consumerId: string, docId?: string): Promise<any[]>;
+    listConsumerPlugins(consumerId: string): Promise<any[]>;
+    upsertConsumerPlugin(consumerId: string, pluginId: string, patch: any): Promise<any>;
+    listPluginManifests(): Promise<any[]>;
+    upsertPluginManifest(manifest: any): Promise<any>;
+    deletePluginManifest(id: string): Promise<void>;
+    replaceProviderRecords(consumerId: string, providerId: string, records: any[]): Promise<void>;
+    listProviderRecords(consumerId: string, providerId?: string): Promise<any[]>;
     replaceKnowledgeIndex(consumerId: string, payload: any): Promise<void>;
     knowledgeSummary(consumerId: string): Promise<any>;
     knowledgeDocs(consumerId: string, query?: string, limit?: number): Promise<any[]>;
@@ -102,9 +118,6 @@ export interface PlatformStore {
     listWorkerHandoffs(consumerId: string, workerId?: string, limit?: number): Promise<any[]>;
     recordWorkerImport(consumerId: string, record: any): Promise<void>;
     listWorkerImports(consumerId: string, limit?: number): Promise<any[]>;
-    createWorkerRun(consumerId: string, run: any): Promise<void>;
-    updateWorkerRun(consumerId: string, runId: string, patch: any): Promise<void>;
-    listWorkerRuns(consumerId: string, workerId?: string, limit?: number): Promise<any[]>;
     withSearchPath<T>(consumerId: string, fn: (tx: PlatformStore) => Promise<T>): Promise<T>;
     getSearchPath(): string | null;
     /** Test-only fault hook (memory store). */
@@ -128,6 +141,8 @@ export class MemoryPlatformStore implements PlatformStore {
     private consumers = new Map<string, ConsumerRecord>();
     private events: ConsumerEvent[] = [];
     private stackVersions = new Map<string, StackVersionRecord[]>();
+    private hostRuntimes = new Map<string, any>();
+    private workerHostPolicies = new Map<string, any>();
     private schemas = new Set<string>();
     private nextEventId = 1;
     private searchPath: string | null = null;
@@ -152,6 +167,8 @@ export class MemoryPlatformStore implements PlatformStore {
             consumers: clone(this.consumers),
             events: clone(this.events),
             stackVersions: new Map([...this.stackVersions].map(([key, value]) => [key, clone(value)])),
+            hostRuntimes: new Map([...this.hostRuntimes].map(([key, value]) => [key, clone(value)])),
+            workerHostPolicies: new Map([...this.workerHostPolicies].map(([key, value]) => [key, clone(value)])),
             schemas: new Set(this.schemas),
             nextEventId: this.nextEventId,
             searchPath: this.searchPath,
@@ -162,6 +179,8 @@ export class MemoryPlatformStore implements PlatformStore {
             this.consumers = snapshot.consumers;
             this.events = snapshot.events;
             this.stackVersions = snapshot.stackVersions;
+            this.hostRuntimes = snapshot.hostRuntimes;
+            this.workerHostPolicies = snapshot.workerHostPolicies;
             this.schemas = snapshot.schemas;
             this.nextEventId = snapshot.nextEventId;
             this.searchPath = snapshot.searchPath;
@@ -254,6 +273,79 @@ export class MemoryPlatformStore implements PlatformStore {
         this.stackVersions.set(consumerId, clone(versions).sort((a, b) => a.version - b.version));
     }
 
+    async listHostRuntimes(): Promise<any[]> {
+        return [...this.hostRuntimes.values()]
+            .sort((a, b) => String(a.host_id).localeCompare(String(b.host_id)))
+            .map((row) => clone(row));
+    }
+
+    async getHostRuntime(hostId: string): Promise<any> {
+        const row = this.hostRuntimes.get(hostId);
+        return row ? clone(row) : null;
+    }
+
+    async upsertHostRuntime(runtime: any): Promise<any> {
+        const key = String(runtime.hostId);
+        const current = this.hostRuntimes.get(key);
+        const now = new Date().toISOString();
+        const row = {
+            host_id: key,
+            runtime_id: runtime.runtimeId,
+            runtime_kind: runtime.runtimeKind,
+            models: clone(runtime.models || []),
+            default_model: runtime.defaultModel || '',
+            lead_eligible: Boolean(runtime.leadEligible),
+            health: runtime.health || current?.health || 'unknown',
+            last_heartbeat: current?.last_heartbeat ?? null,
+            created_at: current?.created_at ?? now,
+            updated_at: now,
+        };
+        this.hostRuntimes.set(key, row);
+        return clone(row);
+    }
+
+    async heartbeatHostRuntime(hostId: string, patch: { health?: string; models?: string[]; defaultModel?: string }): Promise<any> {
+        const current = this.hostRuntimes.get(hostId);
+        if (!current) return null;
+        const now = new Date().toISOString();
+        const row = {
+            ...current,
+            health: patch.health || current.health,
+            models: patch.models ? clone(patch.models) : current.models,
+            default_model: patch.defaultModel !== undefined ? patch.defaultModel : current.default_model,
+            last_heartbeat: now,
+            updated_at: now,
+        };
+        this.hostRuntimes.set(hostId, row);
+        return clone(row);
+    }
+
+    async listWorkerHostPolicies(consumerId: string): Promise<any[]> {
+        return [...this.workerHostPolicies.values()]
+            .filter((row) => row.consumer_id === consumerId)
+            .sort((a, b) => String(a.worker_id).localeCompare(String(b.worker_id)))
+            .map((row) => clone(row));
+    }
+
+    async getWorkerHostPolicy(consumerId: string, workerId: string): Promise<any> {
+        const row = this.workerHostPolicies.get(`${consumerId}:${workerId}`);
+        return row ? clone(row) : null;
+    }
+
+    async upsertWorkerHostPolicy(consumerId: string, workerId: string, config: any): Promise<any> {
+        const row = {
+            consumer_id: consumerId,
+            worker_id: workerId,
+            allowed_hosts: clone(config.allowedHosts || []),
+            model_tier: config.modelTier || 'balanced',
+            native_agent: clone(config.nativeAgent || {}),
+            fallback: config.fallback || 'block',
+            updated_at: new Date().toISOString(),
+        };
+        this.workerHostPolicies.set(`${consumerId}:${workerId}`, row);
+        return clone(row);
+    }
+
     async replaceWorkerIndex(
         _consumerId: string,
         _workers: Array<{
@@ -293,6 +385,20 @@ export class MemoryPlatformStore implements PlatformStore {
     async knowledgeExternalRefs(_consumerId: string, _docId?: string): Promise<any[]> {
         return [];
     }
+
+    async listConsumerPlugins(_consumerId: string): Promise<any[]> {
+        return [];
+    }
+
+    async upsertConsumerPlugin(_consumerId: string, _pluginId: string, patch: any): Promise<any> {
+        return patch;
+    }
+
+    async listPluginManifests(): Promise<any[]> { return []; }
+    async upsertPluginManifest(manifest: any): Promise<any> { return manifest; }
+    async deletePluginManifest(_id: string): Promise<void> {}
+    async replaceProviderRecords(_consumerId: string, _providerId: string, _records: any[]): Promise<void> {}
+    async listProviderRecords(_consumerId: string, _providerId?: string): Promise<any[]> { return []; }
 
     async replaceKnowledgeIndex(_consumerId: string, _payload: any): Promise<void> {
         // Files are canonical; the memory store has no knowledge index surface.
@@ -364,14 +470,6 @@ export class MemoryPlatformStore implements PlatformStore {
         return [];
     }
 
-    async createWorkerRun(_consumerId: string, _run: any): Promise<void> {}
-
-    async updateWorkerRun(_consumerId: string, _runId: string, _patch: any): Promise<void> {}
-
-    async listWorkerRuns(_consumerId: string, _workerId?: string, _limit?: number): Promise<any[]> {
-        return [];
-    }
-
     async recordWorkerImport(_consumerId: string, _record: any): Promise<void> {}
 
     async listWorkerImports(_consumerId: string, _limit?: number): Promise<any[]> {
@@ -423,9 +521,68 @@ export class BunSqlPlatformStore implements PlatformStore {
     }
 
     async ensurePlatformSchema(): Promise<void> {
+        // Migrate the legacy consumer-scoped host registry before the global DDL runs, otherwise
+        // CREATE TABLE IF NOT EXISTS would keep the old shape. Fresh databases are a no-op.
+        await this.migrateHostRuntimeToGlobal();
         for (const statement of PLATFORM_DDL) {
             await this.sql.unsafe(statement);
         }
+    }
+
+    /**
+     * One-way, idempotent migration `platform.host_runtime` from consumer-scoped to global.
+     *
+     * Order matters: rename legacy -> create global -> copy newest row per host -> drop legacy.
+     * Runs in a transaction so an interrupted start cannot leave a half-migrated pair of tables.
+     * Fresh databases (no table yet) and already-global databases are no-ops.
+     */
+    private async migrateHostRuntimeToGlobal(): Promise<void> {
+        const columns = await this.sql.unsafe(
+            `SELECT column_name FROM information_schema.columns
+             WHERE table_schema = 'platform' AND table_name = 'host_runtime'`
+        );
+        const leftover = await this.sql.unsafe(`SELECT to_regclass('${HOST_RUNTIME_LEGACY_TABLE}') AS oid`);
+        const hasLegacyTable = Boolean(leftover[0]?.oid);
+        const hasConsumerColumn = columns.some((row: any) => row.column_name === 'consumer_id');
+        if (!columns.length && !hasLegacyTable) return;
+        if (!hasConsumerColumn && !hasLegacyTable) return;
+
+        const legacyColumns = hasConsumerColumn
+            ? new Set(columns.map((row: any) => row.column_name))
+            : new Set((await this.sql.unsafe(
+                `SELECT column_name FROM information_schema.columns
+                 WHERE table_schema = 'platform' AND table_name = 'host_runtime_legacy'`
+            )).map((row: any) => row.column_name));
+        const insert = this.hostRuntimeMigrationInsert(legacyColumns.has('default_model'));
+
+        await this.sql.begin(async (tx: any) => {
+            if (hasConsumerColumn) {
+                // A leftover legacy table can only come from a manual/partial run; the live
+                // consumer-scoped table is authoritative, so clear the stale staging name first.
+                await tx.unsafe(`DROP TABLE IF EXISTS ${HOST_RUNTIME_LEGACY_TABLE}`);
+                await tx.unsafe(`ALTER TABLE platform.host_runtime RENAME TO host_runtime_legacy`);
+            }
+            await tx.unsafe(HOST_RUNTIME_DDL);
+            if (hasLegacyTable || hasConsumerColumn) {
+                await tx.unsafe(insert);
+                await tx.unsafe(`DROP TABLE ${HOST_RUNTIME_LEGACY_TABLE}`);
+            }
+        });
+    }
+
+    /** Copy legacy rows into the global table, newest row per host wins, existing hosts untouched. */
+    private hostRuntimeMigrationInsert(hasDefaultModel: boolean): string {
+        const defaultModel = hasDefaultModel ? `COALESCE(default_model, '')` : `''`;
+        return `INSERT INTO platform.host_runtime
+                (host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,created_at,updated_at)
+                SELECT DISTINCT ON (host_id)
+                       host_id, runtime_id, runtime_kind,
+                       COALESCE(models, '[]'::jsonb), ${defaultModel},
+                       COALESCE(lead_eligible, false), COALESCE(health, 'unknown'),
+                       last_heartbeat, COALESCE(created_at, now()), COALESCE(updated_at, now())
+                FROM ${HOST_RUNTIME_LEGACY_TABLE}
+                ORDER BY host_id, updated_at DESC NULLS LAST
+                ON CONFLICT (host_id) DO NOTHING`;
     }
 
     async tableExists(table: 'platform.consumer' | 'platform.consumer_event'): Promise<boolean> {
@@ -461,7 +618,7 @@ export class BunSqlPlatformStore implements PlatformStore {
         await this.sql.unsafe(`SET search_path TO ${schema}, public`);
         try {
             for (const statement of ddl) await this.sql.unsafe(statement);
-            await this.sql.unsafe(`ALTER TABLE knowledge_worker_event ADD COLUMN IF NOT EXISTS trace_id text, ADD COLUMN IF NOT EXISTS run_id text, ADD COLUMN IF NOT EXISTS span_id text, ADD COLUMN IF NOT EXISTS parent_span_id text, ADD COLUMN IF NOT EXISTS host_binding_id text, ADD COLUMN IF NOT EXISTS flow_edge_id text, ADD COLUMN IF NOT EXISTS duration_ms integer`);
+            await this.sql.unsafe(`ALTER TABLE knowledge_worker_event ADD COLUMN IF NOT EXISTS trace_id text, ADD COLUMN IF NOT EXISTS span_id text, ADD COLUMN IF NOT EXISTS parent_span_id text, ADD COLUMN IF NOT EXISTS host_binding_id text, ADD COLUMN IF NOT EXISTS flow_edge_id text, ADD COLUMN IF NOT EXISTS duration_ms integer`);
         } finally {
             await this.sql.unsafe('SET search_path TO public');
         }
@@ -621,6 +778,89 @@ export class BunSqlPlatformStore implements PlatformStore {
         });
     }
 
+    async listHostRuntimes(): Promise<any[]> {
+        return await this.sql.unsafe(
+            `SELECT host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,created_at,updated_at
+             FROM platform.host_runtime ORDER BY host_id`
+        );
+    }
+
+    async getHostRuntime(hostId: string): Promise<any> {
+        const rows = await this.sql.unsafe(
+            `SELECT host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,created_at,updated_at
+             FROM platform.host_runtime WHERE host_id=$1`,
+            [hostId]
+        );
+        return rows[0] || null;
+    }
+
+    async upsertHostRuntime(runtime: any): Promise<any> {
+        const rows = await this.sql.unsafe(
+            `INSERT INTO platform.host_runtime
+             (host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,updated_at)
+             VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7,NULL,now())
+             ON CONFLICT (host_id) DO UPDATE SET
+               runtime_id=EXCLUDED.runtime_id, runtime_kind=EXCLUDED.runtime_kind,
+               models=EXCLUDED.models, default_model=EXCLUDED.default_model,
+               lead_eligible=EXCLUDED.lead_eligible,
+               health=CASE WHEN $8 THEN EXCLUDED.health ELSE platform.host_runtime.health END,
+               updated_at=now()
+             RETURNING host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,created_at,updated_at`,
+            [runtime.hostId, runtime.runtimeId, runtime.runtimeKind, JSON.stringify(runtime.models || []),
+             runtime.defaultModel || '', Boolean(runtime.leadEligible), runtime.health || 'unknown',
+             Boolean(runtime.healthExplicit)]
+        );
+        return rows[0] || null;
+    }
+
+    async heartbeatHostRuntime(hostId: string, patch: { health?: string; models?: string[]; defaultModel?: string }): Promise<any> {
+        const rows = await this.sql.unsafe(
+            `UPDATE platform.host_runtime
+             SET health=COALESCE($2,health),
+                 models=COALESCE($3::jsonb,models),
+                 default_model=COALESCE($4,default_model),
+                 last_heartbeat=now(), updated_at=now()
+             WHERE host_id=$1
+             RETURNING host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,created_at,updated_at`,
+            [hostId, patch.health || null, patch.models ? JSON.stringify(patch.models) : null, patch.defaultModel !== undefined ? patch.defaultModel : null]
+        );
+        return rows[0] || null;
+    }
+
+    async listWorkerHostPolicies(consumerId: string): Promise<any[]> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        return await this.sql.unsafe(
+            `SELECT worker_id,allowed_hosts,model_tier,native_agent,fallback,updated_at
+             FROM ${schema}.knowledge_worker_host_policy ORDER BY worker_id`
+        );
+    }
+
+    async getWorkerHostPolicy(consumerId: string, workerId: string): Promise<any> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        const rows = await this.sql.unsafe(
+            `SELECT worker_id,allowed_hosts,model_tier,native_agent,fallback,updated_at
+             FROM ${schema}.knowledge_worker_host_policy WHERE worker_id=$1`,
+            [workerId]
+        );
+        return rows[0] || null;
+    }
+
+    async upsertWorkerHostPolicy(consumerId: string, workerId: string, config: any): Promise<any> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        const rows = await this.sql.unsafe(
+            `INSERT INTO ${schema}.knowledge_worker_host_policy
+             (worker_id,allowed_hosts,model_tier,native_agent,fallback,updated_at)
+             VALUES ($1,$2::text[],$3,$4::jsonb,$5,now())
+             ON CONFLICT (worker_id) DO UPDATE SET
+               allowed_hosts=EXCLUDED.allowed_hosts, model_tier=EXCLUDED.model_tier,
+               native_agent=EXCLUDED.native_agent, fallback=EXCLUDED.fallback, updated_at=now()
+             RETURNING worker_id,allowed_hosts,model_tier,native_agent,fallback,updated_at`,
+            [workerId, pgTextArray(config.allowedHosts || []), config.modelTier || 'balanced',
+             JSON.stringify(config.nativeAgent || {}), config.fallback || 'block']
+        );
+        return rows[0] || null;
+    }
+
     async replaceWorkerIndex(
         consumerId: string,
         workers: Array<{
@@ -734,6 +974,83 @@ export class BunSqlPlatformStore implements PlatformStore {
         );
     }
 
+    async listConsumerPlugins(consumerId: string): Promise<any[]> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        const rows = await this.sql.unsafe(
+            `SELECT consumer_id,plugin_id,enabled,config,secret_refs,health,last_checked_at,updated_at
+             FROM platform.consumer_plugin WHERE consumer_id=$1 ORDER BY plugin_id`,
+            [consumerId]
+        );
+        return rows;
+    }
+
+    async upsertConsumerPlugin(consumerId: string, pluginId: string, patch: any): Promise<any> {
+        const rows = await this.sql.unsafe(
+            `INSERT INTO platform.consumer_plugin
+             (consumer_id,plugin_id,enabled,config,secret_refs,health,last_checked_at,updated_at)
+             VALUES ($1,$2,$3,$4::jsonb,$5::jsonb,$6,now(),now())
+             ON CONFLICT (consumer_id,plugin_id) DO UPDATE SET
+               enabled=EXCLUDED.enabled, config=EXCLUDED.config, secret_refs=EXCLUDED.secret_refs,
+               health=EXCLUDED.health, last_checked_at=now(), updated_at=now()
+             RETURNING consumer_id,plugin_id,enabled,config,secret_refs,health,last_checked_at,updated_at`,
+            [consumerId, pluginId, Boolean(patch.enabled), JSON.stringify(patch.config || {}), JSON.stringify(patch.secretRefs || {}), patch.health || 'unknown']
+        );
+        return rows[0] || null;
+    }
+
+    async listPluginManifests(): Promise<any[]> {
+        return await this.sql.unsafe(
+            `SELECT id,label,type,category,version,capabilities,status,description,config_schema,source,installed_at,updated_at
+             FROM platform.plugin_manifest ORDER BY type,category,label`
+        );
+    }
+
+    async upsertPluginManifest(manifest: any): Promise<any> {
+        const rows = await this.sql.unsafe(
+            `INSERT INTO platform.plugin_manifest
+             (id,label,type,category,version,capabilities,status,description,config_schema,source,updated_at)
+             VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9::jsonb,$10,now())
+             ON CONFLICT (id) DO UPDATE SET
+               label=EXCLUDED.label, type=EXCLUDED.type, category=EXCLUDED.category, version=EXCLUDED.version,
+               capabilities=EXCLUDED.capabilities, status=EXCLUDED.status, description=EXCLUDED.description,
+               config_schema=EXCLUDED.config_schema, source=EXCLUDED.source, updated_at=now()
+             RETURNING *`,
+            [manifest.id, manifest.label, manifest.type, manifest.category || 'other', manifest.version || '1.0.0',
+             JSON.stringify(manifest.capabilities || []), manifest.status || 'installed', manifest.description || '',
+             JSON.stringify(manifest.configSchema || {}), manifest.source || 'custom']
+        );
+        return rows[0] || null;
+    }
+
+    async deletePluginManifest(id: string): Promise<void> {
+        await this.sql.unsafe(`DELETE FROM platform.plugin_manifest WHERE id=$1`, [id]);
+    }
+
+    async replaceProviderRecords(consumerId: string, providerId: string, records: any[]): Promise<void> {
+        await this.sql.begin(async (tx: any) => {
+            await tx.unsafe(`DELETE FROM platform.provider_record WHERE consumer_id=$1 AND provider_id=$2`, [consumerId, providerId]);
+            for (const record of records) {
+                await tx.unsafe(
+                    `INSERT INTO platform.provider_record
+                     (consumer_id,provider_id,external_id,kind,title,status,url,payload)
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb)`,
+                    [consumerId, providerId, record.externalId, record.kind, record.title, record.status || null,
+                     record.url || null, JSON.stringify(record.payload || {})]
+                );
+            }
+        });
+    }
+
+    async listProviderRecords(consumerId: string, providerId?: string): Promise<any[]> {
+        return await this.sql.unsafe(
+            `SELECT consumer_id,provider_id,external_id,kind,title,status,url,payload,synced_at
+             FROM platform.provider_record
+             WHERE consumer_id=$1 AND ($2::text IS NULL OR provider_id=$2)
+             ORDER BY provider_id, kind, external_id`,
+            [consumerId, providerId || null]
+        );
+    }
+
     async replaceKnowledgeIndex(consumerId: string, payload: any): Promise<void> {
         const schema = quoteSchema(schemaNameFor(consumerId));
         const txBody = async (tx: any) => {
@@ -752,7 +1069,7 @@ export class BunSqlPlatformStore implements PlatformStore {
                 WHERE embedding IS NOT NULL AND content_hash IS NOT NULL`);
             await tx.unsafe(`DELETE FROM knowledge_doc_chunk`);
             await tx.unsafe(`DELETE FROM knowledge_doc`);
-            await tx.unsafe(`DELETE FROM knowledge_index_run`);
+            await tx.unsafe(`DELETE FROM knowledge_index_build`);
 
             for (const type of payload.types || []) {
                 await tx.unsafe(
@@ -834,7 +1151,7 @@ export class BunSqlPlatformStore implements PlatformStore {
             }
             for (const run of payload.runs || []) {
                 await tx.unsafe(
-                    `INSERT INTO knowledge_index_run (build_id,source_hash,status,stats,started_at,finished_at)
+                    `INSERT INTO knowledge_index_build (build_id,source_hash,status,stats,started_at,finished_at)
                      VALUES ($1,$2,$3,$4::jsonb,now(),now())`,
                     [run.buildId, run.sourceHash, run.status, JSON.stringify(run.stats || {})]
                 );
@@ -870,11 +1187,11 @@ export class BunSqlPlatformStore implements PlatformStore {
         const schema = quoteSchema(schemaNameFor(consumerId));
         await this.sql.unsafe(
             `INSERT INTO ${schema}.knowledge_worker_event
-             (worker_id,event,verb,path,decision,reasons,evidence,trace_id,run_id,span_id,parent_span_id,host_binding_id,flow_edge_id,duration_ms)
-             VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,$9,$10,$11,$12,$13,$14)`,
+             (worker_id,event,verb,path,decision,reasons,evidence,trace_id,span_id,parent_span_id,host_binding_id,flow_edge_id,duration_ms)
+             VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,$9,$10,$11,$12,$13)`,
             [event.workerId, event.event, event.verb || null, event.path || null,
              event.decision, JSON.stringify(event.reasons || []), JSON.stringify(event.evidence || []),
-             event.traceId || null, event.runId || null, event.spanId || null, event.parentSpanId || null,
+             event.traceId || null, event.spanId || null, event.parentSpanId || null,
              event.hostBindingId || null, event.flowEdgeId || null, event.durationMs ?? null]
         );
     }
@@ -897,37 +1214,6 @@ export class BunSqlPlatformStore implements PlatformStore {
             `SELECT import_id,source_file,source_hash,source_type,worker_id,action,detail,imported_at
              FROM ${schema}.knowledge_worker_import ORDER BY imported_at DESC LIMIT $1`,
             [cap]
-        );
-    }
-
-    async createWorkerRun(consumerId: string, run: any): Promise<void> {
-        const schema = quoteSchema(schemaNameFor(consumerId));
-        await this.sql.unsafe(
-            `INSERT INTO ${schema}.knowledge_worker_run
-             (run_id,worker_id,host_binding_id,status,pid,command)
-             VALUES ($1,$2,$3,$4,$5,$6)`,
-            [run.runId, run.workerId, run.hostBindingId, run.status, run.pid || null, run.command || null]
-        );
-    }
-
-    async updateWorkerRun(consumerId: string, runId: string, patch: any): Promise<void> {
-        const schema = quoteSchema(schemaNameFor(consumerId));
-        await this.sql.unsafe(
-            `UPDATE ${schema}.knowledge_worker_run
-             SET status=$2, ended_at=now() WHERE run_id=$1`,
-            [runId, patch.status]
-        );
-    }
-
-    async listWorkerRuns(consumerId: string, workerId?: string, limit = 50): Promise<any[]> {
-        const schema = quoteSchema(schemaNameFor(consumerId));
-        const cap = Math.max(1, Math.min(Number(limit) || 50, 200));
-        return await this.sql.unsafe(
-            `SELECT run_id,worker_id,host_binding_id,status,pid,command,started_at,ended_at
-             FROM ${schema}.knowledge_worker_run
-             WHERE ($1::text IS NULL OR worker_id=$1)
-             ORDER BY started_at DESC LIMIT $2`,
-            [workerId || null, cap]
         );
     }
 
@@ -970,7 +1256,7 @@ export class BunSqlPlatformStore implements PlatformStore {
         const schema = quoteSchema(schemaNameFor(consumerId));
         const cap = Math.max(1, Math.min(Number(limit) || 50, 200));
         return await this.sql.unsafe(
-            `SELECT event_id,worker_id,event,verb,path,decision,reasons,evidence,trace_id,run_id,span_id,parent_span_id,host_binding_id,flow_edge_id,duration_ms,created_at
+            `SELECT event_id,worker_id,event,verb,path,decision,reasons,evidence,trace_id,span_id,parent_span_id,host_binding_id,flow_edge_id,duration_ms,created_at
              FROM ${schema}.knowledge_worker_event
              WHERE ($1::text IS NULL OR worker_id=$1)
              ORDER BY created_at DESC,event_id DESC LIMIT $2`,

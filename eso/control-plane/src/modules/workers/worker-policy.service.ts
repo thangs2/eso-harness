@@ -165,59 +165,6 @@ export class WorkerPolicyService {
         return { ...check, target: rel, written: true };
     }
 
-    async spawn(consumerId: string, workerId: string, hostBindingId: string): Promise<any> {
-        const id = assertConsumerId(consumerId);
-        const worker = await this.store.knowledgeWorker(id, workerId);
-        const reasons: string[] = [];
-        if (!worker) reasons.push('WORKER_NOT_FOUND');
-        if (worker && worker.status !== 'active') reasons.push(`WORKER_NOT_ACTIVE:${worker.status}`);
-        const placements: string[] = Array.isArray(worker?.host_binding_ids) ? worker.host_binding_ids : [];
-        if (!hostBindingId) reasons.push('HOST_BINDING_REQUIRED');
-        else if (worker && !placements.includes(hostBindingId)) reasons.push(`PLACEMENT_MISSING:${hostBindingId}`);
-        const decision = reasons.length === 0 ? 'ALLOW' : 'DENY';
-        await this.store.recordWorkerEvent(id, {
-            workerId, event: 'spawn', path: hostBindingId, decision, reasons, evidence: [hostBindingId],
-        });
-        if (decision !== 'ALLOW') return { decision, workerId, hostBindingId, reasons };
-
-        const runId = `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-        const command = String(process.env.ESO_WORKER_SPAWN_COMMAND || '').trim();
-        if (!command) {
-            await this.store.createWorkerRun(id, { runId, workerId, hostBindingId, status: 'authorized', command: null });
-            return { decision, workerId, hostBindingId, runId, status: 'authorized', reason: 'HOST_SPAWN_NOT_CONFIGURED', reasons };
-        }
-        let args: string[] = [];
-        try {
-            const parsed = JSON.parse(process.env.ESO_WORKER_SPAWN_ARGS || '[]');
-            if (Array.isArray(parsed)) args = parsed.map(String);
-        } catch {
-            args = [];
-        }
-        const consumer = await this.store.getConsumer(id);
-        const BunRuntime = (globalThis as any).Bun;
-        try {
-            const child = BunRuntime.spawn([command, ...args], {
-                cwd: consumer?.root || process.cwd(),
-                env: {
-                    ...process.env,
-                    ESO_CONSUMER_ID: id,
-                    ESO_WORKER_ID: workerId,
-                    ESO_HOST_BINDING_ID: hostBindingId,
-                },
-                stdout: 'ignore',
-                stderr: 'ignore',
-            });
-            await this.store.createWorkerRun(id, { runId, workerId, hostBindingId, status: 'spawned', pid: child.pid, command: [command, ...args].join(' ') });
-            child.exited.then((code: number) => {
-                void this.store.updateWorkerRun(id, runId, { status: code === 0 ? 'exited' : 'failed' });
-            });
-            return { decision, workerId, hostBindingId, runId, status: 'spawned', pid: child.pid, reasons };
-        } catch (error) {
-            await this.store.createWorkerRun(id, { runId, workerId, hostBindingId, status: 'failed', command: [command, ...args].join(' ') });
-            return { decision: 'DENY', workerId, hostBindingId, runId, status: 'failed', reasons: [`SPAWN_FAILED:${(error as Error)?.message || error}`] };
-        }
-    }
-
     async handoff(consumerId: string, fromWorkerId: string, toWorkerId: string, evidence: any[] = [], work: any = {}, outcome = ''): Promise<any> {
         const id = assertConsumerId(consumerId);
         const [from, to, edge] = await Promise.all([
@@ -264,10 +211,6 @@ export class WorkerPolicyService {
 
     listHandoffs(consumerId: string, workerId?: string, limit = 50): Promise<any[]> {
         return this.store.listWorkerHandoffs(assertConsumerId(consumerId), workerId, limit);
-    }
-
-    listRuns(consumerId: string, workerId?: string, limit = 50): Promise<any[]> {
-        return this.store.listWorkerRuns(assertConsumerId(consumerId), workerId, limit);
     }
 
     listEvents(consumerId: string, workerId?: string, limit = 50): Promise<any[]> {

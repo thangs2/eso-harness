@@ -1,4 +1,5 @@
 import { Component, ChangeDetectionStrategy, inject, OnInit } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { ActivatedRoute, Router } from '@angular/router';
 import { StateFrameComponent } from '../../../shared/state-frame/state-frame.component.js';
 import { WorkOverviewTableComponent } from '../components/work-overview-table.component.js';
@@ -13,7 +14,7 @@ import { WorkOverviewService } from '../data/work-overview.service.js';
 @Component({
     selector: 'eso-work-overview-page',
     standalone: true,
-    imports: [StateFrameComponent, WorkOverviewTableComponent],
+    imports: [RouterLink, StateFrameComponent, WorkOverviewTableComponent],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div class="s1-page-container">
@@ -23,8 +24,9 @@ import { WorkOverviewService } from '../data/work-overview.service.js';
                     <h1>Work overview</h1>
                     <p class="subtitle">Project: {{ store.project() }} · {{ store.totalItems() }} turn</p>
                 </div>
-                <span class="readonly-badge">Read-only</span>
+                <div class="actions-row">@if (store.project() && store.project() !== 'all') { <a class="btn-ghost" [routerLink]="['/consumers', store.project()]">Open consumer</a> }<span class="readonly-badge">Read-only</span></div>
             </header>
+
 
             <eso-state-frame
                 [state]="store.state()"
@@ -74,7 +76,7 @@ export class WorkOverviewPage implements OnInit {
 
     onFrameAction(action: string): void {
         if (action === 'CHANGE_PROJECT' && this.router) {
-            void this.router.navigate(['/projects']);
+            void this.router.navigate(['/consumers']);
         }
     }
 

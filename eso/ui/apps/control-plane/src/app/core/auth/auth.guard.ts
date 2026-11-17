@@ -8,7 +8,7 @@ import { AuthService } from './auth.service.js';
  * SKILL.md §7: Route guards are UX convenience, NOT authorization.
  * The API backend remains the single source of truth for authorization.
  */
-export const authGuard: CanActivateFn = (_route, _state) => {
+export const authGuard: CanActivateFn = (_route, state) => {
     const authService = inject(AuthService);
     const router = inject(Router);
 
@@ -16,5 +16,5 @@ export const authGuard: CanActivateFn = (_route, _state) => {
         return true;
     }
 
-    return router.createUrlTree(['/login']);
+    return router.createUrlTree(['/login'], { queryParams: { returnUrl: state.url } });
 };

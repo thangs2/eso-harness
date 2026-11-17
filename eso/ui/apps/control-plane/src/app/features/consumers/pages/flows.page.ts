@@ -4,7 +4,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
-import { FCanvasComponent, FFlowModule } from '@foblex/flow';
+import { FCanvasComponent, FFlowModule, type FCreateConnectionEvent, type FMoveNodesEvent } from '@foblex/flow';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ConsumerProfileService } from '../../../core/consumers/consumer-profile.service.js';
 import type { FlowDefinitionDto, FlowProposalDto, FlowSummaryDto, FlowValidationDto, WorkerConfigDto } from '../../../../../../../libs/api-client/types.js';
@@ -16,17 +16,18 @@ import type { FlowDefinitionDto, FlowProposalDto, FlowSummaryDto, FlowValidation
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <main class="flows-page">
-            <header class="flows-head">
+            <header class="flows-head page-header">
                 <div>
                     <p class="eyebrow">Consumer setup · flows</p>
                     <h1>Worker flow</h1>
-                    <p class="subtitle">Define how workers hand work to each other. Flow versions are independent of Stack versions.</p>
+                    <p class="subtitle">Define how workers hand work to each other. Flow versions are independent of Stack versions. Hosts execute flows; ESO only defines and publishes them.</p>
                 </div>
                 <div class="flows-head-actions">
-                    <button mat-stroked-button type="button" (click)="back()">Back to consumer</button>
-                    <button mat-flat-button color="primary" type="button" [disabled]="!active()" (click)="saveDraft()">Save draft</button>
+                    <button mat-stroked-button type="button" [disabled]="!active()" (click)="saveDraft()">Save draft</button>
+                    <button mat-flat-button color="primary" type="button" [disabled]="publishing() || !active()" (click)="publish()">{{ publishing() ? 'Publishing…' : 'Publish' }}</button>
                 </div>
             </header>
+
 
             <div class="flows-layout">
                 <aside class="flow-list">
@@ -48,10 +49,11 @@ import type { FlowDefinitionDto, FlowProposalDto, FlowSummaryDto, FlowValidation
                         <header class="flow-toolbar">
                             <div><p class="eyebrow">{{ flow.id }}</p><h2>{{ flow.name }}</h2><span class="muted">{{ flow.status }} v{{ flow.version }} · {{ flow.nodes.length }} nodes · {{ flow.edges.length }} edges</span></div>
                             <div class="flow-toolbar-actions">
+                                <button mat-stroked-button type="button" (click)="undo()" [disabled]="history().length === 0">Undo</button>
+                                <button mat-stroked-button type="button" (click)="redo()" [disabled]="future().length === 0">Redo</button>
                                 <button mat-stroked-button type="button" (click)="fitCanvas()">Fit</button>
                                 <button mat-stroked-button type="button" (click)="setDefault()" [disabled]="isActiveDefault() || active()?.status !== 'published'">{{ isActiveDefault() ? 'Default flow' : 'Set default' }}</button>
                                 <button mat-stroked-button type="button" (click)="validate()" [disabled]="validating()">{{ validating() ? 'Validating…' : 'Validate' }}</button>
-                                <button mat-flat-button color="primary" type="button" (click)="publish()" [disabled]="publishing()">{{ publishing() ? 'Publishing…' : 'Publish' }}</button>
                             </div>
                         </header>
 
@@ -72,18 +74,26 @@ import type { FlowDefinitionDto, FlowProposalDto, FlowSummaryDto, FlowValidation
 
                         <div class="flow-body">
                             <div class="flow-canvas-wrap">
-                                <f-flow (fFullRendered)="fitCanvas()">
+                                <f-flow fDraggable (fFullRendered)="fitCanvas()" (fMoveNodes)="onMoveNodes($event)" (fCreateConnection)="onCreateConnection($event)">
                                     <f-canvas fZoom>
+                                        <f-connection-for-create />
                                         <ng-container ngProjectAs="[fConnections]">
                                             @for (edge of flow.edges; track edge.id) {
-                                                <f-connection [fConnectionId]="edge.id" [fSourceId]="'out-' + edge.from" [fTargetId]="'in-' + edge.to" fType="segment" />
+                                                <f-connection [fConnectionId]="edge.id" [fSourceId]="'out-' + edge.from" [fTargetId]="'in-' + edge.to" fType="segment" [class.edge-pass]="edge.on === 'PASS'" [class.edge-fail]="edge.on === 'FAIL'" [class.edge-always]="edge.on === 'always'">
+                                                    <f-connection-marker-arrow></f-connection-marker-arrow>
+                                                    <div fConnectionContent [position]="0.5" class="flow-edge-chip" [class.edge-chip-fail]="edge.on === 'FAIL'" [class.edge-chip-always]="edge.on === 'always'">{{ edge.on }}</div>
+                                                </f-connection>
                                             }
                                         </ng-container>
                                         <ng-container ngProjectAs="[fNodes]">
                                             @for (node of flow.nodes; track node.workerId) {
-                                                <div fNode fDragHandle class="flow-node" [class.flow-node-selected]="selectedNode() === node.workerId" [fNodePosition]="{ x: node.x, y: node.y }" (click)="selectedNode.set(node.workerId)">
-                                                    <div class="flow-node-head"><strong>{{ workerLabel(node.workerId) }}</strong><span class="badge">{{ workerLayer(node.workerId) }}</span></div>
-                                                    <small>{{ workerRole(node.workerId) }}</small>
+                                                <div fNode fDragHandle [fNodeId]="node.workerId" class="flow-node" [class.flow-node-gate]="workerLayer(node.workerId) === 'gate'" [class.flow-node-selected]="selectedNode() === node.workerId" [fNodePosition]="{ x: node.x, y: node.y }" (click)="selectedNode.set(node.workerId)">
+                                                    <div class="flow-node-head">
+                                                        <span class="flow-node-avatar">{{ workerInitial(node.workerId) }}</span>
+                                                        <div class="flow-node-title"><strong>{{ workerLabel(node.workerId) }}</strong><small>{{ workerRole(node.workerId) }}</small></div>
+                                                        <span class="flow-node-layer">{{ workerLayer(node.workerId) }}</span>
+                                                    </div>
+                                                    <div class="flow-node-foot"><span>{{ workerStatus(node.workerId) }}</span><span class="flow-node-scope">{{ workerScope(node.workerId) }}</span></div>
                                                     <div class="flow-port flow-port-in" fConnector fConnectorType="target" [fConnectorId]="'in-' + node.workerId"></div>
                                                     <div class="flow-port flow-port-out" fConnector fConnectorType="source" [fConnectorId]="'out-' + node.workerId"></div>
                                                 </div>
@@ -96,11 +106,11 @@ import type { FlowDefinitionDto, FlowProposalDto, FlowSummaryDto, FlowValidation
                             <aside class="flow-inspector">
                                 <header><div><p class="eyebrow">Flow inspector</p><h3>Edges</h3></div><span class="muted">{{ flow.edges.length }}</span></header>
                                 @if (flow.edges.length === 0) {
-                                    <p class="muted">No edges. Phase B will add drag-to-connect.</p>
+                                    <p class="muted">No edges. Drag from a source port to a target port.</p>
                                 } @else {
                                     @for (edge of flow.edges; track edge.id) {
                                         <article class="flow-edge-card" [class.active]="selectedEdge() === edge.id" (click)="selectedEdge.set(edge.id)">
-                                            <div class="flow-edge-head"><strong>{{ workerLabel(edge.from) }} → {{ workerLabel(edge.to) }}</strong><code>{{ edge.id }}</code></div>
+                                            <div class="flow-edge-head"><strong>{{ workerLabel(edge.from) }} → {{ workerLabel(edge.to) }}</strong><span class="flow-edge-actions"><code>{{ edge.id }}</code><button mat-button type="button" (click)="$event.stopPropagation(); removeEdge(edge.id)">Remove</button></span></div>
                                             <div class="flow-edge-condition">
                                                 <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>On outcome</mat-label>
                                                     <mat-select [ngModel]="edge.on" (ngModelChange)="updateEdge(edge.id, 'on', $event)">
@@ -117,8 +127,8 @@ import type { FlowDefinitionDto, FlowProposalDto, FlowSummaryDto, FlowValidation
                                     }
                                 }
                                 <div class="flow-inspector-note">
-                                    <strong>Phase A</strong>
-                                    <span>Read-only canvas. Edit edge outcome and guard, validate, then publish.</span>
+                                    <strong>Phase B</strong>
+                                    <span>Drag nodes, connect ports, remove edges, undo/redo, then Save draft or Publish.</span>
                                 </div>
                             </aside>
                         </div>
@@ -132,7 +142,7 @@ import type { FlowDefinitionDto, FlowProposalDto, FlowSummaryDto, FlowValidation
         </main>
     `,
     styles: [`
-        .flows-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); max-width: var(--container); margin: 0 auto; padding: var(--space-5); }
+        .flows-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); min-width: 0; }
         .flows-head { display: flex; justify-content: space-between; gap: var(--space-4); align-items: flex-start; min-width: 0; }
         .flows-head h1 { margin: 0 0 var(--space-1); }
         .flows-head-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
@@ -169,16 +179,17 @@ import type { FlowDefinitionDto, FlowProposalDto, FlowSummaryDto, FlowValidation
         .flow-inspector h3 { margin: 0; font-size: var(--text-md); }
         .flow-edge-card { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); cursor: pointer; }
         .flow-edge-card.active { border-color: var(--brand); }
-        .flow-edge-head { display: flex; justify-content: space-between; gap: var(--space-2); align-items: flex-start; }
+        .flow-edge-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); align-items: start; }
         .flow-edge-head strong { font-size: var(--text-sm); }
         .flow-edge-head code { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+        .flow-edge-actions { display: grid; justify-items: end; gap: 2px; min-width: 0; }
         .flow-edge-condition { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
         .flow-inspector-note { display: grid; gap: 2px; padding: var(--space-3); border: 1px dashed var(--line); border-radius: var(--radius-sm); color: var(--muted); font-size: var(--text-xs); }
         .flow-empty { padding: var(--space-6); border: 1px dashed var(--line); border-radius: var(--radius-md); text-align: center; }
         .flow-empty h2 { margin: 0 0 var(--space-2); }
         .flow-error { margin: 0; color: #f87171; }
         @media (max-width: 1100px) { .flows-layout, .flow-body { grid-template-columns: minmax(0, 1fr); } .flow-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } .flow-list > header { grid-column: 1 / -1; } }
-        @media (max-width: 700px) { .flows-page { padding: var(--space-4); } .flows-head, .flow-toolbar { flex-direction: column; } .flow-list { grid-template-columns: minmax(0, 1fr); } .flow-edge-condition { grid-template-columns: minmax(0, 1fr); } f-flow { height: 420px; } }
+        @media (max-width: 700px) { .flows-head, .flow-toolbar { flex-direction: column; } .flow-list { grid-template-columns: minmax(0, 1fr); } .flow-edge-condition { grid-template-columns: minmax(0, 1fr); } f-flow { height: 420px; } }
     `],
 })
 export class FlowsPage implements OnInit {
@@ -201,6 +212,8 @@ export class FlowsPage implements OnInit {
     readonly publishing = signal(false);
     readonly proposal = signal<FlowProposalDto | null>(null);
     readonly proposalApplying = signal(false);
+    readonly history = signal<FlowDefinitionDto[]>([]);
+    readonly future = signal<FlowDefinitionDto[]>([]);
 
     ngOnInit(): void {
         void this.load();
@@ -229,6 +242,8 @@ export class FlowsPage implements OnInit {
         return this.service.getFlow(this.consumerId, id)
             .then((flow) => {
                 this.active.set(flow);
+                this.history.set([]);
+                this.future.set([]);
                 this.selectedEdge.set(flow.edges[0]?.id || null);
                 this.validation.set(null);
             })
@@ -263,16 +278,76 @@ export class FlowsPage implements OnInit {
         return `${base}-${index}`;
     }
 
+    private commit(next: FlowDefinitionDto): void {
+        const current = this.active();
+        if (!current) return;
+        this.history.update((items) => [...items.slice(-49), current]);
+        this.future.set([]);
+        this.active.set(next);
+    }
+
+    undo(): void {
+        const previous = this.history().at(-1);
+        const current = this.active();
+        if (!previous || !current) return;
+        this.history.update((items) => items.slice(0, -1));
+        this.future.update((items) => [current, ...items].slice(0, 50));
+        this.active.set(previous);
+    }
+
+    redo(): void {
+        const next = this.future()[0];
+        const current = this.active();
+        if (!next || !current) return;
+        this.future.update((items) => items.slice(1));
+        this.history.update((items) => [...items.slice(-49), current]);
+        this.active.set(next);
+    }
+
+    onMoveNodes(event: FMoveNodesEvent): void {
+        const flow = this.active();
+        if (!flow) return;
+        const positions = new Map(event.nodes.map((item) => [item.id, item.position]));
+        let changed = false;
+        const nodes = flow.nodes.map((node) => {
+            const position = positions.get(node.workerId);
+            if (!position) return node;
+            if (position.x === node.x && position.y === node.y) return node;
+            changed = true;
+            return { ...node, x: Math.round(position.x), y: Math.round(position.y) };
+        });
+        if (changed) this.commit({ ...flow, nodes });
+    }
+
+    onCreateConnection(event: FCreateConnectionEvent): void {
+        const flow = this.active();
+        if (!flow || !event.targetId) return;
+        const from = event.sourceId.replace(/^out-/, '');
+        const to = event.targetId.replace(/^in-/, '');
+        if (!flow.nodes.some((node) => node.workerId === from) || !flow.nodes.some((node) => node.workerId === to)) return;
+        if (flow.edges.some((edge) => edge.from === from && edge.to === to)) return;
+        const edge = { id: `e-${from}-${to}`, from, to, on: 'PASS', condition: { kind: 'outcome', equals: 'PASS' }, priority: 0 };
+        this.commit({ ...flow, edges: [...flow.edges, edge] });
+        this.selectedEdge.set(edge.id);
+    }
+
+    removeEdge(edgeId: string): void {
+        const flow = this.active();
+        if (!flow) return;
+        this.commit({ ...flow, edges: flow.edges.filter((edge) => edge.id !== edgeId) });
+        if (this.selectedEdge() === edgeId) this.selectedEdge.set(null);
+    }
+
     updateEdge(edgeId: string, field: 'on', value: string): void {
         const flow = this.active();
         if (!flow) return;
-        this.active.set({ ...flow, edges: flow.edges.map((edge) => edge.id === edgeId ? { ...edge, [field]: value } : edge) });
+        this.commit({ ...flow, edges: flow.edges.map((edge) => edge.id === edgeId ? { ...edge, [field]: value } : edge) });
     }
 
     updateGuard(edgeId: string, value: string): void {
         const flow = this.active();
         if (!flow) return;
-        this.active.set({ ...flow, edges: flow.edges.map((edge) => edge.id === edgeId ? { ...edge, condition: value ? { kind: 'guard', equals: value } : undefined } : edge) });
+        this.commit({ ...flow, edges: flow.edges.map((edge) => edge.id === edgeId ? { ...edge, condition: value ? { kind: 'guard', equals: value } : undefined } : edge) });
     }
 
     saveDraft(): Promise<void> {
@@ -355,6 +430,19 @@ export class FlowsPage implements OnInit {
 
     workerLayer(id: string): string {
         return this.workers()?.workers.find((worker) => worker.id === id)?.layer || 'peer';
+    }
+
+    workerStatus(id: string): string {
+        return this.workers()?.workers.find((worker) => worker.id === id)?.status || 'declared';
+    }
+
+    workerScope(id: string): string {
+        const scope = this.workers()?.workers.find((worker) => worker.id === id)?.scope || '';
+        return scope.length > 28 ? scope.slice(0, 26) + '…' : scope;
+    }
+
+    workerInitial(id: string): string {
+        return (this.workerLabel(id) || 'W').slice(0, 1).toUpperCase();
     }
 
     back(): void {

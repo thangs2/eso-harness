@@ -12,6 +12,14 @@ export const APP_ROUTES: Routes = [
         loadChildren: () => import('./features/login/login.routes.js').then((m) => m.LOGIN_ROUTES),
     },
     {
+        path: 'plugins',
+        loadChildren: () => import('./features/plugins/plugins.routes.js').then((m) => m.PLUGINS_ROUTES),
+    },
+    {
+        path: 'hosts',
+        loadChildren: () => import('./features/hosts/hosts.routes.js').then((m) => m.HOSTS_ROUTES),
+    },
+    {
         path: 'consumers',
         loadChildren: () => import('./features/consumers/consumers.routes.js').then((m) => m.CONSUMERS_ROUTES),
     },

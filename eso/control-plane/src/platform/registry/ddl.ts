@@ -10,6 +10,31 @@ export const PLATFORM_SCHEMA = 'platform';
 export const CONSUMER_TABLE = 'platform.consumer';
 export const CONSUMER_EVENT_TABLE = 'platform.consumer_event';
 export const STACK_VERSION_TABLE = 'platform.harness_stack_version';
+export const HOST_RUNTIME_TABLE = 'platform.host_runtime';
+/** Pre-global-registry table name, kept only as the migration staging name. */
+export const HOST_RUNTIME_LEGACY_TABLE = 'platform.host_runtime_legacy';
+
+/** Host runtime kinds accepted by `platform.host_runtime.runtime_kind`. */
+export const HOST_RUNTIME_KINDS = ['ide-native', 'cli', 'acp'] as const;
+/** Liveness states for a registered host runtime. */
+export const HOST_RUNTIME_HEALTH = ['unknown', 'healthy', 'degraded', 'offline'] as const;
+
+/**
+ * Global host runtime registry: one row per host, shared by every consumer.
+ * A host is a machine/runtime registration; the workspace belongs to the consumer.
+ */
+export const HOST_RUNTIME_DDL = `CREATE TABLE IF NOT EXISTS platform.host_runtime (
+    host_id         text primary key,
+    runtime_id      text not null,
+    runtime_kind    text not null check (runtime_kind in ('ide-native','cli','acp')),
+    models          jsonb not null default '[]'::jsonb,
+    default_model   text not null default '',
+    lead_eligible   boolean not null default false,
+    health          text not null default 'unknown' check (health in ('unknown','healthy','degraded','offline')),
+    last_heartbeat  timestamptz,
+    created_at      timestamptz not null default now(),
+    updated_at      timestamptz not null default now()
+)`;
 
 export const PLATFORM_DDL: readonly string[] = [
     `CREATE SCHEMA IF NOT EXISTS platform`,
@@ -48,6 +73,50 @@ export const PLATFORM_DDL: readonly string[] = [
     )`,
     `CREATE INDEX IF NOT EXISTS idx_stack_version_consumer
         ON platform.harness_stack_version (consumer_id, version desc)`,
+    `CREATE TABLE IF NOT EXISTS platform.plugin_manifest (
+        id              text primary key,
+        label           text not null,
+        type            text not null check (type in ('host','provider','capability','source')),
+        category        text not null default 'other',
+        version         text not null default '1.0.0',
+        capabilities    jsonb not null default '[]'::jsonb,
+        status          text not null default 'installed',
+        description     text not null default '',
+        config_schema   jsonb not null default '{}'::jsonb,
+        source          text not null default 'custom',
+        installed_at    timestamptz not null default now(),
+        updated_at      timestamptz not null default now()
+    )`,
+    `CREATE TABLE IF NOT EXISTS platform.provider_record (
+        consumer_id     text not null,
+        provider_id     text not null,
+        external_id     text not null,
+        kind            text not null,
+        title           text not null,
+        status          text,
+        url             text,
+        payload         jsonb not null default '{}'::jsonb,
+        synced_at       timestamptz not null default now(),
+        primary key (consumer_id, provider_id, external_id, kind)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_provider_record_provider
+        ON platform.provider_record (consumer_id, provider_id, synced_at desc)`,
+    `CREATE TABLE IF NOT EXISTS platform.consumer_plugin (
+        consumer_id     text not null,
+        plugin_id       text not null,
+        enabled         boolean not null default false,
+        config          jsonb not null default '{}'::jsonb,
+        secret_refs     jsonb not null default '{}'::jsonb,
+        health          text not null default 'unknown',
+        last_checked_at timestamptz,
+        updated_at      timestamptz not null default now(),
+        primary key (consumer_id, plugin_id)
+    )`,
+    // Host runtime registry (GLOBAL): one row per host, shared by every consumer.
+    // ESO is control plane only — it never starts these processes, it only records and routes.
+    HOST_RUNTIME_DDL,
+    `CREATE INDEX IF NOT EXISTS idx_host_runtime_health
+        ON platform.host_runtime (health)`,
 ];
 
 export const CONSUMER_ID_PATTERN = /^[a-z0-9][a-z0-9-]{1,31}$/;

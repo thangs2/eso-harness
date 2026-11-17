@@ -67,6 +67,43 @@ export class FsBrowseService {
         };
     }
 
+    async resolveDirectory(name: string): Promise<{ name: string; matches: string[] }> {
+        const root = await this.realDirectory(this.configuredRoot);
+        const safe = String(name || '').trim().replace(/[\\/]+/g, '').replace(/^\.+/, '');
+        if (!safe) return { name: '', matches: [] };
+        const candidates = [
+            resolve(root, safe),
+            resolve(root, 'Workspaces', safe),
+            resolve(root, 'workspaces', safe),
+            resolve(root, 'Projects', safe),
+            resolve(root, 'projects', safe),
+            resolve(root, 'repos', safe),
+        ];
+        const matches = new Set<string>();
+        for (const candidate of candidates) {
+            try {
+                const real = await this.realDirectory(candidate);
+                const rel = relative(root, real);
+                if (rel !== '..' && !rel.startsWith(`..${sep}`)) matches.add(real);
+            } catch { /* candidate missing */ }
+        }
+        if (matches.size === 0) {
+            const walk = async (dir: string, depth: number): Promise<void> => {
+                if (depth > 3 || matches.size >= 20) return;
+                let entries;
+                try { entries = await readdir(dir, { withFileTypes: true }); } catch { return; }
+                for (const entry of entries) {
+                    if (!entry.isDirectory() || entry.name.startsWith('.') || entry.name === 'node_modules') continue;
+                    const child = resolve(dir, entry.name);
+                    if (entry.name === safe) matches.add(child);
+                    else await walk(child, depth + 1);
+                }
+            };
+            await walk(root, 0);
+        }
+        return { name: safe, matches: [...matches].sort() };
+    }
+
     private async realDirectory(path: string): Promise<string> {
         try {
             const real = await realpath(path);

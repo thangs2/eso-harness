@@ -9,5 +9,6 @@ export const CONSUMERS_ROUTES: Routes = [
     { path: '', component: ConsumersPage, canActivate: [authGuard] },
     { path: ':id/settings', component: ConsumerSettingsPage, canActivate: [authGuard] },
     { path: ':id/flows', loadComponent: () => import('./pages/flows.page.js').then((m) => m.FlowsPage), canActivate: [authGuard] },
+    { path: ':id/plugins', loadComponent: () => import('./pages/consumer-plugins.page.js').then((m) => m.ConsumerPluginsPage), canActivate: [authGuard] },
     { path: ':id', component: ConsumerDetailPage, canActivate: [authGuard] },
 ];

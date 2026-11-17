@@ -1,13 +1,14 @@
 import { Component, ChangeDetectionStrategy, OnInit, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { DatePipe } from '@angular/common';
+import { MatButtonModule } from '@angular/material/button';
 import { ConsumerProfileService } from '../../../core/consumers/consumer-profile.service.js';
 import type { ConsumerSummary } from '../../../../../../../libs/api-client/types.js';
 
 @Component({
     selector: 'eso-consumers-page',
     standalone: true,
-    imports: [RouterLink, DatePipe],
+    imports: [RouterLink, DatePipe, MatButtonModule],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <header class="page-header">
@@ -16,6 +17,7 @@ import type { ConsumerSummary } from '../../../../../../../libs/api-client/types
                 <h1>Consumers</h1>
                 <p class="subtitle">Registered profiles; select a consumer to process cases.</p>
             </div>
+            <a mat-flat-button color="primary" routerLink="/setup">Create consumer</a>
         </header>
 
         <div class="stats-row">
@@ -33,7 +35,7 @@ import type { ConsumerSummary } from '../../../../../../../libs/api-client/types
             <section class="panel empty-panel">
                 <h2>No consumers yet</h2>
                 <p>Start by declaring the consumer repo and harness settings.</p>
-                <a class="btn-primary" routerLink="/onboarding">Create consumer</a>
+                <a class="btn-primary" routerLink="/setup">Create consumer</a>
             </section>
         } @else {
             <section class="panel table-panel">
@@ -42,12 +44,20 @@ import type { ConsumerSummary } from '../../../../../../../libs/api-client/types
                     <tbody>
                         @for (item of items(); track item.id) {
                             <tr>
-                                <td class="col-work"><strong>{{ item.id }}</strong><br><small>{{ item.name }}</small></td>
-                                <td>{{ item.root }}</td>
-                                <td><span class="pill">{{ item.profile?.canonical ? 'repo harness' : item.profile?.source || item.profile?.recipe }}</span><br><small>{{ item.profile?.canonical?.agents || item.profile?.host || item.profile?.hostProfile }}</small></td>
-                                <td>v{{ item.version }}</td>
-                                <td>{{ item.updatedAt | date: 'dd/MM/yyyy HH:mm' }}</td>
-                                <td class="col-actions">
+                                <td class="col-work" data-label="Consumer"><strong>{{ item.id }}</strong><br><small>{{ item.name }}</small></td>
+                                <td data-label="Repo">{{ item.root }}</td>
+                                <td data-label="Profile">
+                                    @if (item.profile?.canonical) {
+                                        <span class="pill">repo harness</span><br><small>{{ item.profile?.canonical?.agents || item.profile?.host || '' }}</small>
+                                    } @else if (item.profile?.source || item.profile?.recipe) {
+                                        <span class="pill">{{ item.profile?.source || item.profile?.recipe }}</span><br><small>{{ item.profile?.host || item.profile?.hostProfile || '' }}</small>
+                                    } @else {
+                                        <span class="muted">—</span>
+                                    }
+                                </td>
+                                <td data-label="Version">v{{ item.version }}</td>
+                                <td data-label="Updated">{{ item.updatedAt | date: 'dd/MM/yyyy HH:mm' }}</td>
+                                <td class="col-actions" data-label="Actions">
                                     <a class="btn-why" [routerLink]="['/consumers', item.id]">Details</a>
                                     <a class="btn-why" [routerLink]="['/work-overview']" [queryParams]="{ project: item.id }">Work</a>
                                 </td>

@@ -7,7 +7,6 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { ConsumerProfileService } from '../../../core/consumers/consumer-profile.service.js';
-import type { FsDirectoryEntry } from '../../../../../../../libs/api-client/types.js';
 
 @Component({
     selector: 'eso-setup-page',
@@ -40,12 +39,14 @@ import type { FsDirectoryEntry } from '../../../../../../../libs/api-client/type
                         <h2>1 · Repo</h2>
                         <p class="section-hint">ESO creates canonical state at root: <code>AGENTS.md</code>, <code>agents/</code>, <code>.harness/</code>. Do not choose a host here.</p>
                         <div class="root-field-row">
-                            <mat-form-field appearance="outline" class="setup-field">
+                            <input #rootFolderInput type="file" webkitdirectory directory multiple hidden (change)="onRootFolder($event)">
+                            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="setup-field">
                                 <mat-label>Root repo</mat-label>
                                 <input matInput [ngModel]="root()" (ngModelChange)="root.set($event)" placeholder="/Users/.../repo-A">
                             </mat-form-field>
-                            <button mat-stroked-button type="button" class="browse-button" (click)="openBrowse()">Choose folder</button>
+                            <button mat-flat-button color="primary" type="button" class="browse-button" [disabled]="rootResolving()" (click)="rootFolderInput.click()">{{ rootResolving() ? 'Resolving…' : 'Choose folder' }}</button>
                         </div>
+                        @if (rootError()) { <p class="form-error" role="alert">{{ rootError() }}</p> }
                         <div class="canonical-box">
                             <strong>Layout to create</strong>
                             <pre>repo-A/
@@ -122,51 +123,6 @@ import type { FsDirectoryEntry } from '../../../../../../../libs/api-client/type
                 }
             </section>
 
-            @if (browseOpen()) {
-                <div class="browse-overlay" (click)="closeBrowse()">
-                    <section class="browse-dialog" role="dialog" aria-modal="true" aria-label="Select repo folder" (click)="$event.stopPropagation()">
-                        <header class="browse-header">
-                            <div>
-                                <h2>Select repo folder</h2>
-                                <p class="section-hint">Select a folder on the machine running the control plane.</p>
-                            </div>
-                            <button mat-stroked-button type="button" (click)="closeBrowse()">Close</button>
-                        </header>
-
-                        <div class="browse-path">
-                            <code>{{ browsePath() || '(root)' }}</code>
-                            <div class="browse-path-actions">
-                                <button mat-stroked-button type="button" [disabled]="!browseParent() || browseLoading()" (click)="browseUp()">Up</button>
-                                <button mat-stroked-button type="button" [disabled]="browseLoading()" (click)="loadBrowse(undefined)">Home</button>
-                                <button mat-stroked-button type="button" [disabled]="browseLoading()" (click)="loadBrowse(browsePath() || undefined)">Reload</button>
-                            </div>
-                        </div>
-
-                        @if (browseError(); as message) { <p class="form-error" role="alert">{{ message }}</p> }
-
-                        @if (browseLoading()) {
-                            <p class="browse-status">Reading directory…</p>
-                        } @else if (browseEntries().length === 0) {
-                            <p class="browse-status">No subdirectories.</p>
-                        } @else {
-                            <div class="browse-list">
-                                @for (entry of browseEntries(); track entry.path) {
-                                    <button type="button" class="browse-entry" (click)="browseInto(entry)">
-                                        <span class="browse-entry-icon">▸</span>
-                                        <span>{{ entry.name }}</span>
-                                    </button>
-                                }
-                            </div>
-                        }
-
-                        <footer class="browse-actions">
-                            <button mat-stroked-button type="button" (click)="closeBrowse()">Cancel</button>
-                            <button mat-flat-button color="primary" type="button" [disabled]="browseLoading() || !!browseError() || !browsePath()" (click)="chooseBrowseDirectory()">Choose this folder</button>
-                        </footer>
-                    </section>
-                </div>
-            }
-
             <footer class="setup-actions">
                 <button mat-stroked-button type="button" [disabled]="step() === 1" (click)="back()">Back</button>
                 @if (step() < 4) { <button mat-flat-button color="primary" type="button" (click)="next()">Next</button> }
@@ -212,25 +168,6 @@ import type { FsDirectoryEntry } from '../../../../../../../libs/api-client/type
         .root-field-row { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
         .root-field-row .setup-field { flex: 1 1 420px; }
         .browse-button { margin-top: 4px; }
-        .browse-overlay { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 24px; background: rgb(0 0 0 / 45%); }
-        .browse-dialog { width: min(720px, 100%); max-height: min(80vh, 720px); overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); padding: 20px; display: grid; gap: 16px; box-shadow: 0 24px 80px rgb(0 0 0 / 30%); }
-        .browse-header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
-        .browse-header h2 { margin: 0; font-size: var(--text-lg); }
-        .browse-path { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--surface) 92%, var(--brand)); }
-        .browse-path code { overflow-wrap: anywhere; }
-        .browse-path-actions { display: flex; gap: 8px; flex: none; }
-        .browse-list { display: grid; gap: 4px; align-content: start; min-height: 120px; }
-        .browse-entry { display: flex; gap: 8px; align-items: center; width: 100%; padding: 10px 12px; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
-        .browse-entry:hover, .browse-entry:focus-visible { background: color-mix(in srgb, var(--surface) 88%, var(--brand)); border-color: var(--line); }
-        .browse-entry-icon { color: var(--muted); }
-        .browse-status { color: var(--muted); margin: 0; }
-        .browse-actions { display: flex; justify-content: flex-end; gap: 12px; padding-top: 4px; }
-        @media (max-width: 900px) {
-            .setup-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-            .setup-form, .event-grid, .setup-summary { grid-template-columns: 1fr; }
-            .event-option:nth-child(odd) { border-right: 0; }
-            .observation-header, .observation-toolbar { align-items: flex-start; flex-direction: column; }
-        }
     `],
 })
 export class SetupPage {
@@ -260,12 +197,8 @@ export class SetupPage {
     readonly events = signal<string[]>(['prompt.submitted', 'turn.completed', 'tool.called']);
     readonly saving = signal(false);
     readonly error = signal<string | null>(null);
-    readonly browseOpen = signal(false);
-    readonly browsePath = signal('');
-    readonly browseParent = signal<string | null>(null);
-    readonly browseEntries = signal<FsDirectoryEntry[]>([]);
-    readonly browseLoading = signal(false);
-    readonly browseError = signal<string | null>(null);
+    readonly rootResolving = signal(false);
+    readonly rootError = signal<string | null>(null);
 
     toggleEvent(id: string): void {
         this.events.set(this.events().includes(id) ? this.events().filter((event) => event !== id) : [...this.events(), id]);
@@ -303,44 +236,30 @@ export class SetupPage {
         return null;
     }
 
-    openBrowse(): void {
-        this.browseOpen.set(true);
-        this.loadBrowse(this.root().trim() || undefined);
-    }
-
-    closeBrowse(): void {
-        this.browseOpen.set(false);
-        this.browseError.set(null);
-    }
-
-    loadBrowse(path?: string): void {
-        this.browseLoading.set(true);
-        this.browseError.set(null);
-        this.service
-            .listDirectories(path)
-            .then((res) => {
-                this.browsePath.set(res.path);
-                this.browseParent.set(res.parent);
-                this.browseEntries.set(res.directories);
+    onRootFolder(event: Event): void {
+        const input = event.target as HTMLInputElement;
+        const file = input.files?.[0];
+        input.value = '';
+        if (!file) return;
+        const relative = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
+        const name = relative.split('/')[0];
+        if (!name) return;
+        this.rootResolving.set(true);
+        this.rootError.set(null);
+        this.service.resolveDirectory(name)
+            .then((result) => {
+                if (result.matches.length === 1) {
+                    this.root.set(result.matches[0]);
+                    return;
+                }
+                if (result.matches.length === 0) {
+                    this.rootError.set(`Folder "${name}" is not inside the control-plane filesystem root.`);
+                    return;
+                }
+                this.rootError.set(`Multiple folders named "${name}". Choose a more specific repository folder.`);
             })
-            .catch((error) => this.browseError.set(error?.detail || error?.message || 'Unable to read directory'))
-            .finally(() => this.browseLoading.set(false));
-    }
-
-    browseInto(entry: FsDirectoryEntry): void {
-        this.loadBrowse(entry.path);
-    }
-
-    browseUp(): void {
-        const parent = this.browseParent();
-        if (parent) this.loadBrowse(parent);
-    }
-
-    chooseBrowseDirectory(): void {
-        const path = this.browsePath();
-        if (!path) return;
-        this.root.set(path);
-        this.closeBrowse();
+            .catch((err) => this.rootError.set(err?.detail || err?.message || 'Could not resolve selected folder'))
+            .finally(() => this.rootResolving.set(false));
     }
 
     apply(): void {

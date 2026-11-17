@@ -4,7 +4,6 @@
 
 -- Source of truth remains files; this schema is a derived, rebuildable index.
 
-
 CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE EXTENSION IF NOT EXISTS unaccent;
@@ -167,7 +166,8 @@ CREATE INDEX IF NOT EXISTS knowledge_doc_chunk_hash ON knowledge_doc_chunk (cont
 CREATE INDEX IF NOT EXISTS knowledge_doc_chunk_vec
   ON knowledge_doc_chunk USING hnsw (embedding vector_cosine_ops);
 
-CREATE TABLE IF NOT EXISTS knowledge_index_run (
+ALTER TABLE IF EXISTS knowledge_index_run RENAME TO knowledge_index_build;
+CREATE TABLE IF NOT EXISTS knowledge_index_build (
   build_id    text PRIMARY KEY,
   source_hash text NOT NULL,
   status      text NOT NULL CHECK (status IN ('running','ok','partial','error')),
@@ -178,7 +178,7 @@ CREATE TABLE IF NOT EXISTS knowledge_index_run (
 
 CREATE TABLE IF NOT EXISTS knowledge_manifest (
   manifest_id       text PRIMARY KEY,
-  build_id          text REFERENCES knowledge_index_run(build_id) ON DELETE SET NULL,
+  build_id          text REFERENCES knowledge_index_build(build_id) ON DELETE SET NULL,
   manifest_version  integer NOT NULL DEFAULT 1,
   generator_version text NOT NULL,
   source_hash       text NOT NULL,
@@ -217,15 +217,16 @@ CREATE TABLE IF NOT EXISTS knowledge_worker (
   indexed_at   timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS knowledge_worker_run (
-  run_id          text PRIMARY KEY,
-  worker_id       text NOT NULL,
-  host_binding_id text NOT NULL,
-  status          text NOT NULL CHECK (status IN ('spawned','exited','failed','authorized')),
-  pid             integer,
-  command         text,
-  started_at      timestamptz NOT NULL DEFAULT now(),
-  ended_at        timestamptz
+-- Worker host placement policy. Rename the legacy execution-named table first (idempotent), then
+-- create it when missing. ESO stores the policy; the owning host enforces it.
+ALTER TABLE IF EXISTS knowledge_worker_execution RENAME TO knowledge_worker_host_policy;
+CREATE TABLE IF NOT EXISTS knowledge_worker_host_policy (
+  worker_id     text PRIMARY KEY REFERENCES knowledge_worker(worker_id) ON DELETE CASCADE,
+  allowed_hosts text[] NOT NULL DEFAULT '{}',
+  model_tier    text NOT NULL DEFAULT 'balanced' CHECK (model_tier IN ('fast','balanced','reasoning')),
+  native_agent  jsonb NOT NULL DEFAULT '{}'::jsonb,
+  fallback      text NOT NULL DEFAULT 'block' CHECK (fallback IN ('block','next-host','next-tier')),
+  updated_at    timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS knowledge_worker_handoff (
@@ -265,7 +266,6 @@ CREATE TABLE IF NOT EXISTS knowledge_worker_event (
   reasons        jsonb NOT NULL DEFAULT '[]'::jsonb,
   evidence       jsonb NOT NULL DEFAULT '[]'::jsonb,
   trace_id       text,
-  run_id         text,
   span_id        text,
   parent_span_id text,
   host_binding_id text,
@@ -276,7 +276,6 @@ CREATE TABLE IF NOT EXISTS knowledge_worker_event (
 
 CREATE INDEX IF NOT EXISTS knowledge_worker_event_worker ON knowledge_worker_event (worker_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS knowledge_worker_event_trace ON knowledge_worker_event (trace_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS knowledge_worker_event_run ON knowledge_worker_event (run_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS knowledge_worker_placement (
   worker_id       text NOT NULL REFERENCES knowledge_worker(worker_id) ON DELETE CASCADE,
@@ -305,6 +304,14 @@ CREATE TABLE IF NOT EXISTS knowledge_worker_edge (
   on_label       text NOT NULL DEFAULT '',
   PRIMARY KEY (from_worker_id, to_worker_id, on_label)
 );
+
+-- ESO sidecar invariant: ESO has no run/execution domain. Remove legacy run/execution tables
+-- and the run_id column from consumer schemas created before this rule. Idempotent.
+DROP TABLE IF EXISTS knowledge_flow_step;
+DROP TABLE IF EXISTS knowledge_flow_run;
+DROP TABLE IF EXISTS knowledge_worker_run;
+DROP INDEX IF EXISTS knowledge_worker_event_run;
+ALTER TABLE knowledge_worker_event DROP COLUMN IF EXISTS run_id;
 
 INSERT INTO knowledge_type (type, label, required_sections, header_profile, representation, default_liveness)
 VALUES

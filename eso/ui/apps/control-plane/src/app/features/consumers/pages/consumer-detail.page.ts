@@ -1,12 +1,12 @@
 import { Component, ChangeDetectionStrategy, OnInit, inject, signal } from '@angular/core';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { ConsumerProfileService } from '../../../core/consumers/consumer-profile.service.js';
 import type { ConsumerProfile } from '../../../../../../../libs/api-client/types.js';
 
 @Component({
     selector: 'eso-consumer-detail-page',
     standalone: true,
-    imports: [RouterLink],
+    imports: [],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         @if (profile(); as p) {
@@ -16,12 +16,8 @@ import type { ConsumerProfile } from '../../../../../../../libs/api-client/types
                     <h1>{{ p.name }}</h1>
                     <p class="subtitle"><code>{{ p.id }}</code> · {{ p.root }}</p>
                 </div>
-                <div class="actions-row">
-                    <a class="btn-ghost" [routerLink]="['/consumers', p.id, 'flows']">Flows</a>
-                    <a class="btn-ghost" [routerLink]="['/consumers', p.id, 'settings']">Settings</a>
-                    <a class="btn-primary" [routerLink]="['/work-overview']" [queryParams]="{ project: p.id }">Open work overview</a>
-                </div>
             </header>
+
 
             @if (created()) {
                 <p class="saved-banner">Consumer saved. Setup is complete; you can now process cases.</p>

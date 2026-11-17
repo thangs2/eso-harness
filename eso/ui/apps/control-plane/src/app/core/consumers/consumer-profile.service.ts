@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { CONTROL_PLANE_API_CLIENT } from '../tokens.js';
-import type { ConsumerListResponse, ConsumerPlan, ConsumerProfile, FsBrowseResponse, HostDiscoveryDto, McpDiscoveryDto, SetupConsumerPayload, StackVersionsDto, WorkerConfigDto, WorkerPolicyResultDto, WorkerImportPreviewDto, WorkerImportRecordDto, RuleFileDto, RuleImportPreviewDto, MaterialSummaryDto, FlowDefinitionDto, FlowSummaryDto, FlowValidationDto, FlowProposalDto, WorkerSourceStatusDto, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, KnowledgeEmbeddingResultDto } from '../../../../../../libs/api-client/types.js';
+import type { ConsumerListResponse, ConsumerPlan, ConsumerProfile, FsBrowseResponse, FsResolveDirectoryResponse, HostDiscoveryDto, McpDiscoveryDto, SetupConsumerPayload, StackVersionsDto, WorkerConfigDto, WorkerPolicyResultDto, WorkerImportPreviewDto, WorkerImportRecordDto, RuleFileDto, RuleImportPreviewDto, MaterialSummaryDto, FlowDefinitionDto, FlowSummaryDto, FlowValidationDto, FlowProposalDto, WorkerSourceStatusDto, PluginManifestDto, ConsumerPluginDto, ProviderRecordDto, JiraProjectDto, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, KnowledgeEmbeddingResultDto, HostRuntimeDto, WorkerPlacementDto } from '../../../../../../libs/api-client/types.js';
 
 @Injectable({ providedIn: 'root' })
 export class ConsumerProfileService {
@@ -74,6 +74,51 @@ export class ConsumerProfileService {
     indexKnowledge(id: string): Promise<KnowledgeSummaryDto> {
         if (!this.client) throw new Error('API client is not configured');
         return this.client.indexConsumerKnowledge(id);
+    }
+
+    getPlugins(): Promise<PluginManifestDto[]> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.getPlugins();
+    }
+
+    getConsumerPlugins(id: string): Promise<ConsumerPluginDto[]> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.getConsumerPlugins(id);
+    }
+
+    configureConsumerPlugin(id: string, pluginId: string, payload: any): Promise<any> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.configureConsumerPlugin(id, pluginId, payload);
+    }
+
+    getPluginProjects(id: string, pluginId: string): Promise<JiraProjectDto[]> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.getPluginProjects(id, pluginId);
+    }
+
+    installPlugin(manifest: any): Promise<any> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.installPlugin(manifest);
+    }
+
+    removePlugin(pluginId: string): Promise<any> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.removePlugin(pluginId);
+    }
+
+    syncConsumerPlugin(id: string, pluginId: string): Promise<any> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.syncConsumerPlugin(id, pluginId);
+    }
+
+    getProviderRecords(id: string, provider?: string): Promise<ProviderRecordDto[]> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.getProviderRecords(id, provider);
+    }
+
+    testConsumerPlugin(id: string, pluginId: string): Promise<any> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.testConsumerPlugin(id, pluginId);
     }
 
     getWorkerSourceStatus(id: string): Promise<WorkerSourceStatusDto> {
@@ -191,6 +236,31 @@ export class ConsumerProfileService {
         return this.client.saveConsumerWorkers(id, config);
     }
 
+    getHostRuntimes(): Promise<HostRuntimeDto[]> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.getHostRuntimes();
+    }
+
+    saveHostRuntime(runtime: HostRuntimeDto): Promise<HostRuntimeDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.saveHostRuntime(runtime);
+    }
+
+    sendHostHeartbeat(hostId: string): Promise<HostRuntimeDto | null> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.heartbeatHostRuntime(hostId);
+    }
+
+    getWorkerPlacement(id: string): Promise<WorkerPlacementDto[]> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.getConsumerWorkerPlacement(id);
+    }
+
+    saveWorkerPlacement(id: string, workerId: string, placement: WorkerPlacementDto): Promise<WorkerPlacementDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.saveConsumerWorkerPlacement(id, workerId, placement);
+    }
+
     getHosts(id: string): Promise<HostDiscoveryDto> {
         if (!this.client) throw new Error('API client is not configured');
         return this.client.getConsumerHosts(id);
@@ -204,6 +274,11 @@ export class ConsumerProfileService {
     listDirectories(path?: string): Promise<FsBrowseResponse> {
         if (!this.client) throw new Error('API client is not configured');
         return this.client.browseDirectories(path);
+    }
+
+    resolveDirectory(name: string): Promise<FsResolveDirectoryResponse> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.resolveDirectory(name);
     }
 
     createSetup(payload: SetupConsumerPayload): Promise<{ id: string }> {

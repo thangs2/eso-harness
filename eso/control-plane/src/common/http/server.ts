@@ -35,6 +35,8 @@ import { WorkerImportService } from '../../modules/workers/worker-import.service
 import { RuleFileService } from '../../modules/rules/rule-file.service.js';
 import { FlowFileService } from '../../modules/flows/flow-file.service.js';
 import { FlowProposalService } from '../../modules/flows/flow-proposal.service.js';
+import { HostRuntimeService } from '../../modules/host-runtime/host-runtime.service.js';
+import { PluginService } from '../../modules/plugins/plugin.service.js';
 
 /**
  * L6.2 — the HTTP surface for Sprint 1.
@@ -52,6 +54,17 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
     const { store, auth } = options;
     const registry = new RegistryService(store);
     await registry.initialize();
+    // Reconcile consumer schemas at start. The knowledge DDL is bootstrap-only (CREATE IF NOT EXISTS
+    // plus ADD COLUMN IF NOT EXISTS) and runs on schema creation; an existing consumer would never
+    // pick up new tables/columns on a control-plane upgrade otherwise. Best-effort: a broken consumer
+    // schema must not stop the control plane from serving the others.
+    for (const consumer of await store.listConsumers({ status: 'ready' })) {
+        try {
+            await store.ensureKnowledgeSchema(consumer.id);
+        } catch (error) {
+            console.error(`KNOWLEDGE_SCHEMA_REFRESH_FAILED:${consumer.id}:${(error as Error)?.message || error}`);
+        }
+    }
     const registration = new RegistrationService(registry, store);
     const query = new RegistryQueryService(store);
     const updates = new UpdateConsumerService(store);
@@ -78,6 +91,8 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
     const ruleFiles = new RuleFileService(store);
     const flowFiles = new FlowFileService(store, workerFiles);
     const flowProposal = new FlowProposalService(store, workerFiles, flowFiles);
+    const hostRuntime = new HostRuntimeService(store);
+    const plugins = new PluginService(store);
 
     const provisionConsumer = async (id: string, body: any) => {
         try {
@@ -137,6 +152,18 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
 
     app.get('/api/v1/auth/me', { preHandler: requireAuth }, async (request) => {
         return auth.me(request.headers.authorization);
+    });
+
+    app.get('/api/v1/fs/resolve-directory', { preHandler: requireAuth }, async (request, reply) => {
+        try {
+            return await fsBrowse.resolveDirectory(String((request.query as any)?.name || ''));
+        } catch (error) {
+            const status = typeof (error as any)?.getStatus === 'function' ? (error as any).getStatus() : 500;
+            const body = typeof (error as any)?.getResponse === 'function'
+                ? (error as any).getResponse()
+                : { code: 'INTERNAL_ERROR', message: 'Filesystem resolve failed' };
+            reply.code(status).send(body);
+        }
     });
 
     app.get('/api/v1/fs/list', { preHandler: requireAuth }, async (request, reply) => {
@@ -231,6 +258,32 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
         }
         return hostDiscovery.discover(consumer.id, consumer.root);
     });
+
+    // Host runtime registry is GLOBAL: one registration per host, shared by every consumer.
+    // ESO stores the registration; it never starts a host process or routes work.
+    app.get('/api/v1/host-runtimes', { preHandler: requireAuth }, async () => {
+        return hostRuntime.listHostRuntimes();
+    });
+
+    app.put('/api/v1/host-runtimes/:hostId', { preHandler: requireAuth }, async (request) => {
+        return hostRuntime.putHostRuntime((request.params as any).hostId, request.body || {});
+    });
+
+    app.post('/api/v1/host-runtimes/:hostId/heartbeat', { preHandler: requireAuth }, async (request) => {
+        return hostRuntime.heartbeat((request.params as any).hostId, request.body || {});
+    });
+
+    // Legacy consumer-scoped host registry: hosts are global now, so this surface is gone.
+    const hostRegistryGlobal = async (_request: FastifyRequest, reply: FastifyReply) => {
+        return reply.code(410).send({ ok: false, reason: 'HOST_REGISTRY_GLOBAL' });
+    };
+    for (const url of [
+        '/api/v1/consumers/:id/host-runtimes',
+        '/api/v1/consumers/:id/host-runtimes/:hostId',
+        '/api/v1/consumers/:id/host-runtimes/:hostId/heartbeat',
+    ]) {
+        app.route({ method: ['GET', 'PUT', 'POST'], url, preHandler: requireAuth, handler: hostRegistryGlobal });
+    }
 
     app.get('/api/v1/consumers/:id/stack-versions', { preHandler: requireAuth }, async (request) => {
         const id = (request.params as any).id;
@@ -403,6 +456,43 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
         return ruleFiles.remove((request.params as any).id, (request.params as any).ruleId);
     });
 
+    app.get('/api/v1/plugins', { preHandler: requireAuth }, async () => {
+        return plugins.list();
+    });
+
+    app.post('/api/v1/plugins', { preHandler: requireAuth }, async (request) => {
+        return plugins.install(request.body || {});
+    });
+
+    app.delete('/api/v1/plugins/:pluginId', { preHandler: requireAuth }, async (request) => {
+        return plugins.remove((request.params as any).pluginId);
+    });
+
+    app.get('/api/v1/consumers/:id/plugins', { preHandler: requireAuth }, async (request) => {
+        return plugins.consumer((request.params as any).id);
+    });
+
+    app.put('/api/v1/consumers/:id/plugins/:pluginId', { preHandler: requireAuth }, async (request) => {
+        return plugins.configure((request.params as any).id, (request.params as any).pluginId, request.body || {});
+    });
+
+    app.post('/api/v1/consumers/:id/plugins/:pluginId/test', { preHandler: requireAuth }, async (request) => {
+        return plugins.test((request.params as any).id, (request.params as any).pluginId);
+    });
+
+    app.post('/api/v1/consumers/:id/plugins/:pluginId/sync', { preHandler: requireAuth }, async (request) => {
+        return plugins.sync((request.params as any).id, (request.params as any).pluginId);
+    });
+
+    app.get('/api/v1/consumers/:id/plugins/:pluginId/projects', { preHandler: requireAuth }, async (request) => {
+        return plugins.discoverProjects((request.params as any).id, (request.params as any).pluginId);
+    });
+
+    app.get('/api/v1/consumers/:id/provider-records', { preHandler: requireAuth }, async (request) => {
+        const q = request.query as any;
+        return store.listProviderRecords((request.params as any).id, q?.provider);
+    });
+
     app.get('/api/v1/consumers/:id/flows', { preHandler: requireAuth }, async (request) => {
         return flowFiles.list((request.params as any).id);
     });
@@ -495,9 +585,9 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
         });
     });
 
-    app.post('/api/v1/consumers/:id/workers/:workerId/spawn', { preHandler: requireAuth }, async (request) => {
-        const body = (request.body || {}) as any;
-        return workerPolicy.spawn((request.params as any).id, (request.params as any).workerId, String(body.hostBindingId || ''));
+    // ESO is a control plane only. Host processes are started by the host runtime, never here.
+    app.post('/api/v1/consumers/:id/workers/:workerId/spawn', { preHandler: requireAuth }, async (_request, reply) => {
+        return reply.code(410).send({ ok: false, reason: 'ESO_RUNTIME_REMOVED' });
     });
 
     app.post('/api/v1/consumers/:id/workers/:workerId/handoff', { preHandler: requireAuth }, async (request) => {
@@ -514,11 +604,6 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
         return workerPolicy.listHandoffs((request.params as any).id, (request.params as any).workerId, Number(q?.limit) || 50);
     });
 
-    app.get('/api/v1/consumers/:id/workers/:workerId/runs', { preHandler: requireAuth }, async (request) => {
-        const q = request.query as any;
-        return workerPolicy.listRuns((request.params as any).id, (request.params as any).workerId, Number(q?.limit) || 50);
-    });
-
     app.get('/api/v1/consumers/:id/workers/:workerId/events', { preHandler: requireAuth }, async (request) => {
         const q = request.query as any;
         return workerPolicy.listEvents((request.params as any).id, (request.params as any).workerId, Number(q?.limit) || 50);
@@ -526,6 +611,15 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
 
     app.get('/api/v1/consumers/:id/workers', { preHandler: requireAuth }, async (request) => {
         return workerFiles.read((request.params as any).id);
+    });
+
+    // Worker host placement policy — stored by ESO, enforced by the host runtime.
+    app.get('/api/v1/consumers/:id/worker-placement', { preHandler: requireAuth }, async (request) => {
+        return hostRuntime.listWorkerPlacements((request.params as any).id);
+    });
+
+    app.put('/api/v1/consumers/:id/workers/:workerId/placement', { preHandler: requireAuth }, async (request) => {
+        return hostRuntime.putWorkerPlacement((request.params as any).id, (request.params as any).workerId, request.body || {});
     });
 
     app.put('/api/v1/consumers/:id/workers', { preHandler: requireAuth }, async (request) => {

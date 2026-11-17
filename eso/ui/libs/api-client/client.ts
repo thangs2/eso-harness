@@ -10,6 +10,11 @@ import type {
     ProvisionConsumerResponse,
     ConsumerSetupResponse,
     FsBrowseResponse,
+    FsResolveDirectoryResponse,
+    PluginManifestDto,
+    ConsumerPluginDto,
+    ProviderRecordDto,
+    JiraProjectDto,
     McpDiscoveryDto,
     HostDiscoveryDto,
     StackVersionsDto,
@@ -34,6 +39,8 @@ import type {
     KnowledgeRetrievalDto,
     KnowledgeEmbeddingStatusDto,
     KnowledgeEmbeddingResultDto,
+    HostRuntimeDto,
+    WorkerPlacementDto,
 } from './types.js';
 
 export class ControlPlaneApiClient {
@@ -186,6 +193,34 @@ export class ControlPlaneApiClient {
         }
     }
 
+    /** Parse an optional JSON body; 204/empty bodies yield null instead of throwing. */
+    private async optionalJson(res: Response): Promise<unknown> {
+        const text = await res.text();
+        if (!text) return null;
+        try {
+            return JSON.parse(text) as unknown;
+        } catch {
+            return null;
+        }
+    }
+
+    /** Read a list whether the endpoint answers a bare array or an `{ items: [] }` envelope. */
+    private readList<T>(body: unknown, keys: string[]): T[] {
+        if (Array.isArray(body)) return body as T[];
+        if (body && typeof body === 'object') {
+            const record = body as Record<string, unknown>;
+            for (const key of keys) {
+                const value = record[key];
+                if (Array.isArray(value)) return value as T[];
+            }
+        }
+        return [];
+    }
+
+    private readObject<T>(body: unknown): T | null {
+        return body && typeof body === 'object' && !Array.isArray(body) ? (body as T) : null;
+    }
+
     async planConsumer(profile: ConsumerProfile): Promise<ConsumerPlan> {
         const res = await fetch(`${this.baseUrl}/api/v1/consumers/plan`, {
             method: 'POST',
@@ -328,10 +363,132 @@ export class ControlPlaneApiClient {
         return (await res.json()) as WorkerConfigDto;
     }
 
+    async getHostRuntimes(): Promise<HostRuntimeDto[]> {
+        const res = await fetch(`${this.baseUrl}/api/v1/host-runtimes`, {
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return this.readList<HostRuntimeDto>(await this.optionalJson(res), ['items', 'runtimes', 'hosts', 'hostRuntimes']);
+    }
+
+    async saveHostRuntime(runtime: HostRuntimeDto): Promise<HostRuntimeDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/host-runtimes/${encodeURIComponent(runtime.hostId)}`, {
+            method: 'PUT',
+            headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                runtimeId: runtime.runtimeId,
+                runtimeKind: runtime.runtimeKind,
+                models: [...runtime.models],
+                defaultModel: runtime.defaultModel || '',
+                leadEligible: runtime.leadEligible,
+                health: runtime.health,
+            }),
+        });
+        if (!res.ok) throw await this.problem(res);
+        const saved = this.readObject<HostRuntimeDto>(await this.optionalJson(res));
+        return saved && typeof saved.hostId === 'string' ? saved : runtime;
+    }
+
+    async heartbeatHostRuntime(hostId: string): Promise<HostRuntimeDto | null> {
+        const res = await fetch(`${this.baseUrl}/api/v1/host-runtimes/${encodeURIComponent(hostId)}/heartbeat`, {
+            method: 'POST',
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return this.readObject<HostRuntimeDto>(await this.optionalJson(res));
+    }
+
+    async getConsumerWorkerPlacement(id: string): Promise<WorkerPlacementDto[]> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/worker-placement`, {
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return this.readList<WorkerPlacementDto>(await this.optionalJson(res), ['items', 'placements', 'workerPlacement']);
+    }
+
+    async saveConsumerWorkerPlacement(id: string, workerId: string, placement: WorkerPlacementDto): Promise<WorkerPlacementDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/workers/${encodeURIComponent(workerId)}/placement`, {
+            method: 'PUT',
+            headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                allowedHosts: [...placement.allowedHosts],
+                modelTier: placement.modelTier,
+                nativeAgent: { ...placement.nativeAgent },
+                fallback: placement.fallback,
+            }),
+        });
+        if (!res.ok) throw await this.problem(res);
+        const saved = this.readObject<WorkerPlacementDto>(await this.optionalJson(res));
+        return saved && typeof saved.workerId === 'string' ? saved : { ...placement, workerId };
+    }
+
     async getConsumerFlows(id: string): Promise<FlowSummaryDto[]> {
         const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/flows`, { headers: this.getHeaders() });
         if (!res.ok) throw await this.problem(res);
         return (await res.json()) as FlowSummaryDto[];
+    }
+
+    async getPlugins(): Promise<PluginManifestDto[]> {
+        const res = await fetch(`${this.baseUrl}/api/v1/plugins`, { headers: this.getHeaders() });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as PluginManifestDto[];
+    }
+
+    async getConsumerPlugins(id: string): Promise<ConsumerPluginDto[]> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/plugins`, { headers: this.getHeaders() });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as ConsumerPluginDto[];
+    }
+
+    async getPluginProjects(id: string, pluginId: string): Promise<JiraProjectDto[]> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/plugins/${encodeURIComponent(pluginId)}/projects`, { headers: this.getHeaders() });
+        if (!res.ok) throw await this.problem(res);
+        const body = await res.json() as any;
+        if (body?.ok === false) throw { status: 200, detail: body.reason || 'PROJECT_DISCOVERY_FAILED' };
+        return (body.projects || []) as JiraProjectDto[];
+    }
+
+    async installPlugin(manifest: any): Promise<any> {
+        const res = await fetch(`${this.baseUrl}/api/v1/plugins`, {
+            method: 'POST', headers: { ...this.getHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(manifest),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return res.json();
+    }
+
+    async removePlugin(pluginId: string): Promise<any> {
+        const res = await fetch(`${this.baseUrl}/api/v1/plugins/${encodeURIComponent(pluginId)}`, { method: 'DELETE', headers: this.getHeaders() });
+        if (!res.ok) throw await this.problem(res);
+        return res.json();
+    }
+
+    async syncConsumerPlugin(id: string, pluginId: string): Promise<any> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/plugins/${encodeURIComponent(pluginId)}/sync`, { method: 'POST', headers: this.getHeaders() });
+        if (!res.ok) throw await this.problem(res);
+        return res.json();
+    }
+
+    async getProviderRecords(id: string, provider?: string): Promise<ProviderRecordDto[]> {
+        const suffix = provider ? `?provider=${encodeURIComponent(provider)}` : '';
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/provider-records${suffix}`, { headers: this.getHeaders() });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as ProviderRecordDto[];
+    }
+
+    async configureConsumerPlugin(id: string, pluginId: string, payload: any): Promise<any> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/plugins/${encodeURIComponent(pluginId)}`, {
+            method: 'PUT', headers: { ...this.getHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return res.json();
+    }
+
+    async testConsumerPlugin(id: string, pluginId: string): Promise<any> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/plugins/${encodeURIComponent(pluginId)}/test`, {
+            method: 'POST', headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return res.json();
     }
 
     async getConsumerFlowProposal(id: string): Promise<FlowProposalDto> {
@@ -506,6 +663,12 @@ export class ControlPlaneApiClient {
         });
         if (!res.ok) throw await this.problem(res);
         return (await res.json()) as FsBrowseResponse;
+    }
+
+    async resolveDirectory(name: string): Promise<FsResolveDirectoryResponse> {
+        const res = await fetch(`${this.baseUrl}/api/v1/fs/resolve-directory?name=${encodeURIComponent(name)}`, { headers: this.getHeaders() });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as FsResolveDirectoryResponse;
     }
 
     async getConsumerSetup(id: string): Promise<ConsumerSetupResponse> {

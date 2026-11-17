@@ -174,7 +174,7 @@ CREATE INDEX knowledge_doc_chunk_hash ON knowledge_doc_chunk (content_hash);
 CREATE INDEX knowledge_doc_chunk_vec
   ON knowledge_doc_chunk USING hnsw (embedding vector_cosine_ops);
 
-CREATE TABLE knowledge_index_run (
+CREATE TABLE knowledge_index_build (
   build_id    text PRIMARY KEY,
   source_hash text NOT NULL,
   status      text NOT NULL CHECK (status IN ('running','ok','partial','error')),
@@ -185,7 +185,7 @@ CREATE TABLE knowledge_index_run (
 
 CREATE TABLE knowledge_manifest (
   manifest_id       text PRIMARY KEY,
-  build_id          text REFERENCES knowledge_index_run(build_id) ON DELETE SET NULL,
+  build_id          text REFERENCES knowledge_index_build(build_id) ON DELETE SET NULL,
   manifest_version  integer NOT NULL DEFAULT 1,
   generator_version text NOT NULL,
   source_hash       text NOT NULL,
@@ -224,15 +224,14 @@ CREATE TABLE knowledge_worker (
   indexed_at   timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE knowledge_worker_run (
-  run_id          text PRIMARY KEY,
-  worker_id       text NOT NULL,
-  host_binding_id text NOT NULL,
-  status          text NOT NULL CHECK (status IN ('spawned','exited','failed','authorized')),
-  pid             integer,
-  command         text,
-  started_at      timestamptz NOT NULL DEFAULT now(),
-  ended_at        timestamptz
+-- Host placement policy for a worker. ESO stores the policy; the owning host enforces it.
+CREATE TABLE knowledge_worker_host_policy (
+  worker_id     text PRIMARY KEY REFERENCES knowledge_worker(worker_id) ON DELETE CASCADE,
+  allowed_hosts text[] NOT NULL DEFAULT '{}',
+  model_tier    text NOT NULL DEFAULT 'balanced' CHECK (model_tier IN ('fast','balanced','reasoning')),
+  native_agent  jsonb NOT NULL DEFAULT '{}'::jsonb,
+  fallback      text NOT NULL DEFAULT 'block' CHECK (fallback IN ('block','next-host','next-tier')),
+  updated_at    timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE TABLE knowledge_worker_handoff (
@@ -272,7 +271,6 @@ CREATE TABLE knowledge_worker_event (
   reasons        jsonb NOT NULL DEFAULT '[]'::jsonb,
   evidence       jsonb NOT NULL DEFAULT '[]'::jsonb,
   trace_id       text,
-  run_id         text,
   span_id        text,
   parent_span_id text,
   host_binding_id text,
@@ -283,7 +281,6 @@ CREATE TABLE knowledge_worker_event (
 
 CREATE INDEX knowledge_worker_event_worker ON knowledge_worker_event (worker_id, created_at DESC);
 CREATE INDEX knowledge_worker_event_trace ON knowledge_worker_event (trace_id, created_at DESC);
-CREATE INDEX knowledge_worker_event_run ON knowledge_worker_event (run_id, created_at DESC);
 
 CREATE TABLE knowledge_worker_placement (
   worker_id       text NOT NULL REFERENCES knowledge_worker(worker_id) ON DELETE CASCADE,
