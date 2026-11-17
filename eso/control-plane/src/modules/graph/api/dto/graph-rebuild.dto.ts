@@ -1,6 +1,6 @@
 import { IsNotEmpty, IsObject, IsOptional, IsString } from 'class-validator';
 
-/** API-29 request body. The source is recovered from `graph_index_run` for this build_id. */
+/** API-29 request body. The source is recovered from `graph_index_build` for this build_id. */
 export class GraphRebuildDto {
     @IsString()
     @IsOptional()

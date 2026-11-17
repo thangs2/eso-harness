@@ -2,7 +2,7 @@
  * @mu/eso-graph — graph store service (US-GRAPH-03 / BIP 2.7 / ESO-403)
  *
  * Enforces the parts of API-28/29/30 that live below HTTP:
- * - `graph_index_run` is the idempotency ledger: same source hash replays, a different hash conflicts.
+ * - `graph_index_build` is the idempotency ledger: same source hash replays, a different hash conflicts.
  * - rebuild replaces the rows of exactly one `(project, build_id)` inside one transaction.
  * - query answers carry the completeness of THEIR question, and refuse to answer below the floor
  *   (BR-05: unknown is not absent).
@@ -104,7 +104,7 @@ function resolveSourcePath(source, consumerRoot) {
 export async function readIndexRun(db, { project, buildId, sourceKind = 'roslyn' }) {
     return db.get(
         `SELECT project, build_id, source_kind, source_hash, source_path, status, created_at, completed_at
-         FROM graph_index_run
+         FROM graph_index_build
          WHERE project = ? AND build_id = ? AND source_kind = ?`,
         [project, buildId, sourceKind]
     );
@@ -112,7 +112,7 @@ export async function readIndexRun(db, { project, buildId, sourceKind = 'roslyn'
 
 async function beginIndexRun(db, { project, buildId, sourceKind, sourceHash, sourcePath }) {
     await db.run(
-        `INSERT INTO graph_index_run (project, build_id, source_kind, source_hash, source_path, status, created_at)
+        `INSERT INTO graph_index_build (project, build_id, source_kind, source_hash, source_path, status, created_at)
          VALUES (?, ?, ?, ?, ?, 'queued', now())
          ON CONFLICT (project, build_id, source_kind) DO NOTHING`,
         [project, buildId, sourceKind, sourceHash, sourcePath]
@@ -121,7 +121,7 @@ async function beginIndexRun(db, { project, buildId, sourceKind, sourceHash, sou
 
 async function finishIndexRun(db, { project, buildId, sourceKind, status }) {
     await db.run(
-        `UPDATE graph_index_run
+        `UPDATE graph_index_build
          SET status = ?, completed_at = now()
          WHERE project = ? AND build_id = ? AND source_kind = ?`,
         [status, project, buildId, sourceKind]
@@ -159,7 +159,7 @@ export async function indexGraph({
         // A failed run has no usable rows and its keys are immutable by trigger. Delete the
         // failed ledger row; the fresh insert below records the new source hash/path.
         await db.run(
-            'DELETE FROM graph_index_run WHERE project = ? AND build_id = ? AND source_kind = ? AND status = ?',
+            'DELETE FROM graph_index_build WHERE project = ? AND build_id = ? AND source_kind = ? AND status = ?',
             [project, buildId, source.kind, 'failed']
         );
     }
@@ -511,7 +511,7 @@ export const DOC_RELATIONS = Object.freeze(['specifies', 'constrains', 'derived_
 
 async function latestBuildId(db, project) {
     const run = await db.get(
-        `SELECT build_id FROM graph_index_run WHERE project = ? ORDER BY created_at DESC LIMIT 1`,
+        `SELECT build_id FROM graph_index_build WHERE project = ? ORDER BY created_at DESC LIMIT 1`,
         [project]
     );
     if (run) return run.build_id;

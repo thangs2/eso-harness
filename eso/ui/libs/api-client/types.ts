@@ -390,7 +390,7 @@ export interface WorkerPolicyResultDto {
 export interface WorkerBindingDto {
     id: string;
     developer: string;
-    hostPluginId: string;
+    hostId: string;
     stackVersion: number;
     memorySource: string;
     codeGraphSource: string;
@@ -540,7 +540,7 @@ export interface McpDiscoveryDto {
 }
 
 export interface DetectedHostDto {
-    hostPluginId: string;
+    hostId: string;
     label: string;
     markers: string[];
 }

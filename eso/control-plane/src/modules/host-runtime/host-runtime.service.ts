@@ -1,5 +1,6 @@
 import { assertConsumerId, type PlatformStore } from '../../platform/registry/store.js';
 import { HOST_RUNTIME_HEALTH, HOST_RUNTIME_KINDS } from '../../platform/registry/ddl.js';
+import { PlatformError } from '../../platform/registry/errors.js';
 
 /**
  * Host runtime registry and worker host placement policy.
@@ -8,14 +9,6 @@ import { HOST_RUNTIME_HEALTH, HOST_RUNTIME_KINDS } from '../../platform/registry
  * the placement policy the host must enforce. It never starts a host process, never queues or
  * dispatches work, never tracks runs, and never calls a model itself.
  */
-
-/** HTTP error with a stable code; the server error envelope maps it to `{code,message}`. */
-export class RuntimeHttpError extends Error {
-    constructor(readonly status: number, readonly code: string, message: string) {
-        super(message);
-        this.name = 'RuntimeHttpError';
-    }
-}
 
 const MODEL_TIERS = ['fast', 'balanced', 'reasoning'] as const;
 const FALLBACKS = ['block', 'next-host', 'next-tier'] as const;
@@ -69,16 +62,31 @@ function jsonObject(value: unknown): Record<string, string> {
 
 function requiredText(value: unknown, field: string, code: string): string {
     const text = typeof value === 'string' ? value.trim() : '';
-    if (!text) throw new RuntimeHttpError(422, code, `${field} is required`);
+    if (!text) throw new PlatformError(code, `${field} is required`);
     return text;
 }
 
 function oneOf<T extends readonly string[]>(value: unknown, allowed: T, field: string, code: string): T[number] {
     const text = String(value ?? '');
     if (!(allowed as readonly string[]).includes(text)) {
-        throw new RuntimeHttpError(422, code, `${field} must be one of ${allowed.join(', ')}`);
+        throw new PlatformError(code, `${field} must be one of ${allowed.join(', ')}`);
     }
     return text as T[number];
+}
+
+/** Resolve a host default model: explicit values must be non-empty and present in the effective catalog. */
+function resolveDefaultModel(body: any, models: string[], existing: any, explicit: boolean): string {
+    const current = String(existing?.default_model ?? existing?.defaultModel ?? '');
+    if (explicit) {
+        const requested = String(body?.defaultModel ?? '').trim();
+        if (!requested) throw new PlatformError('HOST_RUNTIME_INVALID', 'defaultModel is required');
+        if (!models.includes(requested)) {
+            throw new PlatformError('HOST_RUNTIME_INVALID', `defaultModel must be one of ${models.join(', ') || '(no models reported)'}`);
+        }
+        return requested;
+    }
+    if (models.length === 0) return '';
+    return current && models.includes(current) ? current : models[0];
 }
 
 function hostRuntimeDto(row: any): any {
@@ -121,14 +129,13 @@ export class HostRuntimeService {
         const existing = await this.store.getHostRuntime(host);
         const models = body?.models === undefined ? (existing ? jsonArray(existing.models) : []) : textArray(body.models);
         const healthExplicit = body?.health !== undefined;
+        const defaultExplicit = body?.defaultModel !== undefined;
         const runtime = {
             hostId: host,
             runtimeId: requiredText(body?.runtimeId, 'runtimeId', 'HOST_RUNTIME_INVALID'),
             runtimeKind: oneOf(body?.runtimeKind, HOST_RUNTIME_KINDS, 'runtimeKind', 'HOST_RUNTIME_INVALID'),
             models,
-            defaultModel: body?.defaultModel === undefined
-                ? (existing ? String(existing.default_model ?? existing.defaultModel ?? '') : '')
-                : String(body.defaultModel || ''),
+            defaultModel: resolveDefaultModel(body, models, existing, defaultExplicit),
             leadEligible: Boolean(body?.leadEligible),
             // Metadata edits preserve observed health; only an explicit health field (or heartbeat)
             // may change liveness. A newly registered host starts as 'unknown'.
@@ -137,28 +144,33 @@ export class HostRuntimeService {
                 : String(existing?.health ?? 'unknown'),
             healthExplicit,
         };
-        if (runtime.defaultModel && models.length > 0 && !models.includes(runtime.defaultModel)) {
-            runtime.defaultModel = models[0];
-        }
-        if (!runtime.defaultModel && models.length > 0) runtime.defaultModel = models[0];
         const row = await this.store.upsertHostRuntime(runtime);
         return hostRuntimeDto(row);
     }
 
     async heartbeat(hostId: string, body: any): Promise<any> {
         const host = requiredText(hostId, 'hostId', 'HOST_RUNTIME_INVALID');
+        const existing = await this.store.getHostRuntime(host);
+        if (!existing) throw new PlatformError('HOST_RUNTIME_NOT_FOUND', `Host runtime not registered: ${host}`);
+        const modelsSupplied = body?.models !== undefined;
+        const defaultSupplied = body?.defaultModel !== undefined;
+        const effectiveModels = modelsSupplied ? textArray(body.models) : jsonArray(existing.models);
         const patch: { health?: string; models?: string[]; defaultModel?: string } = {};
         if (body?.health !== undefined) patch.health = oneOf(body.health, HOST_RUNTIME_HEALTH, 'health', 'HOST_RUNTIME_INVALID');
-        if (body?.models !== undefined) patch.models = textArray(body.models);
-        if (body?.defaultModel !== undefined) patch.defaultModel = String(body.defaultModel || '');
-        if (patch.models && patch.models.length > 0 && patch.defaultModel && !patch.models.includes(patch.defaultModel)) {
-            patch.defaultModel = patch.models[0];
-        }
-        if (patch.models && patch.models.length > 0 && !patch.defaultModel) {
-            patch.defaultModel = patch.models[0];
+        if (modelsSupplied) patch.models = effectiveModels;
+        if (defaultSupplied) {
+            const requested = String(body.defaultModel ?? '').trim();
+            if (!requested) throw new PlatformError('HOST_RUNTIME_INVALID', 'defaultModel is required');
+            if (!effectiveModels.includes(requested)) {
+                throw new PlatformError('HOST_RUNTIME_INVALID', `defaultModel must be one of ${effectiveModels.join(', ') || '(no models reported)'}`);
+            }
+            patch.defaultModel = requested;
+        } else if (modelsSupplied) {
+            const current = String(existing.default_model ?? existing.defaultModel ?? '');
+            patch.defaultModel = effectiveModels.length === 0 ? '' : (current && effectiveModels.includes(current) ? current : effectiveModels[0]);
         }
         const row = await this.store.heartbeatHostRuntime(host, patch);
-        if (!row) throw new RuntimeHttpError(404, 'HOST_RUNTIME_NOT_FOUND', `Host runtime not registered: ${host}`);
+        if (!row) throw new PlatformError('HOST_RUNTIME_NOT_FOUND', `Host runtime not registered: ${host}`);
         return hostRuntimeDto(row);
     }
 
@@ -172,10 +184,10 @@ export class HostRuntimeService {
         const id = assertConsumerId(consumerId);
         const worker = requiredText(workerId, 'workerId', 'WORKER_PLACEMENT_INVALID');
         const known = await this.store.knowledgeWorker(id, worker);
-        if (!known) throw new RuntimeHttpError(404, 'WORKER_NOT_FOUND', `Worker not found: ${worker}`);
+        if (!known) throw new PlatformError('WORKER_NOT_FOUND', `Worker not found: ${worker}`);
         const nativeAgent = body?.nativeAgent === undefined ? {} : body.nativeAgent;
         if (!isRecord(nativeAgent)) {
-            throw new RuntimeHttpError(422, 'WORKER_PLACEMENT_INVALID', 'nativeAgent must be an object of hostId to agent name');
+            throw new PlatformError('WORKER_PLACEMENT_INVALID', 'nativeAgent must be an object of hostId to agent name');
         }
         const config = {
             allowedHosts: body?.allowedHosts === undefined ? [] : textArray(body.allowedHosts),

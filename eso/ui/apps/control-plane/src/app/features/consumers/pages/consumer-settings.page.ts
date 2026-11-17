@@ -10,6 +10,14 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { ConsumerProfileService } from '../../../core/consumers/consumer-profile.service.js';
 import type { ConsumerProfile, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, McpProviderDto, WorkerConfigDto, EvidenceRequirementDto, FlowSummaryDto, FlowDefinitionDto, HostRuntimeDto, WorkerPlacementDto, WorkerModelTier, WorkerPlacementFallback } from '../../../../../../../libs/api-client/types.js';
 
+/**
+ * Only remaining occurrence of the pre-P0.3 host-binding key: settings saved by an older UI.
+ * They are migrated to `hostId` once on load; everything new reads and writes `hostId` only.
+ * The API, host discovery, and worker bindings all use `hostId`.
+ */
+const LEGACY_HOST_PLUGIN_KEY = 'hostPluginId' as const;
+type LegacyHostProfile = HostProfile & { [LEGACY_HOST_PLUGIN_KEY]?: string };
+
 type LayerId = 'multiAgent' | 'rules' | 'skills' | 'hooks' | 'memory' | 'codeGraph' | 'documentGraph' | 'topology';
 
 interface StackLayer {
@@ -37,7 +45,7 @@ interface StackVersion {
 interface HostProfile {
     id: string;
     userId: string;
-    hostPluginId: string;
+    hostId: string;
     stackVersion: number;
     flowId?: string;
     flowVersion?: number;
@@ -425,8 +433,8 @@ function defaultPlugins(): PluginEntry[] {
                                                                 <thead><tr><th>Host</th><th>Stack</th><th>Sources</th><th>Resolution</th><th class="actions-col">Actions</th></tr></thead>
                                                                 <tbody>
                                                                     @for (profile of managedProfilesFor(developer); track profile.id) {
-                                                                        <tr class="host-row" [class.host-unavailable]="!hostAvailable(profile.hostPluginId)">
-                                                                            <td><div class="host-name"><strong>{{ hostLabel(profile.hostPluginId) }}</strong><small>{{ hostAvailable(profile.hostPluginId) ? hostHealth(profile.hostPluginId) : 'host unavailable' }}</small></div></td>
+                                                                        <tr class="host-row" [class.host-unavailable]="!hostAvailable(profile.hostId)">
+                                                                            <td><div class="host-name"><strong>{{ hostLabel(profile.hostId) }}</strong><small>{{ hostAvailable(profile.hostId) ? hostHealth(profile.hostId) : 'host unavailable' }}</small></div></td>
                                                                             <td>v{{ profile.stackVersion }}@if (profile.flowId) { <small class="flow-pin">flow {{ profile.flowId }} · v{{ profile.flowVersion || 1 }}</small> }</td>
                                                                             <td class="host-sources">{{ hostSourcesSummary(profile) }}</td>
                                                                             <td class="host-overrides">{{ resolutionSummary(profile) }}</td>
@@ -477,7 +485,7 @@ function defaultPlugins(): PluginEntry[] {
                                                                     <input matInput [ngModel]="bindingDeveloper()" [disabled]="addingHostFor() !== '__new' || !!editingProfile()" (ngModelChange)="bindingDeveloper.set($event)" placeholder="dev1">
                                                                 </mat-form-field>
                                                                 <mat-form-field appearance="outline"><mat-label>Registered host</mat-label>
-                                                                    <mat-select [ngModel]="newHostPluginId()" [disabled]="!!editingProfile()" (ngModelChange)="changeHostPlugin($event)">
+                                                                    <mat-select [ngModel]="newHostId()" [disabled]="!!editingProfile()" (ngModelChange)="changeHost($event)">
                                                                         @for (host of activeHostRuntimes(); track host.hostId) { <mat-option [value]="host.hostId">{{ host.hostId }} · {{ hostTypeFor(host.hostId) }} · {{ host.runtimeId }}</mat-option> }
                                                                     </mat-select>
                                                                     <mat-hint>Only active registered hosts are assignable.</mat-hint>
@@ -612,7 +620,7 @@ function defaultPlugins(): PluginEntry[] {
                                                                             <div><h4>Host binding</h4><p>Host-owned configuration surface.</p></div>
                                                                             <span class="scope-badge muted-badge">read-only</span>
                                                                         </header>
-                                                                        <div class="mcp-binding"><span>MCP config</span><code>{{ mcpSourceForHost(newHostPluginId()) }}</code></div>
+                                                                        <div class="mcp-binding"><span>MCP config</span><code>{{ mcpSourceForHost(newHostId()) }}</code></div>
                                                                     </section>
                                                                 </div>                                                            </details>
                                                         </div>
@@ -624,10 +632,10 @@ function defaultPlugins(): PluginEntry[] {
                                     <header class="hosts-section-head"><div><h3>Detected host runtimes</h3><p class="muted">Markers exist in the repository, but no binding has been created. Detection is optional.</p></div></header>
                                     @if (unmanagedHosts().length > 0) {
                                         <div class="detected-grid">
-                                            @for (host of unmanagedHosts(); track host.hostPluginId) {
+                                            @for (host of unmanagedHosts(); track host.hostId) {
                                                 <article class="detected-card">
                                                     <div><strong>{{ host.label }}</strong><code>{{ host.markers.join(', ') }}</code></div>
-                                                    <button mat-stroked-button type="button" (click)="manageDetectedHost(host.hostPluginId)">{{ hostAvailable(host.hostPluginId) ? 'Bind with ESO' : 'Register in Hosts' }}</button>
+                                                    <button mat-stroked-button type="button" (click)="manageDetectedHost(host.hostId)">{{ hostAvailable(host.hostId) ? 'Bind with ESO' : 'Register in Hosts' }}</button>
                                                 </article>
                                             }
                                         </div>
@@ -1830,7 +1838,7 @@ export class ConsumerSettingsPage implements OnInit {
     readonly mcpProviders = signal<McpProviderDto[]>([]);
     readonly mcpSources = signal<string[]>([]);
     readonly mcpWarnings = signal<string[]>([]);
-    readonly detectedHosts = signal<Array<{ hostPluginId: string; label: string; markers: string[] }>>([]);
+    readonly detectedHosts = signal<Array<{ hostId: string; label: string; markers: string[] }>>([]);
     readonly developers = signal<string[]>([]);
     readonly workers = signal<WorkerEntry[]>(defaultWorkers());
     readonly selectedWorkerId = signal('');
@@ -1902,7 +1910,7 @@ export class ConsumerSettingsPage implements OnInit {
     readonly bulkUpgradeOpen = signal(false);
     readonly bulkUpgradeTarget = signal<number | null>(null);
     readonly deleteVersionConfirm = signal(false);
-    readonly newHostPluginId = signal('cursor');
+    readonly newHostId = signal('cursor');
     readonly newMemorySource = signal('eso-native');
     readonly newMemoryProvider = signal('');
     readonly newCodeGraphSource = signal('eso-native');
@@ -2018,8 +2026,8 @@ export class ConsumerSettingsPage implements OnInit {
                 this.mcpWarnings.set(mcp.warnings);
                 this.detectedHosts.set(hosts.detected);
                 this.hostRuntimes.set(hostRuntimes);
-                if (!hostRuntimes.some((host) => host.hostId === this.newHostPluginId()) && hostRuntimes.length > 0) {
-                    this.newHostPluginId.set(hostRuntimes.find((host) => host.health !== 'offline')?.hostId || hostRuntimes[0].hostId);
+                if (!hostRuntimes.some((host) => host.hostId === this.newHostId()) && hostRuntimes.length > 0) {
+                    this.newHostId.set(hostRuntimes.find((host) => host.health !== 'offline')?.hostId || hostRuntimes[0].hostId);
                 }
                 this.remoteStackVersions.set(versions.versions.map((item: any) => ({
                     version: Number(item.version) || 1,
@@ -2237,7 +2245,7 @@ export class ConsumerSettingsPage implements OnInit {
     }
 
     bindingLabel(binding: HostProfile): string {
-        return `${binding.userId} · ${this.hostLabel(binding.hostPluginId)} · v${binding.stackVersion}`;
+        return `${binding.userId} · ${this.hostLabel(binding.hostId)} · v${binding.stackVersion}`;
     }
 
     formationBindingLabel(id: string): string {
@@ -2765,21 +2773,21 @@ export class ConsumerSettingsPage implements OnInit {
         ];
     }
 
-    unmanagedHosts(): Array<{ hostPluginId: string; label: string; markers: string[] }> {
-        return this.detectedHosts().filter((host) => !this.hostProfiles().some((profile) => profile.hostPluginId === host.hostPluginId));
+    unmanagedHosts(): Array<{ hostId: string; label: string; markers: string[] }> {
+        return this.detectedHosts().filter((host) => !this.hostProfiles().some((profile) => profile.hostId === host.hostId));
     }
 
-    manageDetectedHost(hostPluginId: string): void {
-        if (!this.hostAvailable(hostPluginId)) { this.error.set('No active host runtime. Register it in Hosts first.'); this.openHosts(); return; }
+    manageDetectedHost(hostId: string): void {
+        if (!this.hostAvailable(hostId)) { this.error.set('No active host runtime. Register it in Hosts first.'); this.openHosts(); return; }
         const userId = this.developers()[0] || 'operator';
         this.developers.update((developers) => (developers.includes(userId) ? developers : [...developers, userId]));
-        if (this.hostProfiles().some((profile) => profile.userId === userId && profile.hostPluginId === hostPluginId)) return;
-        const resolution = this.hostResolution(hostPluginId);
+        if (this.hostProfiles().some((profile) => profile.userId === userId && profile.hostId === hostId)) return;
+        const resolution = this.hostResolution(hostId);
         this.hostProfiles.update((profiles) => [...profiles, {
-            id: `hp-${Date.now()}`, userId, hostPluginId, stackVersion: this.newStackVersion(),
+            id: `hp-${Date.now()}`, userId, hostId, stackVersion: this.newStackVersion(),
             flowId: this.newFlowId() || undefined, flowVersion: this.newFlowId() ? this.newFlowVersion() : undefined,
             ...resolution,
-            mcpConfigSource: this.mcpSourceForHost(hostPluginId), installState: 'pending', detected: false,
+            mcpConfigSource: this.mcpSourceForHost(hostId), installState: 'pending', detected: false,
         }]);
     }
 
@@ -2805,13 +2813,13 @@ export class ConsumerSettingsPage implements OnInit {
         this.useHostDefaults();
     }
 
-    changeHostPlugin(hostPluginId: string): void {
-        this.newHostPluginId.set(hostPluginId);
+    changeHost(hostId: string): void {
+        this.newHostId.set(hostId);
         this.useHostDefaults();
     }
 
     useHostDefaults(): void {
-        const resolution = this.hostResolution(this.newHostPluginId(), this.newStackVersion());
+        const resolution = this.hostResolution(this.newHostId(), this.newStackVersion());
         this.newMemorySource.set(resolution.memorySource);
         this.newMemoryProvider.set(resolution.memoryProvider || '');
         this.newCodeGraphSource.set(resolution.codeGraphSource);
@@ -2844,7 +2852,7 @@ export class ConsumerSettingsPage implements OnInit {
         this.editingProfile.set(profile.id);
         this.addingHostFor.set(profile.userId);
         this.bindingDeveloper.set(profile.userId);
-        this.newHostPluginId.set(profile.hostPluginId);
+        this.newHostId.set(profile.hostId);
         this.newStackVersion.set(profile.stackVersion);
         this.newFlowId.set(profile.flowId || '');
         this.newFlowVersion.set(profile.flowVersion || 1);
@@ -2855,7 +2863,7 @@ export class ConsumerSettingsPage implements OnInit {
     }
 
     saveHostBinding(): void {
-        if (!this.hostAvailable(this.newHostPluginId())) { this.error.set('Selected host is not registered or offline.'); return; }
+        if (!this.hostAvailable(this.newHostId())) { this.error.set('Selected host is not registered or offline.'); return; }
         const editing = this.editingProfile();
         const developer = this.bindingDeveloper().trim();
         if (!developer) return;
@@ -2872,7 +2880,7 @@ export class ConsumerSettingsPage implements OnInit {
                 memoryProvider: this.newMemorySource() === 'market' ? this.newMemoryProvider() : undefined,
                 codeGraphSource: this.newCodeGraphSource(),
                 codeGraphProvider: this.newCodeGraphSource() === 'market' ? this.newCodeGraphProvider() : undefined,
-                mcpConfigSource: this.mcpSourceForHost(profile.hostPluginId),
+                mcpConfigSource: this.mcpSourceForHost(profile.hostId),
             } : profile));
             this.cancelAddHost();
             return;
@@ -2880,7 +2888,7 @@ export class ConsumerSettingsPage implements OnInit {
         this.addHostToDeveloper(developer);
     }
 
-    private hostResolution(hostPluginId: string, stackVersion = this.newStackVersion()): { memorySource: string; memoryProvider?: string; codeGraphSource: string; codeGraphProvider?: string } {
+    private hostResolution(hostId: string, stackVersion = this.newStackVersion()): { memorySource: string; memoryProvider?: string; codeGraphSource: string; codeGraphProvider?: string } {
         const layers = this.layersForVersion(stackVersion);
         const policy = (id: LayerId) => layers.find((layer) => layer.id === id);
         const resolve = (id: LayerId, hostNative: boolean): { source: string; provider?: string } => {
@@ -2892,7 +2900,7 @@ export class ConsumerSettingsPage implements OnInit {
             const provider = source === 'market' ? this.marketProviders(id === 'memory' ? 'memory' : 'codeGraph')[0]?.id : undefined;
             return { source, provider };
         };
-        const memory = resolve('memory', this.hostTypeFor(hostPluginId) === 'dsh');
+        const memory = resolve('memory', this.hostTypeFor(hostId) === 'dsh');
         const codeGraph = resolve('codeGraph', false);
         return {
             memorySource: memory.source,
@@ -2938,8 +2946,8 @@ export class ConsumerSettingsPage implements OnInit {
         return parts.length ? parts.join(' · ') : 'auto';
     }
 
-    mcpSourceForHost(hostPluginId: string): string {
-        const hostType = this.hostTypeFor(hostPluginId);
+    mcpSourceForHost(hostId: string): string {
+        const hostType = this.hostTypeFor(hostId);
         const sources: Record<string, string> = {
             cursor: '.cursor/mcp.json',
             agy: '.agents/mcp_config.json',
@@ -2948,22 +2956,22 @@ export class ConsumerSettingsPage implements OnInit {
             paseo: 'plugin config',
             orca: 'plugin config',
         };
-        return sources[hostType] || sources[hostPluginId] || 'host config';
+        return sources[hostType] || sources[hostId] || 'host config';
     }
 
     addHostToDeveloper(userId: string): void {
-        const hostPluginId = this.newHostPluginId();
-        if (!hostPluginId) return;
-        if (!this.hostAvailable(hostPluginId)) { this.error.set('Selected host is not registered or offline.'); return; }
-        const exists = this.hostProfiles().some((profile) => profile.userId === userId && profile.hostPluginId === hostPluginId);
+        const hostId = this.newHostId();
+        if (!hostId) return;
+        if (!this.hostAvailable(hostId)) { this.error.set('Selected host is not registered or offline.'); return; }
+        const exists = this.hostProfiles().some((profile) => profile.userId === userId && profile.hostId === hostId);
         if (exists) return;
         this.hostProfiles.update((profiles) => [...profiles, {
-            id: `hp-${Date.now()}`, userId, hostPluginId, stackVersion: this.newStackVersion(),
+            id: `hp-${Date.now()}`, userId, hostId, stackVersion: this.newStackVersion(),
             memorySource: this.newMemorySource(),
             memoryProvider: this.newMemorySource() === 'market' ? this.newMemoryProvider() : undefined,
             codeGraphSource: this.newCodeGraphSource(),
             codeGraphProvider: this.newCodeGraphSource() === 'market' ? this.newCodeGraphProvider() : undefined,
-            mcpConfigSource: this.mcpSourceForHost(hostPluginId),
+            mcpConfigSource: this.mcpSourceForHost(hostId),
             installState: 'pending', detected: false,
         }]);
         this.addingHostFor.set(null);
@@ -3750,7 +3758,7 @@ export class ConsumerSettingsPage implements OnInit {
             bindings: this.hostProfiles().map((binding) => ({
                 id: binding.id,
                 developer: binding.userId,
-                hostPluginId: binding.hostPluginId,
+                hostId: binding.hostId,
                 stackVersion: binding.stackVersion,
                 memorySource: binding.memorySource,
                 codeGraphSource: binding.codeGraphSource,
@@ -3849,7 +3857,12 @@ export class ConsumerSettingsPage implements OnInit {
         this.stackLayers.set(this.layersForVersion(active).map((layer) => ({ ...layer, allowedSources: layer.allowedSources ? [...layer.allowedSources] : undefined })));
         this.newStackVersion.set(this.latestPublishedVersion());
         const savedProfiles = Array.isArray(harness.hostProfiles)
-            ? harness.hostProfiles.filter((profile: HostProfile) => !profile.detected)
+            ? (harness.hostProfiles as LegacyHostProfile[])
+                .map((profile) => {
+                    const { [LEGACY_HOST_PLUGIN_KEY]: legacyHostId, ...rest } = profile;
+                    return { ...rest, hostId: rest.hostId || legacyHostId || '' } as HostProfile;
+                })
+                .filter((profile) => !profile.detected)
             : [];
         this.hostProfiles.set(savedProfiles);
         const savedDevelopers = Array.isArray(harness.developers) ? harness.developers : [];

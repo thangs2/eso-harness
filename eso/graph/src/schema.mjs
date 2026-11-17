@@ -118,8 +118,10 @@ CREATE TRIGGER trg_manifest_entry_no_change
 BEFORE UPDATE OR DELETE ON manifest_entry
 FOR EACH ROW EXECUTE FUNCTION raise_append_only();
 
--- 6. graph_index_run: trạng thái chạy và source_hash index graph cho API-28
-CREATE TABLE IF NOT EXISTS graph_index_run (
+-- 6. graph_index_build: trạng thái chạy và source_hash index graph cho API-28
+-- Rename legacy ledger without losing existing graph builds.
+ALTER TABLE IF EXISTS graph_index_run RENAME TO graph_index_build;
+CREATE TABLE IF NOT EXISTS graph_index_build (
   project      text NOT NULL,
   build_id     text NOT NULL,
   source_kind  text NOT NULL CHECK (source_kind IN ('roslyn','docs')),
@@ -134,11 +136,11 @@ CREATE TABLE IF NOT EXISTS graph_index_run (
 );
 
 -- Existing graph databases predate the source_path column; keep DDL idempotent.
-ALTER TABLE graph_index_run ADD COLUMN IF NOT EXISTS source_path text;
+ALTER TABLE graph_index_build ADD COLUMN IF NOT EXISTS source_path text;
 
-CREATE INDEX IF NOT EXISTS idx_graph_index_run_build ON graph_index_run (project, build_id);
+CREATE INDEX IF NOT EXISTS idx_graph_index_build_build ON graph_index_build (project, build_id);
 
-CREATE OR REPLACE FUNCTION check_graph_index_run_immutable_keys()
+CREATE OR REPLACE FUNCTION check_graph_index_build_immutable_keys()
 RETURNS TRIGGER AS $$
 BEGIN
   IF NEW.project <> OLD.project OR NEW.build_id <> OLD.build_id OR NEW.source_kind <> OLD.source_kind OR NEW.source_hash <> OLD.source_hash THEN
@@ -148,10 +150,10 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS trg_graph_index_run_immutable ON graph_index_run;
-CREATE TRIGGER trg_graph_index_run_immutable
-BEFORE UPDATE ON graph_index_run
-FOR EACH ROW EXECUTE FUNCTION check_graph_index_run_immutable_keys();
+DROP TRIGGER IF EXISTS trg_graph_index_build_immutable ON graph_index_build;
+CREATE TRIGGER trg_graph_index_build_immutable
+BEFORE UPDATE ON graph_index_build
+FOR EACH ROW EXECUTE FUNCTION check_graph_index_build_immutable_keys();
 `;
 
 export const POSTGRES_RLS_SQL = `
@@ -166,8 +168,8 @@ ALTER TABLE completeness ENABLE ROW LEVEL SECURITY;
 ALTER TABLE completeness FORCE ROW LEVEL SECURITY;
 ALTER TABLE manifest_entry ENABLE ROW LEVEL SECURITY;
 ALTER TABLE manifest_entry FORCE ROW LEVEL SECURITY;
-ALTER TABLE graph_index_run ENABLE ROW LEVEL SECURITY;
-ALTER TABLE graph_index_run FORCE ROW LEVEL SECURITY;
+ALTER TABLE graph_index_build ENABLE ROW LEVEL SECURITY;
+ALTER TABLE graph_index_build FORCE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS graph_node_project_only ON graph_node;
 CREATE POLICY graph_node_project_only ON graph_node
@@ -199,8 +201,8 @@ CREATE POLICY manifest_entry_project_only ON manifest_entry
   USING      (project = current_setting('eso.project', true))
   WITH CHECK (project = current_setting('eso.project', true));
 
-DROP POLICY IF EXISTS graph_index_run_project_only ON graph_index_run;
-CREATE POLICY graph_index_run_project_only ON graph_index_run
+DROP POLICY IF EXISTS graph_index_build_project_only ON graph_index_build;
+CREATE POLICY graph_index_build_project_only ON graph_index_build
   FOR ALL
   USING      (project = current_setting('eso.project', true))
   WITH CHECK (project = current_setting('eso.project', true));
@@ -212,7 +214,7 @@ export const TABLES = Object.freeze([
   'source_claim',
   'completeness',
   'manifest_entry',
-  'graph_index_run',
+  'graph_index_build',
 ]);
 
 /**
