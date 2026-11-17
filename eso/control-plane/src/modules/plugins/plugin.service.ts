@@ -46,6 +46,23 @@ const BUILTINS: PluginManifest[] = [
     { id: 'dsh', label: 'DSH', type: 'host', category: 'host', version: '1.0.0', capabilities: ['rules', 'skills', 'hooks', 'mcp', 'memory'], status: 'installed', description: 'DeepSeek Harness host adapter.', configSchema: { required: [], properties: {} }, source: 'builtin' },
     { id: 'paseo', label: 'Paseo', type: 'host', category: 'host', version: '1.0.0', capabilities: ['orchestration', 'mcp'], status: 'installed', description: 'Paseo orchestration adapter.', configSchema: { required: [], properties: {} }, source: 'builtin' },
     { id: 'jira', label: 'Jira', type: 'provider', category: 'work', version: '1.0.0', capabilities: ['ticket', 'external-ref'], status: 'installed', description: 'Jira issue and external reference provider.', configSchema: JIRA_SCHEMA, source: 'builtin' },
+    {
+        id: 'jev', label: 'JEV', type: 'capability', category: 'other', version: '1.0.0',
+        capabilities: ['decide', 'verdict'],
+        status: 'available',
+        description: 'JEV decision facade (off | shadow | active). Registers the capability; host wiring is separate.',
+        configSchema: {
+            required: ['mode'],
+            properties: {
+                mode: { type: 'string', label: 'Mode', enum: ['off', 'shadow', 'active'], help: 'off = no JEV; shadow = evaluate only; active = JEV may decide within the confidence band.' },
+                autoThreshold: { type: 'number', label: 'Auto threshold', help: '0..1; decisions at or above this confidence may be automatic in active mode.' },
+                confirmThreshold: { type: 'number', label: 'Confirm threshold', help: '0..1; below this confidence JEV must ask or stay open.' },
+                consent: { type: 'boolean', label: 'Evidence consent', help: 'Required before enabling shadow/active.' },
+            },
+        },
+        source: 'builtin',
+    },
+
     { id: 'notion', label: 'Notion', type: 'provider', category: 'content', version: '1.0.0', capabilities: ['document'], status: 'available', description: 'Notion document provider.', configSchema: { ...NOTION_SCHEMA, properties: { ...NOTION_SCHEMA.properties, baseUrl: { type: 'string', label: 'API base URL', help: 'Default https://api.notion.com' } } }, source: 'builtin' },
     { id: 'confluence', label: 'Confluence', type: 'provider', category: 'content', version: '1.0.0', capabilities: ['document'], status: 'available', description: 'Confluence document provider.', configSchema: { required: ['baseUrl', 'spaceKey'], properties: { baseUrl: { type: 'string', label: 'Base URL' }, spaceKey: { type: 'string', label: 'Space key' }, apiToken: { type: 'string', label: 'API token secret ref', secret: true } } }, source: 'builtin' },
     { id: 'figma', label: 'Figma', type: 'provider', category: 'design', version: '1.0.0', capabilities: ['design'], status: 'installed', description: 'Figma design artifact provider.', configSchema: { required: ['fileKey'], properties: { baseUrl: { type: 'string', label: 'API base URL', help: 'Default https://api.figma.com' }, fileKey: { type: 'string', label: 'File key' }, apiToken: { type: 'string', label: 'API token secret ref', secret: true, help: 'Use env:FIGMA_TOKEN' } } }, source: 'builtin' },

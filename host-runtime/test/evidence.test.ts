@@ -14,6 +14,23 @@ import {
 const PROMPT = 'Implement the host-side runtime for the ESO P3 ticket without touching ESO code.';
 
 describe('evidence', () => {
+    it('records JEV mode only when enabled', () => {
+        const base = {
+            adapter: 'dry',
+            model: null,
+            modelSource: 'default',
+            tier: null,
+            workerId: null,
+            flowId: null,
+            hostStep: 1,
+            exitCode: 0,
+            durationMs: 1,
+        };
+        expect(buildEvidence({ ...base, jevMode: 'off' }).jevMode).toBeUndefined();
+        expect(buildEvidence({ ...base, jevMode: 'shadow' }).jevMode).toBe('shadow');
+        expect(buildEvidence({ ...base, jevMode: 'active' }).jevMode).toBe('active');
+    });
+
     it('derives outcome from block flag, explicit marker and exit code', () => {
         expect(deriveOutcome({ blocked: true, exitCode: 0 })).toBe('BLOCKED');
         expect(deriveOutcome({ exitCode: 0 })).toBe('PASS');

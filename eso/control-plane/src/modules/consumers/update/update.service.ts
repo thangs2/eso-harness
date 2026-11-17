@@ -92,6 +92,7 @@ export class UpdateConsumerService {
             });
             const hash = materializeGeneratedProfile(updated.root, generated);
             await this.store.setMaterializedHash(consumerId, hash);
+            if (current.status === 'error') await this.store.setStatus(consumerId, 'ready', now);
             updated = (await this.store.getConsumer(consumerId))!;
             return { consumer: updated, profile };
         } catch (error) {

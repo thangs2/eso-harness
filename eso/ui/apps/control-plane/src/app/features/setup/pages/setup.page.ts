@@ -6,12 +6,13 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatSelectModule } from '@angular/material/select';
 import { ConsumerProfileService } from '../../../core/consumers/consumer-profile.service.js';
 
 @Component({
     selector: 'eso-setup-page',
     standalone: true,
-    imports: [FormsModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatSlideToggleModule, MatCheckboxModule],
+    imports: [FormsModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatSlideToggleModule, MatCheckboxModule, MatSelectModule],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div class="setup-page">
@@ -107,6 +108,26 @@ import { ConsumerProfileService } from '../../../core/consumers/consumer-profile
                                 }
                             </div>
                         </div>
+
+                        <div class="observation-card jev-card">
+                            <div class="observation-header">
+                                <div>
+                                    <strong>JEV integration</strong>
+                                    <small>Optional decision facade. ESO stores config only; JEV engine/evidence consent is required before shadow/active.</small>
+                                </div>
+                            </div>
+                            <mat-form-field appearance="outline" class="setup-field" subscriptSizing="dynamic">
+                                <mat-label>JEV mode</mat-label>
+                                <mat-select [ngModel]="jevMode()" (ngModelChange)="jevMode.set($event)">
+                                    <mat-option value="off">Off</mat-option>
+                                    <mat-option value="shadow">Shadow — evaluate only</mat-option>
+                                    <mat-option value="active">Active — decide within band</mat-option>
+                                </mat-select>
+                            </mat-form-field>
+                            @if (jevMode() !== 'off' && !consent()) {
+                                <p class="form-error" role="alert">JEV shadow/active requires observation consent.</p>
+                            }
+                        </div>
                     }
 
                     @case (4) {
@@ -117,6 +138,7 @@ import { ConsumerProfileService } from '../../../core/consumers/consumer-profile
                             <div><span>Consumer</span><strong>{{ consumerId() }}</strong></div>
                             <div><span>SDLC root</span><strong>{{ sdlcRoot() }}</strong></div>
                             <div><span>Observation</span><strong>{{ consent() ? events().length + ' event' : 'off' }}</strong></div>
+                            <div><span>JEV</span><strong>{{ jevMode() }}</strong></div>
                         </div>
                         <button mat-flat-button color="primary" class="setup-submit" [disabled]="saving()" (click)="apply()">{{ saving() ? 'Creating…' : 'Create consumer + canonical harness' }}</button>
                     }
@@ -146,6 +168,7 @@ import { ConsumerProfileService } from '../../../core/consumers/consumer-profile
         .canonical-box pre { margin: 8px 0 0; white-space: pre-wrap; font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); }
         .setup-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .setup-form mat-form-field { width: 100%; }
+        .jev-card { margin-top: var(--space-3); }
         .observation-card { margin-top: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-md); overflow: hidden; }
         .observation-header { display: flex; justify-content: space-between; gap: 16px; align-items: center; padding: 16px; background: color-mix(in srgb, var(--surface) 92%, var(--brand)); border-bottom: 1px solid var(--line); }
         .observation-header > div { display: grid; gap: 4px; }
@@ -195,6 +218,7 @@ export class SetupPage {
     readonly sdlcRoot = signal('sdlc');
     readonly consent = signal(true);
     readonly events = signal<string[]>(['prompt.submitted', 'turn.completed', 'tool.called']);
+    readonly jevMode = signal<'off' | 'shadow' | 'active'>('off');
     readonly saving = signal(false);
     readonly error = signal<string | null>(null);
     readonly rootResolving = signal(false);
@@ -228,6 +252,7 @@ export class SetupPage {
 
     validate(): string | null {
         if (this.step() === 1 && !this.root().trim()) return 'Root repo is required.';
+        if (this.step() === 3 && this.jevMode() !== 'off' && !this.consent()) return 'JEV shadow/active requires observation consent.';
         if (this.step() === 2) {
             if (!/^[a-z][a-z0-9-]{1,31}$/.test(this.consumerId())) return 'Consumer id must be a lowercase slug (2–32 characters).';
             if (!this.name().trim()) return 'Consumer name is required.';
@@ -275,6 +300,7 @@ export class SetupPage {
                 profile: {
                     canonical: { agents: 'agents', harness: '.harness' },
                     observation: { consent: this.consent(), events: this.events() },
+                    integration: { jev: { mode: this.jevMode(), consent: this.consent() } },
                 },
             })
             .then((result) => this.router.navigate(['/consumers', result.id], { queryParams: { created: '1' } }))

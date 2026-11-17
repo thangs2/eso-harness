@@ -32,6 +32,13 @@ export interface ProblemDetailsDto {
     instance?: string;
 }
 
+export interface JevConfig {
+    mode: 'off' | 'shadow' | 'active';
+    consent: boolean;
+    autoThreshold?: number;
+    confirmThreshold?: number;
+}
+
 export interface ConsumerZone {
     name: 'human' | 'agent';
     path: string;
@@ -46,7 +53,7 @@ export interface ConsumerProfile {
     hostMode?: string;
     observePort?: number;
     sdlcRoot: string;
-    profile: { recipe?: string; hostProfile?: string; host?: string; source?: string; description?: string; canonical?: { agents: string; harness: string }; observation?: { consent: boolean; events: string[] } };
+    profile: { recipe?: string; hostProfile?: string; host?: string; source?: string; description?: string; canonical?: { agents: string; harness: string }; observation?: { consent: boolean; events: string[] }; integration?: { jev?: JevConfig } };
     integration: { jevMode: string; consent: boolean; hostPack: string; memoryAdapter: string };
     zones: ConsumerZone[];
     headerProfile: string;
@@ -69,7 +76,7 @@ export interface ConsumerSummary {
     name: string;
     root: string;
     sdlcRoot: string;
-    profile: { recipe?: string; hostProfile?: string; host?: string; source?: string; description?: string; canonical?: { agents: string; harness: string }; observation?: { consent: boolean; events: string[] } };
+    profile: { recipe?: string; hostProfile?: string; host?: string; source?: string; description?: string; canonical?: { agents: string; harness: string }; observation?: { consent: boolean; events: string[] }; integration?: { jev?: JevConfig } };
     integration: { jevMode: string; consent: boolean; hostPack: string; memoryAdapter: string };
     version: number;
     status: string;
@@ -495,6 +502,7 @@ export interface ConsumerPlan {
 export interface SetupProfilePayload {
     canonical: { agents: string; harness: string };
     observation: { consent: boolean; events: string[] };
+    integration?: { jev?: JevConfig };
 }
 
 export interface SetupConsumerPayload {

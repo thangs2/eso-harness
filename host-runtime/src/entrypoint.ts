@@ -97,6 +97,7 @@ export interface RunReport {
     /** Non-fatal hardening warnings (cache fallback, buffered observations, tier gaps). */
     warnings: string[];
     snapshotSource: 'network' | 'cache';
+    jevMode?: string;
 }
 
 export type EntrypointErrorCode =
@@ -206,7 +207,9 @@ export async function runEntrypoint(options: EntrypointOptions): Promise<RunRepo
     }
 
     const snapshot = await configClient.getSnapshot();
+    const jevMode = snapshot.consumer?.jev?.mode === 'shadow' || snapshot.consumer?.jev?.mode === 'active' ? snapshot.consumer.jev.mode : 'off';
     const validation = await validateSnapshotVersion(snapshot);
+    if (jevMode !== 'off') warnings.push(`JEV_ENGINE_NOT_IMPLEMENTED:${jevMode}`);
     if (!validation.ok) {
         throw new EntrypointError(
             'SNAPSHOT_VERSION_MISMATCH',
@@ -417,6 +420,7 @@ export async function runEntrypoint(options: EntrypointOptions): Promise<RunRepo
             durationMs: result.durationMs,
             stdout: result.stdout,
             stderr: result.stderr,
+            jevMode,
             blocked: result.blocked,
             reason: result.reason,
             detail: result.detail,
@@ -494,6 +498,7 @@ export async function runEntrypoint(options: EntrypointOptions): Promise<RunRepo
             stoppedReason: reason,
             warnings,
             snapshotSource: configClient.lastSource === 'cache' ? 'cache' : 'network',
+            jevMode,
         };
     }
 }

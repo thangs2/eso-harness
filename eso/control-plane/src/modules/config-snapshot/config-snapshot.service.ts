@@ -40,16 +40,24 @@ export function snapshotVersion(payload: any): string {
     return createHash('sha256').update(JSON.stringify(canonical(payload)), 'utf8').digest('hex');
 }
 
-function readSettings(root: string): any {
+function readConfigFile(root: string): any {
     const file = join(root, '.harness', 'config.json');
     if (!existsSync(file)) return {};
     try {
-        const config = JSON.parse(readFileSync(file, 'utf8'));
-        const settings = config?.profile?.settings ?? config?.settings;
-        return settings && typeof settings === 'object' ? settings : {};
+        return JSON.parse(readFileSync(file, 'utf8'));
     } catch {
         return {};
     }
+}
+
+function readSettings(config: any): any {
+    const settings = config?.profile?.settings ?? config?.settings;
+    return settings && typeof settings === 'object' ? settings : {};
+}
+
+function readJev(config: any): any {
+    const jev = config?.profile?.integration?.jev ?? config?.integration?.jev;
+    return jev && typeof jev === 'object' ? jev : { mode: 'off' };
 }
 
 /** Map legacy bare hostIds to the first runtimeKey for that host. */
@@ -96,7 +104,9 @@ export class ConfigSnapshotService {
             this.hostRuntime.listHosts(),
             this.store.listStackVersions(id),
         ]);
-        const settings = consumer.root ? readSettings(consumer.root) : {};
+        const config = consumer.root ? readConfigFile(consumer.root) : {};
+        const settings = readSettings(config);
+        const jev = readJev(config);
         const activeStack = (stackVersions as any[]).find((version) => version?.status === 'published') ?? null;
         const payload = {
             consumer: {
@@ -106,6 +116,7 @@ export class ConfigSnapshotService {
                 sdlcRoot: consumer.sdlcRoot ?? null,
                 status: consumer.status,
                 version: consumer.version,
+                jev,
             },
             flow: flow
                 ? {

@@ -47,6 +47,43 @@ export function stableStringify(value: unknown): string {
     return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`).join(',')}}`;
 }
 
+const JEV_MODES = ['off', 'shadow', 'active'] as const;
+
+/** Validate/normalize JEV integration config. JEV engine is host-side; ESO stores only config. */
+export function normalizeJevProfile(profile: Record<string, unknown>): Record<string, unknown> {
+    const next = { ...(profile ?? {}) } as Record<string, any>;
+    const integration = next.integration && typeof next.integration === 'object' ? { ...(next.integration as Record<string, any>) } : {};
+    const raw = integration.jev && typeof integration.jev === 'object'
+        ? integration.jev
+        : (typeof integration.jevMode === 'string' ? { mode: integration.jevMode } : null);
+    if (!raw) return next;
+    const mode = String(raw.mode ?? 'off');
+    if (!(JEV_MODES as readonly string[]).includes(mode)) fail('PROFILE_INVALID', `JEV mode must be one of ${JEV_MODES.join(', ')}`);
+    const observationConsent = Boolean(next.observation && (next.observation as any).consent);
+    const consent = raw.consent === undefined ? observationConsent : Boolean(raw.consent);
+    if (mode !== 'off' && !observationConsent) fail('PROFILE_INVALID', 'JEV shadow/active requires observation consent');
+    const numeric = (value: unknown, field: string): number | undefined => {
+        if (value === undefined || value === null || value === '') return undefined;
+        const parsed = Number(value);
+        if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) fail('PROFILE_INVALID', `JEV ${field} must be between 0 and 1`);
+        return parsed;
+    };
+    const autoThreshold = numeric(raw.autoThreshold, 'autoThreshold');
+    const confirmThreshold = numeric(raw.confirmThreshold, 'confirmThreshold');
+    if (autoThreshold !== undefined && confirmThreshold !== undefined && autoThreshold < confirmThreshold) {
+        fail('PROFILE_INVALID', 'JEV autoThreshold must be >= confirmThreshold');
+    }
+    integration.jev = {
+        mode,
+        consent,
+        ...(autoThreshold !== undefined ? { autoThreshold } : {}),
+        ...(confirmThreshold !== undefined ? { confirmThreshold } : {}),
+    };
+    delete integration.jevMode;
+    next.integration = integration;
+    return next;
+}
+
 export function buildGeneratedProfile(
     record: ConsumerRecord,
     input: RegisterConsumerInput
@@ -56,7 +93,7 @@ export function buildGeneratedProfile(
         name: record.name,
         root: record.root,
         sdlcRoot: record.sdlcRoot,
-        profile: input.profile ?? {},
+        profile: normalizeJevProfile((input.profile ?? {}) as Record<string, unknown>),
         zones: input.zones ?? [],
     };
     const hash = createHash('sha256').update(stableStringify(payload)).digest('hex');

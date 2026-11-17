@@ -19,6 +19,7 @@ export interface SnapshotConsumer {
     sdlcRoot: string | null;
     status: string;
     version: number;
+    jev?: { mode?: string; consent?: boolean; autoThreshold?: number; confirmThreshold?: number } | null;
 }
 
 export interface SnapshotHostRuntime {

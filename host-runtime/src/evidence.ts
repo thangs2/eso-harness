@@ -52,6 +52,8 @@ export interface WorkerEvidence {
     stderrTail: string;
     promptRedacted: boolean;
     timedOut: boolean;
+    /** Config-only in this slice; host wiring for decisions is separate. */
+    jevMode?: string;
     reason?: string;
     detail?: string;
 }
@@ -132,6 +134,7 @@ export function eventForOutcome(outcome: Outcome): 'worker.completed' | 'worker.
 
 export interface BuildEvidenceInput extends AdapterRunFacts {
     redaction?: EvidenceRedaction;
+    jevMode?: string;
 }
 
 /** Evidence payload posted to ESO — bounded, redacted, no prompt body. */
@@ -155,6 +158,7 @@ export function buildEvidence(input: BuildEvidenceInput): WorkerEvidence {
         promptRedacted: stdout.redacted || stderr.redacted,
         timedOut: Boolean(input.timedOut),
     };
+    if (input.jevMode && input.jevMode !== 'off') evidence.jevMode = input.jevMode;
     if (input.effort) evidence.effort = input.effort;
     if (input.reason) evidence.reason = input.reason;
     if (input.detail) {

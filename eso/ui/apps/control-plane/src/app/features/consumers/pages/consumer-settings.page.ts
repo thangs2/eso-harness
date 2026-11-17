@@ -194,6 +194,7 @@ function defaultPlugins(): PluginEntry[] {
                                     <mat-form-field appearance="outline"><mat-label>Tags</mat-label><input matInput [ngModel]="tags()" (ngModelChange)="tags.set($event)" placeholder="finance, accounting"></mat-form-field>
                                 </div>
                                 <mat-form-field appearance="outline" class="full-width"><mat-label>Description</mat-label><textarea matInput rows="3" [ngModel]="description()" (ngModelChange)="description.set($event)"></textarea></mat-form-field>
+
                             </section>
                         }
 
@@ -1641,7 +1642,7 @@ function defaultPlugins(): PluginEntry[] {
 
                         @case ('observation') {
                             <section class="tab-panel" role="tabpanel">
-                                <p class="section-hint">Only enabled events are recorded; no secrets, prompt bodies, or file content.</p>
+                                <p class="section-hint">Only enabled events are recorded; no secrets, prompt bodies, or file content. JEV decides on evidence, so its mode and consent live here.</p>
                                 <mat-slide-toggle [ngModel]="consent()" (ngModelChange)="consent.set($event)">Enable observation</mat-slide-toggle>
                                 <div class="event-grid" [class.event-grid-disabled]="!consent()">
                                     @for (event of eventKinds; track event.id) {
@@ -1650,6 +1651,39 @@ function defaultPlugins(): PluginEntry[] {
                                         </mat-checkbox>
                                     }
                                 </div>
+
+                                <section class="jev-panel" aria-label="JEV integration">
+                                    <header class="jev-head">
+                                        <div>
+                                            <h3>JEV integration</h3>
+                                            <p class="section-hint">Decision facade config only. ESO stores the policy; the host owns JEV execution and evidence.</p>
+                                        </div>
+                                        <span class="tag" [class.tag-muted]="jevMode() === 'off'">{{ jevMode() }}</span>
+                                    </header>
+                                    <div class="form-grid">
+                                        <mat-form-field appearance="outline">
+                                            <mat-label>JEV mode</mat-label>
+                                            <mat-select [ngModel]="jevMode()" (ngModelChange)="jevMode.set($event)">
+                                                <mat-option value="off">Off — no JEV</mat-option>
+                                                <mat-option value="shadow">Shadow — evaluate only</mat-option>
+                                                <mat-option value="active">Active — decide within band</mat-option>
+                                            </mat-select>
+                                        </mat-form-field>
+                                        <mat-form-field appearance="outline">
+                                            <mat-label>Auto threshold (0–1)</mat-label>
+                                            <input matInput type="number" min="0" max="1" step="0.01" [ngModel]="jevAutoThreshold()" (ngModelChange)="jevAutoThreshold.set($event)" [disabled]="jevMode() === 'off'">
+                                        </mat-form-field>
+                                        <mat-form-field appearance="outline">
+                                            <mat-label>Confirm threshold (0–1)</mat-label>
+                                            <input matInput type="number" min="0" max="1" step="0.01" [ngModel]="jevConfirmThreshold()" (ngModelChange)="jevConfirmThreshold.set($event)" [disabled]="jevMode() === 'off'">
+                                        </mat-form-field>
+                                    </div>
+                                    @if (jevMode() !== 'off' && !consent()) {
+                                        <p class="form-error" role="alert">JEV shadow/active requires observation consent (Observatory tab).</p>
+                                    } @else {
+                                        <p class="section-hint">Threshold rule: auto ≥ confirm. Empty thresholds leave the host default.</p>
+                                    }
+                                </section>
 
                                 <section class="observation-timeline" aria-label="Observation timeline">
                                     <header class="observation-head">
@@ -1731,6 +1765,9 @@ function defaultPlugins(): PluginEntry[] {
         .settings-step-no { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; border: 1px solid currentColor; font-size: var(--text-xs); font-weight: 700; flex: none; }
         .settings-tab-content { border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); }
         .tab-panel { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: var(--space-4); padding: var(--space-5); }
+        .jev-panel { margin-top: var(--space-5); padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-md); }
+        .jev-head { display: flex; justify-content: space-between; gap: var(--space-3); align-items: flex-start; margin-bottom: var(--space-3); }
+        .jev-head h3 { margin: 0 0 var(--space-1); }
         .section-hint { color: var(--muted); margin: 0; }
         .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
         .form-grid mat-form-field { width: 100%; }
@@ -1813,7 +1850,7 @@ export class ConsumerSettingsPage implements OnInit {
         { id: 'hosts', n: 3, label: 'Host Bindings', hint: 'Developer × host runtime' },
         { id: 'workers', n: 4, label: 'Agent Workers', hint: 'Agent identities & roles' },
         { id: 'knowledge', n: 5, label: 'Knowledge', hint: 'Knowledge & Artifact Governance' },
-        { id: 'observation', n: 6, label: 'Observatory', hint: 'Evidence capture' },
+        { id: 'observation', n: 6, label: 'Observatory', hint: 'Evidence & JEV' },
     ];
 
     readonly consumerId = this.route.snapshot.paramMap.get('id') || 'unknown';
@@ -1873,6 +1910,9 @@ export class ConsumerSettingsPage implements OnInit {
     readonly locale = signal('vi-VN');
     readonly tags = signal('');
     readonly description = signal('');
+    readonly jevMode = signal<'off' | 'shadow' | 'active'>('off');
+    readonly jevAutoThreshold = signal('');
+    readonly jevConfirmThreshold = signal('');
     readonly stackLayers = signal<StackLayer[]>(defaultStackLayers());
     readonly stackVersions = signal<StackVersion[]>([{ version: 1, status: 'published', layers: defaultStackLayers() }]);
     readonly activeStackVersion = signal(1);
@@ -3800,10 +3840,24 @@ export class ConsumerSettingsPage implements OnInit {
         const profile = this.current();
         if (!profile) return;
         this.saving.set(true); this.saved.set(false); this.error.set(null);
+        if (this.jevMode() !== 'off' && !this.consent()) { this.saving.set(false); this.error.set('JEV shadow/active requires observation consent.'); return; }
+        const auto = this.jevAutoThreshold().trim() === '' ? undefined : Number(this.jevAutoThreshold());
+        const confirm = this.jevConfirmThreshold().trim() === '' ? undefined : Number(this.jevConfirmThreshold());
+        if ((auto !== undefined && (!Number.isFinite(auto) || auto < 0 || auto > 1)) || (confirm !== undefined && (!Number.isFinite(confirm) || confirm < 0 || confirm > 1))) { this.saving.set(false); this.error.set('JEV thresholds must be between 0 and 1.'); return; }
+        if (auto !== undefined && confirm !== undefined && auto < confirm) { this.saving.set(false); this.error.set('JEV auto threshold must be >= confirm threshold.'); return; }
         const previous = (profile.profile || {}) as Record<string, unknown>;
         const nextProfile: Record<string, unknown> = {
             ...previous,
             observation: { consent: this.consent(), events: this.events() },
+            integration: {
+                ...((previous.integration as Record<string, unknown> | undefined) || {}),
+                jev: {
+                    mode: this.jevMode(),
+                    consent: this.consent(),
+                    ...(auto !== undefined ? { autoThreshold: auto } : {}),
+                    ...(confirm !== undefined ? { confirmThreshold: confirm } : {}),
+                },
+            },
             settings: {
                 general: { owner: this.owner().trim(), locale: this.locale().trim(), tags: this.tags().split(',').map((tag) => tag.trim()).filter(Boolean), description: this.description().trim() },
                 harness: { stack: { version: this.activeStackVersion(), status: this.stackStatus(), layers: this.stackLayers(), versions: this.stackVersions() }, hostProfiles: this.hostProfiles(), developers: this.developers(), formationHostIds: this.formationHostIds(), plugins: this.plugins() },
@@ -3902,6 +3956,10 @@ export class ConsumerSettingsPage implements OnInit {
         this.locale.set(settings.general?.locale || 'vi-VN');
         this.tags.set((settings.general?.tags || []).join(', '));
         this.description.set(prof.description || settings.general?.description || '');
+        const jev = prof.integration?.jev ?? prof.profile?.integration?.jev ?? (profile as any).integration?.jev;
+        this.jevMode.set(jev?.mode === 'shadow' || jev?.mode === 'active' ? jev.mode : 'off');
+        this.jevAutoThreshold.set(jev?.autoThreshold === undefined ? '' : String(jev.autoThreshold));
+        this.jevConfirmThreshold.set(jev?.confirmThreshold === undefined ? '' : String(jev.confirmThreshold));
         this.jiraEnabled.set(settings.jira?.enabled ?? false);
         const routing = settings.knowledge?.providers?.routing;
         if (routing && typeof routing === 'object') {
