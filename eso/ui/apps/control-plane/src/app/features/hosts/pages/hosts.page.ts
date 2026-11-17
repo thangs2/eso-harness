@@ -274,7 +274,7 @@ type DialogMode = 'register' | 'host' | 'runtime';
         .host-type-badge { border: 1px solid color-mix(in srgb, var(--brand) 55%, var(--line)); border-radius: 999px; padding: 1px var(--space-2); font-size: var(--text-xs); color: var(--brand); background: color-mix(in srgb, var(--surface) 90%, var(--brand)); white-space: nowrap; }
         .host-label { color: var(--muted); font-size: var(--text-xs); overflow-wrap: anywhere; }
         .host-group-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
-        .runtime-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: var(--space-3); min-width: 0; }
+        .runtime-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: var(--space-3); min-width: 0; }
         .runtime-card { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--surface) 96%, var(--brand)); min-width: 0; }
         .runtime-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-2); min-width: 0; }
         .runtime-title { display: grid; gap: 2px; min-width: 0; }
@@ -329,9 +329,6 @@ type DialogMode = 'register' | 'host' | 'runtime';
         .host-form mat-form-field { width: 100%; min-width: 0; }
         .host-form .mat-mdc-checkbox { align-self: center; }
         .host-dialog-actions { display: flex; justify-content: flex-end; gap: var(--space-2); flex-wrap: wrap; padding-top: var(--space-3); border-top: 1px solid var(--line); background: var(--surface); }
-        @media (min-width: 1000px) {
-            .host-card-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: var(--space-5); }
-        }
         @media (max-width: 900px) {
             .host-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
             .runtime-grid { grid-template-columns: minmax(0, 1fr); }
