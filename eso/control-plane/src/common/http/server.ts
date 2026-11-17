@@ -1,7 +1,8 @@
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { pathToFileURL } from 'node:url';
 
-import { AuthService, loadAuthConfig, type AuthConfig } from '../auth/auth.js';
+import { AuthService, loadAuthConfig, parseAuthorization, type AuthConfig } from '../auth/auth.js';
+import { HostTokenService } from '../auth/host-token.service.js';
 import { corsHeaders } from '../errors/cors.js';
 import { toErrorResponse } from '../errors/envelope.js';
 import {
@@ -36,6 +37,8 @@ import { RuleFileService } from '../../modules/rules/rule-file.service.js';
 import { FlowFileService } from '../../modules/flows/flow-file.service.js';
 import { FlowProposalService } from '../../modules/flows/flow-proposal.service.js';
 import { HostRuntimeService } from '../../modules/host-runtime/host-runtime.service.js';
+import { ConfigSnapshotService, RUNTIME_KEY_PATTERN, etagMatches } from '../../modules/config-snapshot/config-snapshot.service.js';
+import { ObservationService } from '../../modules/observations/observation.service.js';
 import { PluginService } from '../../modules/plugins/plugin.service.js';
 
 /**
@@ -92,6 +95,9 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
     const flowFiles = new FlowFileService(store, workerFiles);
     const flowProposal = new FlowProposalService(store, workerFiles, flowFiles);
     const hostRuntime = new HostRuntimeService(store);
+    const hostTokens = new HostTokenService(store);
+    const configSnapshot = new ConfigSnapshotService(store, flowFiles, workerFiles, hostRuntime);
+    const observations = new ObservationService(store);
     const plugins = new PluginService(store);
 
     const provisionConsumer = async (id: string, body: any) => {
@@ -145,6 +151,27 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
         } catch (error) {
             const response = toErrorResponse(error);
             reply.code(response.status).send(response.body);
+        }
+    };
+
+    // Operator/machine auth first, then scoped host bearer token (snapshot + observation ingest).
+    const hostOrOperator = async (request: FastifyRequest, reply: FastifyReply) => {
+        try {
+            (request as any).actor = auth.authenticate(request.headers.authorization);
+            return;
+        } catch (error) {
+            const parsed = parseAuthorization(request.headers.authorization);
+            if (!parsed || parsed.scheme !== 'bearer') {
+                const response = toErrorResponse(error);
+                reply.code(response.status).send(response.body);
+                return;
+            }
+            try {
+                (request as any).actor = await hostTokens.authenticate(parsed.value);
+            } catch (hostError) {
+                const response = toErrorResponse(hostError);
+                reply.code(response.status).send(response.body);
+            }
         }
     };
 
@@ -280,6 +307,21 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
     // Flattened runtime list (compat for pickers/placement); nested view is GET /hosts.
     app.get('/api/v1/host-runtimes', { preHandler: requireAuth }, async () => {
         return hostRuntime.listHostRuntimes();
+    });
+
+    // Scoped host tokens (operator auth only): issue returns the plaintext token exactly once.
+    app.post('/api/v1/hosts/:hostId/runtimes/:runtimeId/tokens', { preHandler: requireAuth }, async (request, reply) => {
+        const body = request.body as any;
+        const consumerId = String(body?.consumerId || '').trim();
+        if (!consumerId) throw new PlatformError('INVALID_CONSUMER_ID', 'consumerId is required');
+        const issued = await hostTokens.issue((request.params as any).hostId, (request.params as any).runtimeId, consumerId);
+        reply.code(201);
+        return issued;
+    });
+
+    app.delete('/api/v1/hosts/:hostId/runtimes/:runtimeId/tokens/:tokenId', { preHandler: requireAuth }, async (request, reply) => {
+        await hostTokens.revoke((request.params as any).hostId, (request.params as any).runtimeId, (request.params as any).tokenId);
+        return reply.code(204).send();
     });
 
     // Legacy consumer-scoped host registry: hosts are global now, so this surface is gone.
@@ -500,6 +542,40 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
     app.get('/api/v1/consumers/:id/provider-records', { preHandler: requireAuth }, async (request) => {
         const q = request.query as any;
         return store.listProviderRecords((request.params as any).id, q?.provider);
+    });
+
+    // Read-only config snapshot for a host runtime (operator or scoped host token).
+    app.get('/api/v1/consumers/:id/config-snapshot', { preHandler: hostOrOperator }, async (request, reply) => {
+        const id = (request.params as any).id;
+        const rawRuntimeKey = (request.query as any)?.runtimeKey;
+        const runtimeKey = rawRuntimeKey === undefined ? undefined : String(rawRuntimeKey);
+        if (runtimeKey !== undefined && !RUNTIME_KEY_PATTERN.test(runtimeKey)) {
+            throw new PlatformError('HOST_RUNTIME_INVALID', 'runtimeKey must be hostId:runtimeId');
+        }
+        const actor = (request as any).actor;
+        if (actor?.kind === 'host') {
+            if (actor.consumerId !== id) throw new PlatformError('AUTH_INVALID', 'Host token consumer scope mismatch');
+            if (!runtimeKey || runtimeKey !== `${actor.hostId}:${actor.runtimeId}`) {
+                throw new PlatformError('AUTH_INVALID', 'Host token runtime scope mismatch');
+            }
+        }
+        const snapshot = await configSnapshot.get(id);
+        const etag = `"${snapshot.version}"`;
+        if (etagMatches(String(request.headers['if-none-match'] || ''), snapshot.version)) {
+            return reply.code(304).header('etag', etag).send();
+        }
+        reply.header('etag', etag).header('cache-control', 'no-cache');
+        return snapshot;
+    });
+
+    // Observation/evidence append log (operator, or scoped host token for POST).
+    app.post('/api/v1/consumers/:id/observations', { preHandler: hostOrOperator }, async (request) => {
+        return observations.ingest((request.params as any).id, request.body || {}, (request as any).actor || {});
+    });
+
+    app.get('/api/v1/consumers/:id/observations', { preHandler: requireAuth }, async (request) => {
+        const limit = Number((request.query as any)?.limit) || 100;
+        return observations.list((request.params as any).id, limit);
     });
 
     app.get('/api/v1/consumers/:id/flows', { preHandler: requireAuth }, async (request) => {

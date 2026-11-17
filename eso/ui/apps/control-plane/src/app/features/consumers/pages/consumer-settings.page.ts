@@ -8,7 +8,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { ConsumerProfileService } from '../../../core/consumers/consumer-profile.service.js';
-import type { ConsumerProfile, HostDto, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, McpProviderDto, WorkerConfigDto, EvidenceRequirementDto, FlowSummaryDto, FlowDefinitionDto, HostRuntimeDto, WorkerPlacementDto, WorkerModelTier, WorkerPlacementFallback } from '../../../../../../../libs/api-client/types.js';
+import type { ConsumerProfile, HostDto, ObservationDto, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, McpProviderDto, WorkerConfigDto, EvidenceRequirementDto, FlowSummaryDto, FlowDefinitionDto, HostRuntimeDto, WorkerPlacementDto, WorkerModelTier, WorkerPlacementFallback } from '../../../../../../../libs/api-client/types.js';
 
 /**
  * Only remaining occurrence of the pre-P0.3 host-binding key: settings saved by an older UI.
@@ -1650,6 +1650,49 @@ function defaultPlugins(): PluginEntry[] {
                                         </mat-checkbox>
                                     }
                                 </div>
+
+                                <section class="observation-timeline" aria-label="Observation timeline">
+                                    <header class="observation-head">
+                                        <div>
+                                            <p class="eyebrow">Observations</p>
+                                            <h3>Observation timeline</h3>
+                                            <p class="section-hint">Host-reported observations. ESO stores and displays them only.</p>
+                                        </div>
+                                        <button mat-stroked-button type="button" [disabled]="observationsLoading()" (click)="refreshObservations()">{{ observationsLoading() ? 'Refreshing…' : 'Refresh' }}</button>
+                                    </header>
+                                    @if (observationsError(); as message) { <p class="field-error" role="alert">{{ message }}</p> }
+                                    @if (observationsLoading() && observations().length === 0) {
+                                        <p class="loading-label" role="status">Loading observations…</p>
+                                    } @else if (observations().length === 0) {
+                                        <div class="observation-empty">
+                                            <strong>No observations yet</strong>
+                                            <span>Hosts post observations when an enabled event fires. Nothing is editable here.</span>
+                                        </div>
+                                    } @else {
+                                        <ol class="observation-list" role="list">
+                                            @for (observation of observations(); track observation.observationId) {
+                                                <li class="observation-row">
+                                                    <div class="observation-row-head">
+                                                        <span class="observation-event"><code>{{ observation.event }}</code></span>
+                                                        @if (observation.outcome) { <span class="badge">{{ observation.outcome }}</span> }
+                                                        <time class="observation-time" [attr.datetime]="observation.at">{{ observation.at }}</time>
+                                                    </div>
+                                                    <div class="observation-meta">
+                                                        <span><small>Worker</small>{{ observation.workerId || '—' }}</span>
+                                                        <span><small>Runtime</small>{{ observation.runtimeKey || '—' }}</span>
+                                                        <span><small>Host</small>{{ observation.hostId }}</span>
+                                                        <span><small>Trace</small><code>{{ observation.traceId }}</code></span>
+                                                        <span><small>Received</small>{{ observation.receivedAt }}</span>
+                                                    </div>
+                                                    <details class="observation-evidence">
+                                                        <summary>Evidence</summary>
+                                                        <pre>{{ evidenceText(observation.evidence) }}</pre>
+                                                    </details>
+                                                </li>
+                                            }
+                                        </ol>
+                                    }
+                                </section>
                             </section>
                         }
                     }
@@ -1965,6 +2008,10 @@ export class ConsumerSettingsPage implements OnInit {
     readonly openDiagram = signal<'main' | 'cr' | 'intent' | 'workers' | null>(null);
     readonly consent = signal(true);
     readonly events = signal<string[]>(['prompt.submitted', 'turn.completed', 'tool.called']);
+    readonly observations = signal<ObservationDto[]>([]);
+    readonly observationsLoading = signal(false);
+    readonly observationsError = signal<string | null>(null);
+    private observationsLoaded = false;
     readonly sourceOptions = ['eso-native', 'host-native', 'market', 'none'];
     readonly policySources = ['host-native', 'eso-native', 'market'];
     readonly jiraModes = ['off', 'push', 'two-way'];
@@ -2046,6 +2093,7 @@ export class ConsumerSettingsPage implements OnInit {
                 })));
                 this.current.set(profile);
                 this.hydrate(profile);
+                if (this.activeTab() === 'observation') this.loadObservations();
             })
             .catch((err) => this.error.set(err?.detail || err?.message || 'Unable to load consumer'))
             .finally(() => this.loading.set(false));
@@ -3023,6 +3071,7 @@ export class ConsumerSettingsPage implements OnInit {
 
     selectTab(id: string): void {
         this.activeTab.set(id);
+        if (id === 'observation') this.loadObservations();
         this.router.navigate([], { relativeTo: this.route, queryParams: { tab: id }, queryParamsHandling: 'merge', replaceUrl: true });
     }
 
@@ -3477,6 +3526,31 @@ export class ConsumerSettingsPage implements OnInit {
     }
 
     toggleEvent(id: string): void { this.events.set(this.events().includes(id) ? this.events().filter((event) => event !== id) : [...this.events(), id]); }
+
+    refreshObservations(): void { this.loadObservations(true); }
+
+    loadObservations(force = false): void {
+        if (this.observationsLoading()) return;
+        if (this.observationsLoaded && !force) return;
+        this.observationsLoading.set(true);
+        this.observationsError.set(null);
+        this.service.getObservations(this.consumerId)
+            .then((items) => {
+                this.observations.set([...items].sort((left, right) => this.observationTime(right) - this.observationTime(left)));
+                this.observationsLoaded = true;
+            })
+            .catch((err) => this.observationsError.set(err?.detail || err?.message || 'Could not load observations'))
+            .finally(() => this.observationsLoading.set(false));
+    }
+
+    private observationTime(observation: ObservationDto): number {
+        const time = new Date(observation.at || observation.receivedAt).getTime();
+        return Number.isFinite(time) ? time : 0;
+    }
+
+    evidenceText(evidence: unknown): string {
+        try { return JSON.stringify(evidence ?? null, null, 2); } catch { return String(evidence); }
+    }
 
     private pruneWorkerBindings(): void {
         const valid = new Set(this.hostProfiles().map((profile) => profile.id));

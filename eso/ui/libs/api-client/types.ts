@@ -446,6 +446,20 @@ export interface WorkerPlacementDto {
     fallback: WorkerPlacementFallback;
 }
 
+/** A host-reported observation. ESO stores and displays it only — read-only evidence. */
+export interface ObservationDto {
+    observationId: string;
+    traceId: string;
+    hostId: string;
+    runtimeKey: string;
+    workerId?: string | null;
+    event: string;
+    outcome?: string | null;
+    evidence: unknown;
+    at: string;
+    receivedAt: string;
+}
+
 export interface ConsumerListResponse {
     items: ConsumerSummary[];
 }

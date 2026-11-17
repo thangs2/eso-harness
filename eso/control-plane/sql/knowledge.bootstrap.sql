@@ -229,6 +229,24 @@ CREATE TABLE IF NOT EXISTS knowledge_worker_host_policy (
   updated_at    timestamptz NOT NULL DEFAULT now()
 );
 
+-- Observation/evidence append log from hosts (observability only; no run/execution state).
+CREATE TABLE IF NOT EXISTS knowledge_observation (
+  observation_id  text PRIMARY KEY,
+  trace_id        text NOT NULL,
+  host_id         text NOT NULL,
+  runtime_key     text NOT NULL,
+  worker_id       text,
+  event           text NOT NULL,
+  outcome         text,
+  evidence        jsonb NOT NULL DEFAULT '{}'::jsonb,
+  at              timestamptz,
+  idempotency_key text NOT NULL UNIQUE,
+  received_at     timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS knowledge_observation_trace ON knowledge_observation (trace_id, received_at DESC);
+CREATE INDEX IF NOT EXISTS knowledge_observation_received ON knowledge_observation (received_at DESC);
+
 CREATE TABLE IF NOT EXISTS knowledge_worker_handoff (
   handoff_id      text PRIMARY KEY,
   from_worker_id  text NOT NULL,

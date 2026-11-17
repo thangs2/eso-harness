@@ -61,6 +61,12 @@ export interface PlatformStore {
     getHostRuntime(hostId: string, runtimeId: string): Promise<any>;
     upsertHostRuntime(runtime: any): Promise<any>;
     heartbeatHostRuntime(hostId: string, runtimeId: string, patch: { health?: string; models?: string[]; defaultModel?: string }): Promise<any>;
+    createHostToken(token: any): Promise<any>;
+    getHostTokenByHash(tokenHash: string): Promise<any>;
+    touchHostToken(tokenId: string): Promise<any>;
+    revokeHostToken(hostId: string, runtimeId: string, tokenId: string): Promise<any>;
+    insertObservation(consumerId: string, observation: any): Promise<{ observation: any; created: boolean }>;
+    listObservations(consumerId: string, limit?: number): Promise<any[]>;
     listWorkerHostPolicies(consumerId: string): Promise<any[]>;
     getWorkerHostPolicy(consumerId: string, workerId: string): Promise<any>;
     upsertWorkerHostPolicy(consumerId: string, workerId: string, config: any): Promise<any>;
@@ -153,6 +159,8 @@ export class MemoryPlatformStore implements PlatformStore {
     /** Keyed by `${hostId}:${runtimeId}` (runtimeKey). */
     private hostRuntimes = new Map<string, any>();
     private workerHostPolicies = new Map<string, any>();
+    private hostTokens = new Map<string, any>();
+    private observations = new Map<string, any[]>();
     private schemas = new Set<string>();
     private nextEventId = 1;
     private searchPath: string | null = null;
@@ -180,6 +188,8 @@ export class MemoryPlatformStore implements PlatformStore {
             hosts: new Map([...this.hosts].map(([key, value]) => [key, clone(value)])),
             hostRuntimes: new Map([...this.hostRuntimes].map(([key, value]) => [key, clone(value)])),
             workerHostPolicies: new Map([...this.workerHostPolicies].map(([key, value]) => [key, clone(value)])),
+            hostTokens: new Map([...this.hostTokens].map(([key, value]) => [key, clone(value)])),
+            observations: new Map([...this.observations].map(([key, value]) => [key, clone(value)])),
             schemas: new Set(this.schemas),
             nextEventId: this.nextEventId,
             searchPath: this.searchPath,
@@ -193,6 +203,8 @@ export class MemoryPlatformStore implements PlatformStore {
             this.hosts = snapshot.hosts;
             this.hostRuntimes = snapshot.hostRuntimes;
             this.workerHostPolicies = snapshot.workerHostPolicies;
+            this.hostTokens = snapshot.hostTokens;
+            this.observations = snapshot.observations;
             this.schemas = snapshot.schemas;
             this.nextEventId = snapshot.nextEventId;
             this.searchPath = snapshot.searchPath;
@@ -357,6 +369,73 @@ export class MemoryPlatformStore implements PlatformStore {
         };
         this.hostRuntimes.set(key, row);
         return clone(row);
+    }
+
+    async createHostToken(token: any): Promise<any> {
+        const now = new Date().toISOString();
+        const row = {
+            token_id: token.tokenId,
+            host_id: token.hostId,
+            runtime_id: token.runtimeId,
+            consumer_id: token.consumerId,
+            role: 'host',
+            token_hash: token.tokenHash,
+            created_at: token.createdAt ?? now,
+            last_used_at: null,
+            revoked_at: null,
+        };
+        this.hostTokens.set(row.token_id, row);
+        return clone(row);
+    }
+
+    async getHostTokenByHash(tokenHash: string): Promise<any> {
+        const row = [...this.hostTokens.values()].find((token) => token.token_hash === tokenHash);
+        return row ? clone(row) : null;
+    }
+
+    async touchHostToken(tokenId: string): Promise<any> {
+        const row = this.hostTokens.get(tokenId);
+        if (!row) return null;
+        row.last_used_at = new Date().toISOString();
+        return clone(row);
+    }
+
+    async revokeHostToken(hostId: string, runtimeId: string, tokenId: string): Promise<any> {
+        const row = this.hostTokens.get(tokenId);
+        if (!row || row.host_id !== hostId || row.runtime_id !== runtimeId || row.revoked_at) return null;
+        row.revoked_at = new Date().toISOString();
+        return clone(row);
+    }
+
+    async insertObservation(consumerId: string, observation: any): Promise<{ observation: any; created: boolean }> {
+        const rows = this.observations.get(consumerId) ?? [];
+        const existing = rows.find((row) => row.idempotency_key === observation.idempotencyKey);
+        if (existing) return { observation: clone(existing), created: false };
+        const row = {
+            observation_id: observation.observationId,
+            trace_id: observation.traceId,
+            host_id: observation.hostId,
+            runtime_key: observation.runtimeKey,
+            worker_id: observation.workerId ?? null,
+            event: observation.event,
+            outcome: observation.outcome ?? null,
+            evidence: clone(observation.evidence ?? {}),
+            at: observation.at ?? null,
+            idempotency_key: observation.idempotencyKey,
+            received_at: new Date().toISOString(),
+        };
+        rows.push(row);
+        this.observations.set(consumerId, rows);
+        return { observation: clone(row), created: true };
+    }
+
+    async listObservations(consumerId: string, limit = 100): Promise<any[]> {
+        const cap = Math.max(1, Math.min(Number(limit) || 100, 500));
+        return (this.observations.get(consumerId) ?? [])
+            .slice()
+            .sort((a, b) => String(b.received_at).localeCompare(String(a.received_at)))
+            .slice(0, cap)
+            .map((row) => clone(row));
     }
 
     async listWorkerHostPolicies(consumerId: string): Promise<any[]> {
@@ -1030,6 +1109,76 @@ export class BunSqlPlatformStore implements PlatformStore {
              patch.defaultModel !== undefined ? patch.defaultModel : null]
         );
         return rows[0] || null;
+    }
+
+    async createHostToken(token: any): Promise<any> {
+        const rows = await this.sql.unsafe(
+            `INSERT INTO platform.host_token
+             (token_id,host_id,runtime_id,consumer_id,role,token_hash,created_at)
+             VALUES ($1,$2,$3,$4,'host',$5,COALESCE($6::timestamptz, now()))
+             RETURNING token_id,host_id,runtime_id,consumer_id,role,token_hash,created_at,last_used_at,revoked_at`,
+            [token.tokenId, token.hostId, token.runtimeId, token.consumerId, token.tokenHash, token.createdAt ?? null]
+        );
+        return rows[0] || null;
+    }
+
+    async getHostTokenByHash(tokenHash: string): Promise<any> {
+        const rows = await this.sql.unsafe(
+            `SELECT token_id,host_id,runtime_id,consumer_id,role,token_hash,created_at,last_used_at,revoked_at
+             FROM platform.host_token WHERE token_hash=$1`,
+            [tokenHash]
+        );
+        return rows[0] || null;
+    }
+
+    async touchHostToken(tokenId: string): Promise<any> {
+        const rows = await this.sql.unsafe(
+            `UPDATE platform.host_token SET last_used_at=now() WHERE token_id=$1
+             RETURNING token_id,last_used_at`,
+            [tokenId]
+        );
+        return rows[0] || null;
+    }
+
+    async revokeHostToken(hostId: string, runtimeId: string, tokenId: string): Promise<any> {
+        const rows = await this.sql.unsafe(
+            `UPDATE platform.host_token SET revoked_at=now()
+             WHERE token_id=$1 AND host_id=$2 AND runtime_id=$3 AND revoked_at IS NULL
+             RETURNING token_id,host_id,runtime_id,consumer_id,revoked_at`,
+            [tokenId, hostId, runtimeId]
+        );
+        return rows[0] || null;
+    }
+
+    async insertObservation(consumerId: string, observation: any): Promise<{ observation: any; created: boolean }> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        const rows = await this.sql.unsafe(
+            `INSERT INTO ${schema}.knowledge_observation
+             (observation_id,trace_id,host_id,runtime_key,worker_id,event,outcome,evidence,at,idempotency_key)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,COALESCE($9::timestamptz, now()),$10)
+             ON CONFLICT (idempotency_key) DO NOTHING
+             RETURNING observation_id,trace_id,host_id,runtime_key,worker_id,event,outcome,evidence,at,idempotency_key,received_at`,
+            [observation.observationId, observation.traceId, observation.hostId, observation.runtimeKey,
+             observation.workerId ?? null, observation.event, observation.outcome ?? null,
+             JSON.stringify(observation.evidence ?? {}), observation.at ?? null, observation.idempotencyKey]
+        );
+        if (rows.length) return { observation: rows[0], created: true };
+        const existing = await this.sql.unsafe(
+            `SELECT observation_id,trace_id,host_id,runtime_key,worker_id,event,outcome,evidence,at,idempotency_key,received_at
+             FROM ${schema}.knowledge_observation WHERE idempotency_key=$1`,
+            [observation.idempotencyKey]
+        );
+        return { observation: existing[0] || null, created: false };
+    }
+
+    async listObservations(consumerId: string, limit = 100): Promise<any[]> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        const cap = Math.max(1, Math.min(Number(limit) || 100, 500));
+        return await this.sql.unsafe(
+            `SELECT observation_id,trace_id,host_id,runtime_key,worker_id,event,outcome,evidence,at,idempotency_key,received_at
+             FROM ${schema}.knowledge_observation ORDER BY received_at DESC, observation_id DESC LIMIT $1`,
+            [cap]
+        );
     }
 
     async listWorkerHostPolicies(consumerId: string): Promise<any[]> {

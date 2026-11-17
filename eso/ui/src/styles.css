@@ -1589,3 +1589,23 @@ button.mat-mdc-button-base { white-space: nowrap; }
 .host-add-blocked { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border: 1px solid var(--warn-ink); border-radius: var(--radius-sm); background: var(--warn-bg); color: var(--warn-ink); font-size: var(--text-xs); }
 .host-row.host-unavailable { opacity: .65; }
 .host-row.host-unavailable .host-name small { color: var(--danger-ink); }
+
+/* Observatory — read-only host-reported observation timeline */
+.observation-timeline { display: grid; gap: var(--space-3); padding-top: var(--space-4); border-top: 1px solid var(--line); min-width: 0; }
+.observation-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-3); flex-wrap: wrap; }
+.observation-head h3 { margin: 0 0 2px; }
+.observation-head .section-hint { margin: 0; }
+.observation-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); min-width: 0; }
+.observation-row { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--surface) 96%, var(--brand)); min-width: 0; }
+.observation-row-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); min-width: 0; }
+.observation-event code { color: var(--brand); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.observation-time { color: var(--muted); font-size: var(--text-xs); }
+.observation-meta { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); min-width: 0; }
+.observation-meta > span { display: grid; gap: 0; font-size: var(--text-xs); min-width: 0; overflow-wrap: anywhere; }
+.observation-meta small { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
+.observation-evidence summary { cursor: pointer; color: var(--brand); font-size: var(--text-xs); }
+.observation-evidence pre { margin: var(--space-2) 0 0; max-height: 220px; overflow: auto; font-size: var(--text-xs); }
+.observation-empty { display: grid; gap: 2px; padding: var(--space-4); border: 1px dashed var(--line); border-radius: var(--radius-sm); }
+.observation-empty strong { font-size: var(--text-sm); }
+.observation-empty span { color: var(--muted); font-size: var(--text-sm); }
+@media (max-width: 600px) { .observation-row-head { align-items: flex-start; } }

@@ -30,8 +30,10 @@ export const ERROR_STATUS: Readonly<Record<string, number>> = {
     EDGES_MOVED_TO_FLOW: 422,
     HOST_RUNTIME_INVALID: 422,
     HOST_RUNTIME_NOT_FOUND: 404,
+    HOST_TOKEN_NOT_FOUND: 404,
     WORKER_NOT_FOUND: 404,
     WORKER_PLACEMENT_INVALID: 422,
+    OBSERVATION_INVALID: 422,
 };
 
 export const ERROR_MESSAGE: Readonly<Record<string, string>> = {
@@ -58,8 +60,10 @@ export const ERROR_MESSAGE: Readonly<Record<string, string>> = {
     EDGES_MOVED_TO_FLOW: 'Worker edges are defined by flows',
     HOST_RUNTIME_INVALID: 'Host runtime registration is invalid',
     HOST_RUNTIME_NOT_FOUND: 'Host runtime not found',
+    HOST_TOKEN_NOT_FOUND: 'Host token not found',
     WORKER_NOT_FOUND: 'Worker not found',
     WORKER_PLACEMENT_INVALID: 'Worker host placement is invalid',
+    OBSERVATION_INVALID: 'Observation is invalid',
 };
 
 export class PlatformError extends Error {

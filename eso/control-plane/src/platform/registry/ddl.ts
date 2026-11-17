@@ -12,6 +12,7 @@ export const CONSUMER_EVENT_TABLE = 'platform.consumer_event';
 export const STACK_VERSION_TABLE = 'platform.harness_stack_version';
 export const HOST_TABLE = 'platform.host';
 export const HOST_RUNTIME_TABLE = 'platform.host_runtime';
+export const HOST_TOKEN_TABLE = 'platform.host_token';
 /** Migration staging name used while reshaping the host registry. */
 export const HOST_RUNTIME_LEGACY_TABLE = 'platform.host_runtime_legacy';
 
@@ -52,6 +53,26 @@ export const HOST_RUNTIME_DDL = `CREATE TABLE IF NOT EXISTS platform.host_runtim
     updated_at      timestamptz not null default now(),
     primary key (host_id, runtime_id)
 )`;
+
+/**
+ * Scoped bearer token for one host runtime + consumer. Only the SHA-256 hash is stored; the
+ * plaintext token is shown exactly once at issue time.
+ */
+export const HOST_TOKEN_DDL = `CREATE TABLE IF NOT EXISTS platform.host_token (
+    token_id     text primary key,
+    host_id      text not null,
+    runtime_id   text not null,
+    consumer_id  text not null,
+    role         text not null check (role = 'host'),
+    token_hash   text not null unique,
+    created_at   timestamptz not null default now(),
+    last_used_at timestamptz,
+    revoked_at   timestamptz,
+    foreign key (host_id, runtime_id) references platform.host_runtime(host_id, runtime_id) on delete cascade
+)`;
+
+export const HOST_TOKEN_INDEX_DDL = `CREATE INDEX IF NOT EXISTS idx_host_token_scope
+    ON platform.host_token (consumer_id, host_id, runtime_id)`;
 
 export const PLATFORM_DDL: readonly string[] = [
     `CREATE SCHEMA IF NOT EXISTS platform`,
@@ -135,6 +156,8 @@ export const PLATFORM_DDL: readonly string[] = [
     HOST_RUNTIME_DDL,
     `CREATE INDEX IF NOT EXISTS idx_host_runtime_health
         ON platform.host_runtime (health)`,
+    HOST_TOKEN_DDL,
+    HOST_TOKEN_INDEX_DDL,
 ];
 
 export const CONSUMER_ID_PATTERN = /^[a-z0-9][a-z0-9-]{1,31}$/;

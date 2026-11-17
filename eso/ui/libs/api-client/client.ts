@@ -42,6 +42,7 @@ import type {
     HostRuntimeDto,
     HostDto,
     WorkerPlacementDto,
+    ObservationDto,
 } from './types.js';
 
 export class ControlPlaneApiClient {
@@ -416,6 +417,24 @@ export class ControlPlaneApiClient {
         });
         if (!res.ok) throw await this.problem(res);
         return this.readObject<HostRuntimeDto>(await this.optionalJson(res));
+    }
+
+    async getConsumerObservations(id: string, limit = 100): Promise<ObservationDto[]> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/observations?limit=${encodeURIComponent(String(limit))}`, {
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return this.readList<ObservationDto>(await this.optionalJson(res), ['items', 'observations']);
+    }
+
+    async createConsumerObservation(id: string, body: Partial<ObservationDto> & { event: string }): Promise<ObservationDto | null> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/observations`, {
+            method: 'POST',
+            headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return this.readObject<ObservationDto>(await this.optionalJson(res));
     }
 
     async getConsumerWorkerPlacement(id: string): Promise<WorkerPlacementDto[]> {
