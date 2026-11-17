@@ -407,16 +407,29 @@ export type HostRuntimeKind = 'ide-native' | 'cli' | 'acp';
 
 export type HostRuntimeHealth = 'unknown' | 'healthy' | 'degraded' | 'offline';
 
-/** A globally registered host runtime. Hosts are shared across consumers and carry no workspace. */
+/** A runtime registered under one host machine. Placement targets `runtimeKey`. */
 export interface HostRuntimeDto {
     hostId: string;
+    hostType: string;
     runtimeId: string;
+    /** `${hostId}:${runtimeId}` — the placement target for worker allowed hosts. */
+    runtimeKey: string;
     runtimeKind: HostRuntimeKind;
     models: string[];
     defaultModel?: string;
     leadEligible: boolean;
     health: HostRuntimeHealth;
     lastHeartbeat: string | null;
+}
+
+/** A host machine with its registered runtimes. Consumers bind hosts by `hostId`. */
+export interface HostDto {
+    hostId: string;
+    hostType: string;
+    label: string;
+    createdAt?: string;
+    updatedAt?: string;
+    runtimes: HostRuntimeDto[];
 }
 
 export type WorkerModelTier = 'fast' | 'balanced' | 'reasoning';
@@ -428,7 +441,7 @@ export interface WorkerPlacementDto {
     workerId: string;
     allowedHosts: string[];
     modelTier: WorkerModelTier;
-    /** hostId → host-native agent name, e.g. `{ host-a: 'cursor', host-b: 'agy' }`. */
+    /** runtimeKey → host-native agent name, e.g. `{ 'host-a:cursor': 'cursor' }`. */
     nativeAgent: Record<string, string>;
     fallback: WorkerPlacementFallback;
 }

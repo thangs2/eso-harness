@@ -259,18 +259,27 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
         return hostDiscovery.discover(consumer.id, consumer.root);
     });
 
-    // Host runtime registry is GLOBAL: one registration per host, shared by every consumer.
+    // Host registry is GLOBAL: a machine (host) owns one or more runtimes (hostId:runtimeId).
     // ESO stores the registration; it never starts a host process or routes work.
+    app.get('/api/v1/hosts', { preHandler: requireAuth }, async () => {
+        return hostRuntime.listHosts();
+    });
+
+    app.put('/api/v1/hosts/:hostId', { preHandler: requireAuth }, async (request) => {
+        return hostRuntime.putHost((request.params as any).hostId, request.body || {});
+    });
+
+    app.put('/api/v1/hosts/:hostId/runtimes/:runtimeId', { preHandler: requireAuth }, async (request) => {
+        return hostRuntime.putHostRuntime((request.params as any).hostId, (request.params as any).runtimeId, request.body || {});
+    });
+
+    app.post('/api/v1/hosts/:hostId/runtimes/:runtimeId/heartbeat', { preHandler: requireAuth }, async (request) => {
+        return hostRuntime.heartbeat((request.params as any).hostId, (request.params as any).runtimeId, request.body || {});
+    });
+
+    // Flattened runtime list (compat for pickers/placement); nested view is GET /hosts.
     app.get('/api/v1/host-runtimes', { preHandler: requireAuth }, async () => {
         return hostRuntime.listHostRuntimes();
-    });
-
-    app.put('/api/v1/host-runtimes/:hostId', { preHandler: requireAuth }, async (request) => {
-        return hostRuntime.putHostRuntime((request.params as any).hostId, request.body || {});
-    });
-
-    app.post('/api/v1/host-runtimes/:hostId/heartbeat', { preHandler: requireAuth }, async (request) => {
-        return hostRuntime.heartbeat((request.params as any).hostId, request.body || {});
     });
 
     // Legacy consumer-scoped host registry: hosts are global now, so this surface is gone.

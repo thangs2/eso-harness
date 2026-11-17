@@ -5,8 +5,13 @@ import {
     CONSUMER_ID_PATTERN,
     CONSUMER_TABLE,
     CONSUMER_EVENT_TABLE,
+    HOST_DDL,
     HOST_RUNTIME_DDL,
+    HOST_RUNTIME_HEALTH,
+    HOST_RUNTIME_KINDS,
     HOST_RUNTIME_LEGACY_TABLE,
+    HOST_RUNTIME_TABLE,
+    HOST_TYPES,
     PLATFORM_DDL,
     quoteSchema,
     schemaNameFor,
@@ -49,10 +54,13 @@ export interface PlatformStore {
     listEvents(consumerId: string, limit?: number): Promise<ConsumerEvent[]>;
     listStackVersions(consumerId: string): Promise<StackVersionRecord[]>;
     replaceStackVersions(consumerId: string, versions: StackVersionRecord[]): Promise<void>;
+    listHosts(): Promise<any[]>;
+    getHost(hostId: string): Promise<any>;
+    upsertHost(host: any): Promise<any>;
     listHostRuntimes(): Promise<any[]>;
-    getHostRuntime(hostId: string): Promise<any>;
+    getHostRuntime(hostId: string, runtimeId: string): Promise<any>;
     upsertHostRuntime(runtime: any): Promise<any>;
-    heartbeatHostRuntime(hostId: string, patch: { health?: string; models?: string[]; defaultModel?: string }): Promise<any>;
+    heartbeatHostRuntime(hostId: string, runtimeId: string, patch: { health?: string; models?: string[]; defaultModel?: string }): Promise<any>;
     listWorkerHostPolicies(consumerId: string): Promise<any[]>;
     getWorkerHostPolicy(consumerId: string, workerId: string): Promise<any>;
     upsertWorkerHostPolicy(consumerId: string, workerId: string, config: any): Promise<any>;
@@ -141,6 +149,8 @@ export class MemoryPlatformStore implements PlatformStore {
     private consumers = new Map<string, ConsumerRecord>();
     private events: ConsumerEvent[] = [];
     private stackVersions = new Map<string, StackVersionRecord[]>();
+    private hosts = new Map<string, any>();
+    /** Keyed by `${hostId}:${runtimeId}` (runtimeKey). */
     private hostRuntimes = new Map<string, any>();
     private workerHostPolicies = new Map<string, any>();
     private schemas = new Set<string>();
@@ -167,6 +177,7 @@ export class MemoryPlatformStore implements PlatformStore {
             consumers: clone(this.consumers),
             events: clone(this.events),
             stackVersions: new Map([...this.stackVersions].map(([key, value]) => [key, clone(value)])),
+            hosts: new Map([...this.hosts].map(([key, value]) => [key, clone(value)])),
             hostRuntimes: new Map([...this.hostRuntimes].map(([key, value]) => [key, clone(value)])),
             workerHostPolicies: new Map([...this.workerHostPolicies].map(([key, value]) => [key, clone(value)])),
             schemas: new Set(this.schemas),
@@ -179,6 +190,7 @@ export class MemoryPlatformStore implements PlatformStore {
             this.consumers = snapshot.consumers;
             this.events = snapshot.events;
             this.stackVersions = snapshot.stackVersions;
+            this.hosts = snapshot.hosts;
             this.hostRuntimes = snapshot.hostRuntimes;
             this.workerHostPolicies = snapshot.workerHostPolicies;
             this.schemas = snapshot.schemas;
@@ -273,23 +285,49 @@ export class MemoryPlatformStore implements PlatformStore {
         this.stackVersions.set(consumerId, clone(versions).sort((a, b) => a.version - b.version));
     }
 
-    async listHostRuntimes(): Promise<any[]> {
-        return [...this.hostRuntimes.values()]
+    async listHosts(): Promise<any[]> {
+        return [...this.hosts.values()]
             .sort((a, b) => String(a.host_id).localeCompare(String(b.host_id)))
             .map((row) => clone(row));
     }
 
-    async getHostRuntime(hostId: string): Promise<any> {
-        const row = this.hostRuntimes.get(hostId);
+    async getHost(hostId: string): Promise<any> {
+        const row = this.hosts.get(hostId);
+        return row ? clone(row) : null;
+    }
+
+    async upsertHost(host: any): Promise<any> {
+        const key = String(host.hostId);
+        const current = this.hosts.get(key);
+        const now = new Date().toISOString();
+        const row = {
+            host_id: key,
+            host_type: host.hostType,
+            label: host.label ?? key,
+            created_at: current?.created_at ?? now,
+            updated_at: now,
+        };
+        this.hosts.set(key, row);
+        return clone(row);
+    }
+
+    async listHostRuntimes(): Promise<any[]> {
+        return [...this.hostRuntimes.values()]
+            .sort((a, b) => `${a.host_id}:${a.runtime_id}`.localeCompare(`${b.host_id}:${b.runtime_id}`))
+            .map((row) => clone(row));
+    }
+
+    async getHostRuntime(hostId: string, runtimeId: string): Promise<any> {
+        const row = this.hostRuntimes.get(`${hostId}:${runtimeId}`);
         return row ? clone(row) : null;
     }
 
     async upsertHostRuntime(runtime: any): Promise<any> {
-        const key = String(runtime.hostId);
+        const key = `${runtime.hostId}:${runtime.runtimeId}`;
         const current = this.hostRuntimes.get(key);
         const now = new Date().toISOString();
         const row = {
-            host_id: key,
+            host_id: runtime.hostId,
             runtime_id: runtime.runtimeId,
             runtime_kind: runtime.runtimeKind,
             models: clone(runtime.models || []),
@@ -304,8 +342,9 @@ export class MemoryPlatformStore implements PlatformStore {
         return clone(row);
     }
 
-    async heartbeatHostRuntime(hostId: string, patch: { health?: string; models?: string[]; defaultModel?: string }): Promise<any> {
-        const current = this.hostRuntimes.get(hostId);
+    async heartbeatHostRuntime(hostId: string, runtimeId: string, patch: { health?: string; models?: string[]; defaultModel?: string }): Promise<any> {
+        const key = `${hostId}:${runtimeId}`;
+        const current = this.hostRuntimes.get(key);
         if (!current) return null;
         const now = new Date().toISOString();
         const row = {
@@ -316,7 +355,7 @@ export class MemoryPlatformStore implements PlatformStore {
             last_heartbeat: now,
             updated_at: now,
         };
-        this.hostRuntimes.set(hostId, row);
+        this.hostRuntimes.set(key, row);
         return clone(row);
     }
 
@@ -511,6 +550,59 @@ function pgTextArray(values: string[]): string {
     return `{${(values || []).map((value) => `"${String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',')}}`;
 }
 
+/** Normalize a Postgres text[] value (JS array or `{a,b}` literal) to string[]. */
+function normalizeTextArray(value: unknown): string[] {
+    if (Array.isArray(value)) return value.map((item) => String(item));
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed.startsWith('{')) {
+            return trimmed.replace(/^\{|\}$/g, '').split(',').map((item) => item.replace(/^"|"$/g, '').trim()).filter(Boolean);
+        }
+        try {
+            const parsed = JSON.parse(trimmed);
+            return Array.isArray(parsed) ? parsed.map((item) => String(item)) : [];
+        } catch {
+            return [];
+        }
+    }
+    return [];
+}
+
+/** Normalize a jsonb array value that Bun may return as an array or JSON text. */
+function normalizeJsonArray(value: unknown): any[] {
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string') {
+        try {
+            const parsed = JSON.parse(value);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch {
+            return [];
+        }
+    }
+    return [];
+}
+
+function normalizeRuntimeKind(value: unknown): string {
+    const text = String(value ?? '');
+    return (HOST_RUNTIME_KINDS as readonly string[]).includes(text) ? text : 'cli';
+}
+
+function normalizeHealth(value: unknown): string {
+    const text = String(value ?? '');
+    return (HOST_RUNTIME_HEALTH as readonly string[]).includes(text) ? text : 'unknown';
+}
+
+/** Infer a machine host type from a legacy host/runtime id (host id wins, then runtime family). */
+function inferHostType(hostId: string, runtimeId: string): string {
+    const known = HOST_TYPES as readonly string[];
+    if (known.includes(hostId)) return hostId;
+    const runtime = String(runtimeId || '').trim();
+    if (known.includes(runtime)) return runtime;
+    const family = runtime.replace(/[-_](agent|cli|native)$/i, '');
+    if (known.includes(family)) return family;
+    return hostId;
+}
+
 export class BunSqlPlatformStore implements PlatformStore {
     readonly kind = 'postgres' as const;
     private readonly sql: any;
@@ -521,68 +613,150 @@ export class BunSqlPlatformStore implements PlatformStore {
     }
 
     async ensurePlatformSchema(): Promise<void> {
-        // Migrate the legacy consumer-scoped host registry before the global DDL runs, otherwise
-        // CREATE TABLE IF NOT EXISTS would keep the old shape. Fresh databases are a no-op.
-        await this.migrateHostRuntimeToGlobal();
+        // Reshape the host registry (platform.host + composite platform.host_runtime) before the DDL
+        // runs; CREATE TABLE IF NOT EXISTS would otherwise keep a legacy shape. Fresh DB is a no-op.
+        await this.migrateHostRegistry();
         for (const statement of PLATFORM_DDL) {
             await this.sql.unsafe(statement);
         }
     }
 
-    /**
-     * One-way, idempotent migration `platform.host_runtime` from consumer-scoped to global.
-     *
-     * Order matters: rename legacy -> create global -> copy newest row per host -> drop legacy.
-     * Runs in a transaction so an interrupted start cannot leave a half-migrated pair of tables.
-     * Fresh databases (no table yet) and already-global databases are no-ops.
-     */
-    private async migrateHostRuntimeToGlobal(): Promise<void> {
-        const columns = await this.sql.unsafe(
-            `SELECT column_name FROM information_schema.columns
-             WHERE table_schema = 'platform' AND table_name = 'host_runtime'`
-        );
-        const leftover = await this.sql.unsafe(`SELECT to_regclass('${HOST_RUNTIME_LEGACY_TABLE}') AS oid`);
-        const hasLegacyTable = Boolean(leftover[0]?.oid);
-        const hasConsumerColumn = columns.some((row: any) => row.column_name === 'consumer_id');
-        if (!columns.length && !hasLegacyTable) return;
-        if (!hasConsumerColumn && !hasLegacyTable) return;
-
-        const legacyColumns = hasConsumerColumn
-            ? new Set(columns.map((row: any) => row.column_name))
-            : new Set((await this.sql.unsafe(
-                `SELECT column_name FROM information_schema.columns
-                 WHERE table_schema = 'platform' AND table_name = 'host_runtime_legacy'`
-            )).map((row: any) => row.column_name));
-        const insert = this.hostRuntimeMigrationInsert(legacyColumns.has('default_model'));
+    private async migrateHostRegistry(): Promise<void> {
+        const currentExists = await this.relationExists(HOST_RUNTIME_TABLE);
+        const legacyExists = await this.relationExists(HOST_RUNTIME_LEGACY_TABLE);
+        if (!currentExists && !legacyExists) return;
+        const alreadyComposite = currentExists ? await this.hostRuntimeIsComposite() : false;
+        if (alreadyComposite && !legacyExists) return;
 
         await this.sql.begin(async (tx: any) => {
-            if (hasConsumerColumn) {
-                // A leftover legacy table can only come from a manual/partial run; the live
-                // consumer-scoped table is authoritative, so clear the stale staging name first.
+            if (currentExists && !alreadyComposite) {
+                // A leftover staging table can only come from a manual/partial run; the live table wins.
                 await tx.unsafe(`DROP TABLE IF EXISTS ${HOST_RUNTIME_LEGACY_TABLE}`);
-                await tx.unsafe(`ALTER TABLE platform.host_runtime RENAME TO host_runtime_legacy`);
+                await tx.unsafe(`ALTER TABLE ${HOST_RUNTIME_TABLE} RENAME TO host_runtime_legacy`);
             }
+            await tx.unsafe(HOST_DDL);
             await tx.unsafe(HOST_RUNTIME_DDL);
-            if (hasLegacyTable || hasConsumerColumn) {
-                await tx.unsafe(insert);
-                await tx.unsafe(`DROP TABLE ${HOST_RUNTIME_LEGACY_TABLE}`);
+            const legacyColumns = await this.columnsOf(tx, 'host_runtime_legacy');
+            if (legacyColumns.size > 0) {
+                const select = [
+                    'host_id',
+                    'runtime_id',
+                    legacyColumns.has('runtime_kind') ? 'runtime_kind' : `'cli' AS runtime_kind`,
+                    legacyColumns.has('models') ? 'models' : `'[]'::jsonb AS models`,
+                    legacyColumns.has('default_model') ? 'default_model' : `'' AS default_model`,
+                    legacyColumns.has('lead_eligible') ? 'lead_eligible' : 'false AS lead_eligible',
+                    legacyColumns.has('health') ? 'health' : `'unknown' AS health`,
+                    legacyColumns.has('last_heartbeat') ? 'last_heartbeat' : 'NULL::timestamptz AS last_heartbeat',
+                    legacyColumns.has('created_at') ? 'created_at' : 'now() AS created_at',
+                    legacyColumns.has('updated_at') ? 'updated_at' : 'now() AS updated_at',
+                ].join(',');
+                const rows = await tx.unsafe(
+                    `SELECT ${select} FROM ${HOST_RUNTIME_LEGACY_TABLE} ORDER BY updated_at DESC NULLS LAST`
+                );
+                const hosts = new Map<string, any>();
+                const runtimes = new Map<string, any>();
+                for (const row of rows) {
+                    const hostId = String(row.host_id || '').trim();
+                    const runtimeId = String(row.runtime_id || '').trim();
+                    if (!hostId || !runtimeId) continue;
+                    if (!hosts.has(hostId)) {
+                        hosts.set(hostId, {
+                            hostId,
+                            hostType: inferHostType(hostId, runtimeId),
+                            label: hostId,
+                            createdAt: row.created_at ?? new Date(),
+                            updatedAt: row.updated_at ?? new Date(),
+                        });
+                    }
+                    const key = `${hostId}:${runtimeId}`;
+                    if (runtimes.has(key)) continue; // newest row per (host, runtime) wins
+                    runtimes.set(key, {
+                        hostId,
+                        runtimeId,
+                        runtimeKind: normalizeRuntimeKind(row.runtime_kind),
+                        models: normalizeJsonArray(row.models),
+                        defaultModel: String(row.default_model ?? ''),
+                        leadEligible: Boolean(row.lead_eligible),
+                        health: normalizeHealth(row.health),
+                        lastHeartbeat: row.last_heartbeat ?? null,
+                        createdAt: row.created_at ?? new Date(),
+                        updatedAt: row.updated_at ?? new Date(),
+                    });
+                }
+                for (const host of hosts.values()) {
+                    await tx.unsafe(
+                        `INSERT INTO platform.host (host_id,host_type,label,created_at,updated_at)
+                         VALUES ($1,$2,$3,$4,$5) ON CONFLICT (host_id) DO NOTHING`,
+                        [host.hostId, host.hostType, host.label, host.createdAt, host.updatedAt]
+                    );
+                }
+                for (const runtime of runtimes.values()) {
+                    await tx.unsafe(
+                        `INSERT INTO platform.host_runtime
+                         (host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,created_at,updated_at)
+                         VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7,$8,$9,$10)
+                         ON CONFLICT (host_id,runtime_id) DO NOTHING`,
+                        [runtime.hostId, runtime.runtimeId, runtime.runtimeKind, JSON.stringify(runtime.models),
+                         runtime.defaultModel, runtime.leadEligible, runtime.health, runtime.lastHeartbeat,
+                         runtime.createdAt, runtime.updatedAt]
+                    );
+                }
             }
+            await tx.unsafe(`DROP TABLE ${HOST_RUNTIME_LEGACY_TABLE}`);
         });
     }
 
-    /** Copy legacy rows into the global table, newest row per host wins, existing hosts untouched. */
-    private hostRuntimeMigrationInsert(hasDefaultModel: boolean): string {
-        const defaultModel = hasDefaultModel ? `COALESCE(default_model, '')` : `''`;
-        return `INSERT INTO platform.host_runtime
-                (host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,created_at,updated_at)
-                SELECT DISTINCT ON (host_id)
-                       host_id, runtime_id, runtime_kind,
-                       COALESCE(models, '[]'::jsonb), ${defaultModel},
-                       COALESCE(lead_eligible, false), COALESCE(health, 'unknown'),
-                       last_heartbeat, COALESCE(created_at, now()), COALESCE(updated_at, now())
-                FROM ${HOST_RUNTIME_LEGACY_TABLE}
-                ORDER BY host_id, updated_at DESC NULLS LAST
-                ON CONFLICT (host_id) DO NOTHING`;
+    private async relationExists(name: string): Promise<boolean> {
+        const rows = await this.sql.unsafe(`SELECT to_regclass($1) AS oid`, [name]);
+        return Boolean(rows[0]?.oid);
+    }
+
+    private async columnsOf(tx: any, tableName: string): Promise<Set<string>> {
+        const rows = await tx.unsafe(
+            `SELECT column_name FROM information_schema.columns
+             WHERE table_schema = 'platform' AND table_name = $1`,
+            [tableName]
+        );
+        return new Set(rows.map((row: any) => String(row.column_name)));
+    }
+
+    private async hostRuntimeIsComposite(): Promise<boolean> {
+        const rows = await this.sql.unsafe(
+            `SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint
+             WHERE conrelid = $1::regclass AND contype = 'p'`,
+            [HOST_RUNTIME_TABLE]
+        );
+        if (!rows.length) return false;
+        const definition = String(rows[0].def || '');
+        return definition.includes('host_id') && definition.includes('runtime_id');
+    }
+
+    /** Migrate legacy bare hostIds in worker placement to the first runtimeKey of that host. */
+    private async migrateWorkerHostPolicyRuntimeKeys(consumerId: string): Promise<void> {
+        const schemaName = schemaNameFor(consumerId);
+        const relation = await this.sql.unsafe(`SELECT to_regclass($1) AS oid`, [`${schemaName}.knowledge_worker_host_policy`]);
+        if (!relation[0]?.oid) return;
+        const runtimes = await this.sql.unsafe(
+            `SELECT host_id, runtime_id FROM platform.host_runtime ORDER BY host_id, runtime_id`
+        );
+        const firstKey = new Map<string, string>();
+        for (const row of runtimes) {
+            const hostId = String(row.host_id);
+            if (!firstKey.has(hostId)) firstKey.set(hostId, `${hostId}:${row.runtime_id}`);
+        }
+        const rows = await this.sql.unsafe(
+            `SELECT worker_id, allowed_hosts FROM ${quoteSchema(schemaName)}.knowledge_worker_host_policy`
+        );
+        for (const row of rows) {
+            const current = normalizeTextArray(row.allowed_hosts);
+            const next = current.map((hostId) => (String(hostId).includes(':') ? String(hostId) : (firstKey.get(String(hostId)) ?? String(hostId))));
+            if (JSON.stringify(next) === JSON.stringify(current)) continue;
+            await this.sql.unsafe(
+                `UPDATE ${quoteSchema(schemaName)}.knowledge_worker_host_policy
+                 SET allowed_hosts = $2::text[], updated_at = now() WHERE worker_id = $1`,
+                [row.worker_id, pgTextArray(next)]
+            );
+        }
     }
 
     async tableExists(table: 'platform.consumer' | 'platform.consumer_event'): Promise<boolean> {
@@ -622,6 +796,8 @@ export class BunSqlPlatformStore implements PlatformStore {
         } finally {
             await this.sql.unsafe('SET search_path TO public');
         }
+        // Placement policy stores runtimeKeys now; rewrite legacy bare hostIds idempotently.
+        await this.migrateWorkerHostPolicyRuntimeKeys(consumerId);
     }
 
     async dropSchema(consumerId: string): Promise<void> {
@@ -778,18 +954,46 @@ export class BunSqlPlatformStore implements PlatformStore {
         });
     }
 
-    async listHostRuntimes(): Promise<any[]> {
+    async listHosts(): Promise<any[]> {
         return await this.sql.unsafe(
-            `SELECT host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,created_at,updated_at
-             FROM platform.host_runtime ORDER BY host_id`
+            `SELECT host_id,host_type,label,created_at,updated_at FROM platform.host ORDER BY host_id`
         );
     }
 
-    async getHostRuntime(hostId: string): Promise<any> {
+    async getHost(hostId: string): Promise<any> {
+        const rows = await this.sql.unsafe(
+            `SELECT host_id,host_type,label,created_at,updated_at FROM platform.host WHERE host_id=$1`,
+            [hostId]
+        );
+        return rows[0] || null;
+    }
+
+    async upsertHost(host: any): Promise<any> {
+        const rows = await this.sql.unsafe(
+            `INSERT INTO platform.host (host_id,host_type,label,created_at,updated_at)
+             VALUES ($1,$2,$3,now(),now())
+             ON CONFLICT (host_id) DO UPDATE SET
+               host_type=EXCLUDED.host_type,
+               label=EXCLUDED.label,
+               updated_at=now()
+             RETURNING host_id,host_type,label,created_at,updated_at`,
+            [host.hostId, host.hostType, host.label ?? host.hostId]
+        );
+        return rows[0] || null;
+    }
+
+    async listHostRuntimes(): Promise<any[]> {
+        return await this.sql.unsafe(
+            `SELECT host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,created_at,updated_at
+             FROM platform.host_runtime ORDER BY host_id, runtime_id`
+        );
+    }
+
+    async getHostRuntime(hostId: string, runtimeId: string): Promise<any> {
         const rows = await this.sql.unsafe(
             `SELECT host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,created_at,updated_at
-             FROM platform.host_runtime WHERE host_id=$1`,
-            [hostId]
+             FROM platform.host_runtime WHERE host_id=$1 AND runtime_id=$2`,
+            [hostId, runtimeId]
         );
         return rows[0] || null;
     }
@@ -799,8 +1003,8 @@ export class BunSqlPlatformStore implements PlatformStore {
             `INSERT INTO platform.host_runtime
              (host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,updated_at)
              VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7,NULL,now())
-             ON CONFLICT (host_id) DO UPDATE SET
-               runtime_id=EXCLUDED.runtime_id, runtime_kind=EXCLUDED.runtime_kind,
+             ON CONFLICT (host_id,runtime_id) DO UPDATE SET
+               runtime_kind=EXCLUDED.runtime_kind,
                models=EXCLUDED.models, default_model=EXCLUDED.default_model,
                lead_eligible=EXCLUDED.lead_eligible,
                health=CASE WHEN $8 THEN EXCLUDED.health ELSE platform.host_runtime.health END,
@@ -813,16 +1017,17 @@ export class BunSqlPlatformStore implements PlatformStore {
         return rows[0] || null;
     }
 
-    async heartbeatHostRuntime(hostId: string, patch: { health?: string; models?: string[]; defaultModel?: string }): Promise<any> {
+    async heartbeatHostRuntime(hostId: string, runtimeId: string, patch: { health?: string; models?: string[]; defaultModel?: string }): Promise<any> {
         const rows = await this.sql.unsafe(
             `UPDATE platform.host_runtime
-             SET health=COALESCE($2,health),
-                 models=COALESCE($3::jsonb,models),
-                 default_model=COALESCE($4,default_model),
+             SET health=COALESCE($3,health),
+                 models=COALESCE($4::jsonb,models),
+                 default_model=COALESCE($5,default_model),
                  last_heartbeat=now(), updated_at=now()
-             WHERE host_id=$1
+             WHERE host_id=$1 AND runtime_id=$2
              RETURNING host_id,runtime_id,runtime_kind,models,default_model,lead_eligible,health,last_heartbeat,created_at,updated_at`,
-            [hostId, patch.health || null, patch.models ? JSON.stringify(patch.models) : null, patch.defaultModel !== undefined ? patch.defaultModel : null]
+            [hostId, runtimeId, patch.health || null, patch.models ? JSON.stringify(patch.models) : null,
+             patch.defaultModel !== undefined ? patch.defaultModel : null]
         );
         return rows[0] || null;
     }

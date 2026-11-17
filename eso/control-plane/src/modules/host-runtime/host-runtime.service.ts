@@ -89,10 +89,33 @@ function resolveDefaultModel(body: any, models: string[], existing: any, explici
     return current && models.includes(current) ? current : models[0];
 }
 
-function hostRuntimeDto(row: any): any {
+/** Stable composite identifier for a host runtime. */
+function runtimeKeyOf(hostId: unknown, runtimeId: unknown): string {
+    return `${String(hostId ?? '')}:${String(runtimeId ?? '')}`;
+}
+
+/** Placement values are runtimeKeys; reject malformed keys (missing/extra colon, empty side). */
+function isRuntimeKey(value: string): boolean {
+    return /^[^:\s]+:[^:\s]+$/.test(value);
+}
+
+function hostDto(row: any): any {
+    const hostId = row.host_id ?? row.hostId;
     return {
-        hostId: row.host_id ?? row.hostId,
-        runtimeId: row.runtime_id ?? row.runtimeId,
+        hostId,
+        hostType: row.host_type ?? row.hostType,
+        label: row.label ?? hostId,
+    };
+}
+
+function hostRuntimeDto(row: any, hostType?: string | null): any {
+    const hostId = row.host_id ?? row.hostId;
+    const runtimeId = row.runtime_id ?? row.runtimeId;
+    return {
+        hostId,
+        runtimeId,
+        runtimeKey: runtimeKeyOf(hostId, runtimeId),
+        hostType: hostType ?? row.host_type ?? row.hostType ?? null,
         runtimeKind: row.runtime_kind ?? row.runtimeKind,
         models: jsonArray(row.models),
         defaultModel: row.default_model ?? row.defaultModel ?? '',
@@ -115,43 +138,79 @@ function workerPlacementDto(row: any): any {
 export class HostRuntimeService {
     constructor(private readonly store: PlatformStore) {}
 
-    private async emit(consumerId: string, event: any): Promise<void> {
-        await this.store.recordWorkerEvent(consumerId, event);
+    /** Nested host view: one item per machine with its advertised runtimes. */
+    async listHosts(): Promise<any> {
+        const [hosts, runtimes] = await Promise.all([this.store.listHosts(), this.store.listHostRuntimes()]);
+        const hostTypes = new Map(hosts.map((host: any) => [String(host.host_id ?? host.hostId), String(host.host_type ?? host.hostType)]));
+        const byHost = new Map<string, any[]>();
+        for (const runtime of runtimes) {
+            const hostId = String(runtime.host_id ?? runtime.hostId);
+            const list = byHost.get(hostId) ?? [];
+            list.push(hostRuntimeDto(runtime, hostTypes.get(hostId)));
+            byHost.set(hostId, list);
+        }
+        return {
+            items: hosts.map((host) => {
+                const dto = hostDto(host);
+                return { ...dto, runtimes: byHost.get(String(dto.hostId)) ?? [] };
+            }),
+        };
     }
 
+    /** Flattened runtime view for pickers/placement. */
     async listHostRuntimes(): Promise<any> {
-        const rows = await this.store.listHostRuntimes();
-        return { items: rows.map(hostRuntimeDto) };
+        const [rows, hosts] = await Promise.all([this.store.listHostRuntimes(), this.store.listHosts()]);
+        const types = new Map(hosts.map((host: any) => [String(host.host_id ?? host.hostId), String(host.host_type ?? host.hostType)]));
+        return {
+            items: rows.map((row) => hostRuntimeDto(row, types.get(String(row.host_id ?? row.hostId)))),
+        };
     }
 
-    async putHostRuntime(hostId: string, body: any): Promise<any> {
+    async putHost(hostId: string, body: any): Promise<any> {
         const host = requiredText(hostId, 'hostId', 'HOST_RUNTIME_INVALID');
-        const existing = await this.store.getHostRuntime(host);
+        const hostType = requiredText(body?.hostType, 'hostType', 'HOST_RUNTIME_INVALID');
+        const existing = await this.store.getHost(host);
+        const label = body?.label === undefined
+            ? (existing ? String(existing.label ?? host) : host)
+            : String(body.label || host);
+        const row = await this.store.upsertHost({ hostId: host, hostType, label });
+        return hostDto(row);
+    }
+
+    async putHostRuntime(hostId: string, runtimeId: string, body: any): Promise<any> {
+        const host = requiredText(hostId, 'hostId', 'HOST_RUNTIME_INVALID');
+        const runtime = requiredText(runtimeId, 'runtimeId', 'HOST_RUNTIME_INVALID');
+        const hostRow = await this.store.getHost(host);
+        if (!hostRow) throw new PlatformError('HOST_RUNTIME_NOT_FOUND', `Host not registered: ${host}`);
+        const existing = await this.store.getHostRuntime(host, runtime);
         const models = body?.models === undefined ? (existing ? jsonArray(existing.models) : []) : textArray(body.models);
         const healthExplicit = body?.health !== undefined;
         const defaultExplicit = body?.defaultModel !== undefined;
-        const runtime = {
+        const row = await this.store.upsertHostRuntime({
             hostId: host,
-            runtimeId: requiredText(body?.runtimeId, 'runtimeId', 'HOST_RUNTIME_INVALID'),
+            runtimeId: runtime,
             runtimeKind: oneOf(body?.runtimeKind, HOST_RUNTIME_KINDS, 'runtimeKind', 'HOST_RUNTIME_INVALID'),
             models,
             defaultModel: resolveDefaultModel(body, models, existing, defaultExplicit),
             leadEligible: Boolean(body?.leadEligible),
             // Metadata edits preserve observed health; only an explicit health field (or heartbeat)
-            // may change liveness. A newly registered host starts as 'unknown'.
+            // may change liveness. A newly registered runtime starts as 'unknown'.
             health: healthExplicit
                 ? oneOf(body.health, HOST_RUNTIME_HEALTH, 'health', 'HOST_RUNTIME_INVALID')
                 : String(existing?.health ?? 'unknown'),
             healthExplicit,
-        };
-        const row = await this.store.upsertHostRuntime(runtime);
-        return hostRuntimeDto(row);
+        });
+        return hostRuntimeDto(row, hostRow.host_type ?? hostRow.hostType);
     }
 
-    async heartbeat(hostId: string, body: any): Promise<any> {
+    async heartbeat(hostId: string, runtimeId: string, body: any): Promise<any> {
         const host = requiredText(hostId, 'hostId', 'HOST_RUNTIME_INVALID');
-        const existing = await this.store.getHostRuntime(host);
-        if (!existing) throw new PlatformError('HOST_RUNTIME_NOT_FOUND', `Host runtime not registered: ${host}`);
+        const runtime = requiredText(runtimeId, 'runtimeId', 'HOST_RUNTIME_INVALID');
+        const [existing, hostRow] = await Promise.all([
+            this.store.getHostRuntime(host, runtime),
+            this.store.getHost(host),
+        ]);
+        if (!existing) throw new PlatformError('HOST_RUNTIME_NOT_FOUND', `Host runtime not registered: ${host}:${runtime}`);
         const modelsSupplied = body?.models !== undefined;
         const defaultSupplied = body?.defaultModel !== undefined;
         const effectiveModels = modelsSupplied ? textArray(body.models) : jsonArray(existing.models);
@@ -169,9 +228,9 @@ export class HostRuntimeService {
             const current = String(existing.default_model ?? existing.defaultModel ?? '');
             patch.defaultModel = effectiveModels.length === 0 ? '' : (current && effectiveModels.includes(current) ? current : effectiveModels[0]);
         }
-        const row = await this.store.heartbeatHostRuntime(host, patch);
-        if (!row) throw new PlatformError('HOST_RUNTIME_NOT_FOUND', `Host runtime not registered: ${host}`);
-        return hostRuntimeDto(row);
+        const row = await this.store.heartbeatHostRuntime(host, runtime, patch);
+        if (!row) throw new PlatformError('HOST_RUNTIME_NOT_FOUND', `Host runtime not registered: ${host}:${runtime}`);
+        return hostRuntimeDto(row, hostRow?.host_type ?? hostRow?.hostType ?? null);
     }
 
     async listWorkerPlacements(consumerId: string): Promise<any> {
@@ -187,10 +246,16 @@ export class HostRuntimeService {
         if (!known) throw new PlatformError('WORKER_NOT_FOUND', `Worker not found: ${worker}`);
         const nativeAgent = body?.nativeAgent === undefined ? {} : body.nativeAgent;
         if (!isRecord(nativeAgent)) {
-            throw new PlatformError('WORKER_PLACEMENT_INVALID', 'nativeAgent must be an object of hostId to agent name');
+            throw new PlatformError('WORKER_PLACEMENT_INVALID', 'nativeAgent must be an object keyed by runtimeKey');
+        }
+        const allowedHosts = body?.allowedHosts === undefined ? [] : textArray(body.allowedHosts);
+        for (const key of allowedHosts) {
+            if (!isRuntimeKey(key)) {
+                throw new PlatformError('WORKER_PLACEMENT_INVALID', `allowedHosts entries must be runtimeKey hostId:runtimeId (got ${key})`);
+            }
         }
         const config = {
-            allowedHosts: body?.allowedHosts === undefined ? [] : textArray(body.allowedHosts),
+            allowedHosts,
             modelTier: body?.modelTier === undefined ? 'balanced' : oneOf(body.modelTier, MODEL_TIERS, 'modelTier', 'WORKER_PLACEMENT_INVALID'),
             nativeAgent: jsonObject(nativeAgent),
             fallback: body?.fallback === undefined ? 'block' : oneOf(body.fallback, FALLBACKS, 'fallback', 'WORKER_PLACEMENT_INVALID'),

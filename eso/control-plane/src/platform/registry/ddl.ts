@@ -10,21 +10,37 @@ export const PLATFORM_SCHEMA = 'platform';
 export const CONSUMER_TABLE = 'platform.consumer';
 export const CONSUMER_EVENT_TABLE = 'platform.consumer_event';
 export const STACK_VERSION_TABLE = 'platform.harness_stack_version';
+export const HOST_TABLE = 'platform.host';
 export const HOST_RUNTIME_TABLE = 'platform.host_runtime';
-/** Pre-global-registry table name, kept only as the migration staging name. */
+/** Migration staging name used while reshaping the host registry. */
 export const HOST_RUNTIME_LEGACY_TABLE = 'platform.host_runtime_legacy';
 
 /** Host runtime kinds accepted by `platform.host_runtime.runtime_kind`. */
 export const HOST_RUNTIME_KINDS = ['ide-native', 'cli', 'acp'] as const;
 /** Liveness states for a registered host runtime. */
 export const HOST_RUNTIME_HEALTH = ['unknown', 'healthy', 'degraded', 'offline'] as const;
+/** Known host types used when inferring a machine type from a legacy runtime id. */
+export const HOST_TYPES = ['cursor', 'agy', 'claude', 'codex', 'dsh', 'paseo', 'orca'] as const;
 
 /**
- * Global host runtime registry: one row per host, shared by every consumer.
- * A host is a machine/runtime registration; the workspace belongs to the consumer.
+ * Global host registry: one row per machine, shared by every consumer.
+ * A host is the machine; each machine can advertise several runtimes (see host_runtime).
+ */
+export const HOST_DDL = `CREATE TABLE IF NOT EXISTS platform.host (
+    host_id         text primary key,
+    host_type       text not null,
+    label           text,
+    created_at      timestamptz not null default now(),
+    updated_at      timestamptz not null default now()
+)`;
+
+/**
+ * Global host runtime registry: one row per (host, runtime), shared by every consumer.
+ * `runtimeKey` is `hostId:runtimeId`. A host is a machine/runtime registration; the workspace
+ * belongs to the consumer.
  */
 export const HOST_RUNTIME_DDL = `CREATE TABLE IF NOT EXISTS platform.host_runtime (
-    host_id         text primary key,
+    host_id         text not null references platform.host(host_id) on delete cascade,
     runtime_id      text not null,
     runtime_kind    text not null check (runtime_kind in ('ide-native','cli','acp')),
     models          jsonb not null default '[]'::jsonb,
@@ -33,7 +49,8 @@ export const HOST_RUNTIME_DDL = `CREATE TABLE IF NOT EXISTS platform.host_runtim
     health          text not null default 'unknown' check (health in ('unknown','healthy','degraded','offline')),
     last_heartbeat  timestamptz,
     created_at      timestamptz not null default now(),
-    updated_at      timestamptz not null default now()
+    updated_at      timestamptz not null default now(),
+    primary key (host_id, runtime_id)
 )`;
 
 export const PLATFORM_DDL: readonly string[] = [
@@ -112,8 +129,9 @@ export const PLATFORM_DDL: readonly string[] = [
         updated_at      timestamptz not null default now(),
         primary key (consumer_id, plugin_id)
     )`,
-    // Host runtime registry (GLOBAL): one row per host, shared by every consumer.
+    // Host registry (GLOBAL): one row per machine, then one row per (host, runtime).
     // ESO is control plane only — it never starts these processes, it only records and routes.
+    HOST_DDL,
     HOST_RUNTIME_DDL,
     `CREATE INDEX IF NOT EXISTS idx_host_runtime_health
         ON platform.host_runtime (health)`,

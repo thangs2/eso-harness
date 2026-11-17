@@ -8,7 +8,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { ConsumerProfileService } from '../../../core/consumers/consumer-profile.service.js';
-import type { ConsumerProfile, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, McpProviderDto, WorkerConfigDto, EvidenceRequirementDto, FlowSummaryDto, FlowDefinitionDto, HostRuntimeDto, WorkerPlacementDto, WorkerModelTier, WorkerPlacementFallback } from '../../../../../../../libs/api-client/types.js';
+import type { ConsumerProfile, HostDto, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, McpProviderDto, WorkerConfigDto, EvidenceRequirementDto, FlowSummaryDto, FlowDefinitionDto, HostRuntimeDto, WorkerPlacementDto, WorkerModelTier, WorkerPlacementFallback } from '../../../../../../../libs/api-client/types.js';
 
 /**
  * Only remaining occurrence of the pre-P0.3 host-binding key: settings saved by an older UI.
@@ -16,6 +16,8 @@ import type { ConsumerProfile, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFi
  * The API, host discovery, and worker bindings all use `hostId`.
  */
 const LEGACY_HOST_PLUGIN_KEY = 'hostPluginId' as const;
+
+const HOST_TYPE_LABELS: Record<string, string> = { cursor: 'Cursor', agy: 'Antigravity', dsh: 'DSH', claude: 'Claude', codex: 'Codex', paseo: 'Paseo', orca: 'Orca' };
 type LegacyHostProfile = HostProfile & { [LEGACY_HOST_PLUGIN_KEY]?: string };
 
 type LayerId = 'multiAgent' | 'rules' | 'skills' | 'hooks' | 'memory' | 'codeGraph' | 'documentGraph' | 'topology';
@@ -393,7 +395,7 @@ function defaultPlugins(): PluginEntry[] {
                                 </div>
 
                                 <section class="hosts-section">
-                                    <header class="hosts-section-head"><div><h3>Active bindings</h3><p class="muted">Developer → host runtime × pinned Stack version.</p></div><div class="developer-actions"><button mat-stroked-button type="button" (click)="openBulkUpgrade()">Bulk upgrade</button><button mat-flat-button color="primary" type="button" [disabled]="activeHostRuntimes().length === 0" (click)="startNewBinding()">New host binding</button></div></header>
+                                    <header class="hosts-section-head"><div><h3>Active bindings</h3><p class="muted">Developer → host runtime × pinned Stack version.</p></div><div class="developer-actions"><button mat-stroked-button type="button" (click)="openBulkUpgrade()">Bulk upgrade</button><button mat-flat-button color="primary" type="button" [disabled]="activeHosts().length === 0" (click)="startNewBinding()">New host binding</button></div></header>
                                     @if (bulkUpgradeOpen()) {
                                         <div class="bulk-upgrade-panel">
                                             <mat-form-field appearance="outline"><mat-label>Target Stack version</mat-label>
@@ -414,7 +416,7 @@ function defaultPlugins(): PluginEntry[] {
                                                     <header class="developer-head">
                                                         <div><h3>{{ developer }}</h3><span>{{ hostProfileCount(developer) }}</span></div>
                                                         <div class="developer-actions">
-                                                            <button mat-stroked-button type="button" [disabled]="activeHostRuntimes().length === 0" (click)="startAddHost(developer)">Add host binding</button>
+                                                            <button mat-stroked-button type="button" [disabled]="activeHosts().length === 0" (click)="startAddHost(developer)">Add host binding</button>
                                                             <button mat-stroked-button color="warn" type="button" (click)="askRemoveDeveloper(developer)">Remove developer</button>
                                                         </div>
                                                     </header>
@@ -474,7 +476,7 @@ function defaultPlugins(): PluginEntry[] {
                                                     @if (addingHostFor()) {
                                                         <div class="host-add-panel">
                                                             <div class="host-add-heading">{{ editingProfile() ? 'Edit host binding' : 'New host binding' }}</div>
-                                                            @if (activeHostRuntimes().length === 0) {
+                                                            @if (activeHosts().length === 0) {
                                                                 <div class="host-add-blocked" role="alert">
                                                                     <span>No active host runtime. Register one in Hosts before creating a binding.</span>
                                                                     <button mat-stroked-button type="button" (click)="openHosts()">Open Hosts</button>
@@ -486,9 +488,9 @@ function defaultPlugins(): PluginEntry[] {
                                                                 </mat-form-field>
                                                                 <mat-form-field appearance="outline"><mat-label>Registered host</mat-label>
                                                                     <mat-select [ngModel]="newHostId()" [disabled]="!!editingProfile()" (ngModelChange)="changeHost($event)">
-                                                                        @for (host of activeHostRuntimes(); track host.hostId) { <mat-option [value]="host.hostId">{{ host.hostId }} · {{ hostTypeFor(host.hostId) }} · {{ host.runtimeId }}</mat-option> }
+                                                                        @for (host of activeHosts(); track host.hostId) { <mat-option [value]="host.hostId">{{ host.hostId }} · {{ hostTypeLabel(host.hostType) }} · {{ host.label || 'no label' }}</mat-option> }
                                                                     </mat-select>
-                                                                    <mat-hint>Only active registered hosts are assignable.</mat-hint>
+                                                                    <mat-hint>Only active registered hosts are assignable. Bindings target hostId.</mat-hint>
                                                                 </mat-form-field>
                                                                 <mat-form-field appearance="outline"><mat-label>Stack version</mat-label>
                                                                     <mat-select [ngModel]="newStackVersion()" (ngModelChange)="newStackVersion.set($event)">
@@ -956,15 +958,18 @@ function defaultPlugins(): PluginEntry[] {
                                                         </div>
                                                     } @else {
                                                         <div class="policy-field">
-                                                            <span class="field-label">Allowed hosts — {{ placementDraftFor(worker.id).allowedHosts.length }} selected</span>
+                                                            <span class="field-label">Allowed runtimes — {{ placementDraftFor(worker.id).allowedHosts.length }} selected</span>
                                                             <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full">
                                                                 <mat-select multiple [ngModel]="placementDraftFor(worker.id).allowedHosts" (ngModelChange)="setPlacementHosts(worker.id, $event)">
-                                                                    @for (host of hostRuntimes(); track host.hostId) {
-                                                                        <mat-option [value]="host.hostId">{{ host.hostId }} · {{ host.runtimeId }} · {{ host.health }}</mat-option>
+                                                                    @for (option of runtimeOptionsFor(worker.id); track option.value) {
+                                                                        <mat-option [value]="option.value">{{ option.label }}</mat-option>
                                                                     }
                                                                 </mat-select>
                                                             </mat-form-field>
-                                                            <p class="field-help">Empty means this worker has no allowed host.</p>
+                                                            <p class="field-help">Placement targets a runtime key. Empty means this worker has no allowed runtime.</p>
+                                                            @if (legacyPlacementKeys(worker.id).length > 0) {
+                                                                <p class="field-error">Legacy host id without a runtime: {{ legacyPlacementKeys(worker.id).join(', ') }} — pick a runtime key to replace it before saving.</p>
+                                                            }
                                                         </div>
                                                         <div class="placement-grid">
                                                             <mat-form-field appearance="outline" subscriptSizing="dynamic">
@@ -985,18 +990,18 @@ function defaultPlugins(): PluginEntry[] {
                                                             </mat-form-field>
                                                         </div>
                                                         <div class="policy-field">
-                                                            <span class="field-label">Native agent mapping — per allowed host</span>
+                                                            <span class="field-label">Native agent mapping — per allowed runtime</span>
                                                             @if (placementDraftFor(worker.id).allowedHosts.length === 0) {
-                                                                <span class="tag-empty">Select at least one allowed host to map a native agent.</span>
+                                                                <span class="tag-empty">Select at least one allowed runtime to map a native agent.</span>
                                                             } @else {
-                                                                @for (hostId of placementDraftFor(worker.id).allowedHosts; track hostId) {
+                                                                @for (runtimeKey of placementDraftFor(worker.id).allowedHosts; track runtimeKey) {
                                                                     <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full">
-                                                                        <mat-label>Native agent · {{ hostId }}</mat-label>
-                                                                        <input matInput [ngModel]="placementDraftFor(worker.id).nativeAgent[hostId] || ''" (ngModelChange)="setNativeAgent(worker.id, hostId, $event)" placeholder="cursor / agy / claude">
+                                                                        <mat-label>Native agent · {{ runtimeKey }}</mat-label>
+                                                                        <input matInput [ngModel]="placementDraftFor(worker.id).nativeAgent[runtimeKey] || ''" (ngModelChange)="setNativeAgent(worker.id, runtimeKey, $event)" placeholder="cursor / agy / claude">
                                                                     </mat-form-field>
                                                                 }
                                                             }
-                                                            <p class="field-help">Host-native agent name this host uses for the worker — Cursor, AGY, or another installed agent id.</p>
+                                                            <p class="field-help">Host-native agent name this runtime uses for the worker — Cursor, AGY, or another installed agent id.</p>
                                                         </div>
                                                         @if (placementNotice(); as message) { <p class="placement-feedback" role="status">{{ message }}</p> }
                                                         @if (placementError(); as message) { <p class="field-error" role="alert">{{ message }}</p> }
@@ -1846,6 +1851,7 @@ export class ConsumerSettingsPage implements OnInit {
         this.workers().find((worker) => worker.id === this.selectedWorkerId()) || this.workers()[0] || null
     );
     readonly hostRuntimes = signal<HostRuntimeDto[]>([]);
+    readonly hosts = signal<HostDto[]>([]);
     readonly workerPlacements = signal<Record<string, WorkerPlacementDto>>({});
     readonly placementDrafts = signal<Record<string, WorkerPlacementDto>>({});
     readonly placementSaving = signal(false);
@@ -2016,18 +2022,21 @@ export class ConsumerSettingsPage implements OnInit {
         Promise.all([
             this.service.get(id),
             this.service.getMcp(id).catch(() => ({ consumerId: id, root: '', sources: [], providers: [], warnings: [] })),
-            this.service.getHosts(id).catch(() => ({ consumerId: id, root: '', detected: [] })),
+            this.service.getDetectedHosts(id).catch(() => ({ consumerId: id, root: '', detected: [] })),
             this.service.getStackVersions(id).catch(() => ({ consumerId: id, versions: [] })),
             this.service.getHostRuntimes().catch(() => [] as HostRuntimeDto[]),
+            this.service.getHosts().catch(() => [] as HostDto[]),
         ])
-            .then(([profile, mcp, hosts, versions, hostRuntimes]) => {
+            .then(([profile, mcp, detectedHosts, versions, hostRuntimes, hosts]) => {
                 this.mcpProviders.set(mcp.providers);
                 this.mcpSources.set(mcp.sources);
                 this.mcpWarnings.set(mcp.warnings);
-                this.detectedHosts.set(hosts.detected);
+                this.detectedHosts.set(detectedHosts.detected);
                 this.hostRuntimes.set(hostRuntimes);
-                if (!hostRuntimes.some((host) => host.hostId === this.newHostId()) && hostRuntimes.length > 0) {
-                    this.newHostId.set(hostRuntimes.find((host) => host.health !== 'offline')?.hostId || hostRuntimes[0].hostId);
+                this.hosts.set(hosts);
+                const activeHosts = hosts.filter((host) => host.runtimes.some((runtime) => runtime.health !== 'offline'));
+                if (!activeHosts.some((host) => host.hostId === this.newHostId()) && activeHosts.length > 0) {
+                    this.newHostId.set(activeHosts[0].hostId);
                 }
                 this.remoteStackVersions.set(versions.versions.map((item: any) => ({
                     version: Number(item.version) || 1,
@@ -2154,9 +2163,26 @@ export class ConsumerSettingsPage implements OnInit {
 
     hostPlugins(): PluginEntry[] { return this.plugins().filter((plugin) => plugin.type === 'host'); }
     activeHostRuntimes(): HostRuntimeDto[] { return this.hostRuntimes().filter((host) => host.health !== 'offline'); }
+    activeHosts(): HostDto[] { return this.hosts().filter((host) => host.runtimes.some((runtime) => runtime.health !== 'offline')); }
+    hostTypeLabel(type: string): string { return HOST_TYPE_LABELS[type] || type; }
+    runtimeOptionsFor(workerId: string): Array<{ value: string; label: string; legacy: boolean }> {
+        const allowed = this.placementDraftFor(workerId).allowedHosts;
+        const runtimeKeys = new Set(this.hostRuntimes().map((runtime) => runtime.runtimeKey));
+        const options = this.hostRuntimes().map((runtime) => ({ value: runtime.runtimeKey, label: `${runtime.runtimeKey} · ${runtime.hostType}`, legacy: false }));
+        for (const key of allowed) {
+            if (!runtimeKeys.has(key)) options.push({ value: key, label: `${key} · legacy host id (no runtime)`, legacy: true });
+        }
+        return options.sort((left, right) => left.value.localeCompare(right.value));
+    }
+    legacyPlacementKeys(workerId: string): string[] {
+        const runtimeKeys = new Set(this.hostRuntimes().map((runtime) => runtime.runtimeKey));
+        return this.placementDraftFor(workerId).allowedHosts.filter((key) => !runtimeKeys.has(key));
+    }
     hostAvailable(hostId: string): boolean { return this.hostRuntimes().some((host) => host.hostId === hostId && host.health !== 'offline'); }
     hostHealth(hostId: string): string { return this.hostRuntimes().find((host) => host.hostId === hostId)?.health || 'unregistered'; }
     hostTypeFor(hostId: string): string {
+        const hostType = this.hosts().find((host) => host.hostId === hostId)?.hostType;
+        if (hostType) return hostType;
         const runtimeId = this.hostRuntimes().find((host) => host.hostId === hostId)?.runtimeId || hostId;
         const value = String(runtimeId || hostId).toLowerCase();
         if (value.includes('cursor')) return 'cursor';
@@ -2792,7 +2818,7 @@ export class ConsumerSettingsPage implements OnInit {
     }
 
     startNewBinding(): void {
-        if (this.activeHostRuntimes().length === 0) { this.error.set('Register an active host runtime in Hosts first.'); return; }
+        if (this.activeHosts().length === 0) { this.error.set('Register an active host runtime in Hosts first.'); return; }
         this.editingProfile.set(null);
         this.addingHostFor.set('__new');
         this.bindingDeveloper.set('');
@@ -2803,7 +2829,7 @@ export class ConsumerSettingsPage implements OnInit {
     }
 
     startAddHost(userId: string): void {
-        if (this.activeHostRuntimes().length === 0) { this.error.set('Register an active host runtime in Hosts first.'); return; }
+        if (this.activeHosts().length === 0) { this.error.set('Register an active host runtime in Hosts first.'); return; }
         this.editingProfile.set(null);
         this.addingHostFor.set(userId);
         this.bindingDeveloper.set(userId);
@@ -3624,7 +3650,7 @@ export class ConsumerSettingsPage implements OnInit {
         const saved = this.workerPlacements()[workerId];
         if (!saved) return 'No placement';
         if (saved.allowedHosts.length === 0) return `Not placed · ${saved.modelTier}`;
-        return `${saved.allowedHosts.length} host${saved.allowedHosts.length === 1 ? '' : 's'} · ${saved.modelTier}`;
+        return `${saved.allowedHosts.length} runtime${saved.allowedHosts.length === 1 ? '' : 's'} · ${saved.modelTier}`;
     }
 
     private patchPlacementDraft(workerId: string, patch: Partial<WorkerPlacementDto>): void {
@@ -3639,9 +3665,9 @@ export class ConsumerSettingsPage implements OnInit {
     setPlacementHosts(workerId: string, allowedHosts: string[]): void {
         const current = this.placementDraftFor(workerId);
         const nativeAgent: Record<string, string> = {};
-        for (const hostId of allowedHosts) {
-            const agent = current.nativeAgent[hostId];
-            if (agent) nativeAgent[hostId] = agent;
+        for (const runtimeKey of allowedHosts) {
+            const agent = current.nativeAgent[runtimeKey];
+            if (agent) nativeAgent[runtimeKey] = agent;
         }
         this.patchPlacementDraft(workerId, { allowedHosts: [...allowedHosts], nativeAgent });
     }
@@ -3654,10 +3680,10 @@ export class ConsumerSettingsPage implements OnInit {
         this.patchPlacementDraft(workerId, { fallback });
     }
 
-    setNativeAgent(workerId: string, hostId: string, value: string): void {
+    setNativeAgent(workerId: string, runtimeKey: string, value: string): void {
         const nativeAgent = { ...this.placementDraftFor(workerId).nativeAgent };
-        if (value.trim()) nativeAgent[hostId] = value.trim();
-        else delete nativeAgent[hostId];
+        if (value.trim()) nativeAgent[runtimeKey] = value.trim();
+        else delete nativeAgent[runtimeKey];
         this.patchPlacementDraft(workerId, { nativeAgent });
     }
 

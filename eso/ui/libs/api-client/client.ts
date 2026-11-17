@@ -40,6 +40,7 @@ import type {
     KnowledgeEmbeddingStatusDto,
     KnowledgeEmbeddingResultDto,
     HostRuntimeDto,
+    HostDto,
     WorkerPlacementDto,
 } from './types.js';
 
@@ -363,20 +364,39 @@ export class ControlPlaneApiClient {
         return (await res.json()) as WorkerConfigDto;
     }
 
+    async getHosts(): Promise<HostDto[]> {
+        const res = await fetch(`${this.baseUrl}/api/v1/hosts`, {
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return this.readList<HostDto>(await this.optionalJson(res), ['items', 'hosts']);
+    }
+
+    async saveHost(host: { hostId: string; hostType: string; label: string }): Promise<HostDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/hosts/${encodeURIComponent(host.hostId)}`, {
+            method: 'PUT',
+            headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ hostType: host.hostType, label: host.label }),
+        });
+        if (!res.ok) throw await this.problem(res);
+        const saved = this.readObject<HostDto>(await this.optionalJson(res));
+        return saved && typeof saved.hostId === 'string' ? saved : { ...host, runtimes: [] };
+    }
+
+    /** Flattened runtime list used by worker placement (targets `runtimeKey`). */
     async getHostRuntimes(): Promise<HostRuntimeDto[]> {
         const res = await fetch(`${this.baseUrl}/api/v1/host-runtimes`, {
             headers: this.getHeaders(),
         });
         if (!res.ok) throw await this.problem(res);
-        return this.readList<HostRuntimeDto>(await this.optionalJson(res), ['items', 'runtimes', 'hosts', 'hostRuntimes']);
+        return this.readList<HostRuntimeDto>(await this.optionalJson(res), ['items', 'runtimes', 'hostRuntimes']);
     }
 
     async saveHostRuntime(runtime: HostRuntimeDto): Promise<HostRuntimeDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/host-runtimes/${encodeURIComponent(runtime.hostId)}`, {
+        const res = await fetch(`${this.baseUrl}/api/v1/hosts/${encodeURIComponent(runtime.hostId)}/runtimes/${encodeURIComponent(runtime.runtimeId)}`, {
             method: 'PUT',
             headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                runtimeId: runtime.runtimeId,
                 runtimeKind: runtime.runtimeKind,
                 models: [...runtime.models],
                 defaultModel: runtime.defaultModel || '',
@@ -386,11 +406,11 @@ export class ControlPlaneApiClient {
         });
         if (!res.ok) throw await this.problem(res);
         const saved = this.readObject<HostRuntimeDto>(await this.optionalJson(res));
-        return saved && typeof saved.hostId === 'string' ? saved : runtime;
+        return saved && typeof saved.runtimeKey === 'string' ? saved : runtime;
     }
 
-    async heartbeatHostRuntime(hostId: string): Promise<HostRuntimeDto | null> {
-        const res = await fetch(`${this.baseUrl}/api/v1/host-runtimes/${encodeURIComponent(hostId)}/heartbeat`, {
+    async heartbeatHostRuntime(hostId: string, runtimeId: string): Promise<HostRuntimeDto | null> {
+        const res = await fetch(`${this.baseUrl}/api/v1/hosts/${encodeURIComponent(hostId)}/runtimes/${encodeURIComponent(runtimeId)}/heartbeat`, {
             method: 'POST',
             headers: this.getHeaders(),
         });
