@@ -1,0 +1,19 @@
+{
+  "name": "@eso/host-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Host-side ESO runtime entrypoint (Mode A): config snapshot -> worker -> model -> adapter -> evidence -> observation.",
+  "engines": {
+    "bun": ">=1.3.0"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "dev": "bun run src/cli.ts",
+    "help": "bun run src/cli.ts --help"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
+}

@@ -26,6 +26,7 @@ export function etagMatches(header: string, version: string): boolean {
 
 /** Deterministic JSON: object keys sorted recursively so the hash only changes with content. */
 function canonical(value: any): any {
+    if (value instanceof Date) return value.toISOString();
     if (Array.isArray(value)) return value.map((item) => canonical(item));
     if (value && typeof value === 'object') {
         const result: Record<string, any> = {};
