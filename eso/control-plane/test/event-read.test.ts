@@ -18,6 +18,9 @@ import {
     resolveEventRoute,
 } from '../src/platform/events/read/event-reader.js';
 
+// DB-backed tdd-qc scenarios are explicitly skipped when ESO_TEST_DB_URL is absent.
+const qcTest = process.env.ESO_TEST_DB_URL ? test : test.skip;
+
 const actor: Actor = { kind: 'operator', label: 'operator@test' };
 const root = '/tmp/eso-l13';
 
@@ -64,7 +67,7 @@ describe('L1.3 — event read API', () => {
             eventType: 'updated',
             actorKind: 'machine',
             actorLabel: 'cli',
-            at: '2026-11-10T03:00:00.000Z',
+            at: new Date(Date.now() + 1_000).toISOString(),
             detail: { version: 2 },
         });
 
@@ -112,7 +115,7 @@ describe('L1.3 — event read API', () => {
         await assert.rejects(reader.list('read-guard'), (e: any) => e.code === 'CONSUMER_NOT_FOUND');
     });
 
-    test('SCN-14-1 · AC-14-1 — Event read API (append-only) · tdd-qc', async () => {
+    qcTest('SCN-14-1 · AC-14-1 — Event read API (append-only) · tdd-qc', async () => {
         const sql = new (globalThis as any).Bun.SQL(dbUrl());
         const store = new BunSqlPlatformStore(sql);
         const registry = new RegistryService(store);

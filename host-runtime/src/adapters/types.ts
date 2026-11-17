@@ -16,6 +16,8 @@ export type AdapterName = 'dry' | 'cursor' | 'agy';
 export interface AdapterRequest {
     workerId: string;
     model: string;
+    /** Placement effort (from modelTiers); only adapters that support a flag may use it. */
+    effort?: string;
     prompt: string;
     timeoutMs: number;
     cwd?: string;

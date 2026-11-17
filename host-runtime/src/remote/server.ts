@@ -177,12 +177,8 @@ async function handleJob(request: Request, deps: RemoteServerDeps): Promise<Resp
         });
     }
 
-    const cached = ledgerGet(deps, job.jobId);
-    if (cached) {
-        log(`[remote] replay job=${job.jobId} (ledger result)`);
-        return json(200, cached);
-    }
-
+    // Workspace policy is enforced even for a ledger replay: a cached result is only returned
+    // for a workspace that still passes validation (R7d).
     const workspace = await validateWorkspace(job.workspaceRef, {
         allowedRoots: options.allowedWorkspaces ?? [],
         env: process.env,
@@ -193,6 +189,12 @@ async function handleJob(request: Request, deps: RemoteServerDeps): Promise<Resp
             code: workspace.code ?? 'WORKSPACE_INVALID',
             message: workspace.reason ?? 'workspace is invalid',
         });
+    }
+
+    const cached = ledgerGet(deps, job.jobId);
+    if (cached) {
+        log(`[remote] replay job=${job.jobId} (ledger result)`);
+        return json(200, cached);
     }
 
     log(

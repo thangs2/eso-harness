@@ -18,6 +18,9 @@ import { RegistrationService } from '../src/modules/consumers/registration/regis
 import { LifecycleService } from '../src/modules/consumers/lifecycle/lifecycle.service.js';
 import { PurgeService } from '../src/modules/consumers/purge/purge.service.js';
 
+// DB-backed tdd-qc scenarios are explicitly skipped when ESO_TEST_DB_URL is absent.
+const qcTest = process.env.ESO_TEST_DB_URL ? test : test.skip;
+
 const actor: Actor = { kind: 'operator', label: 'operator@test' };
 
 function tempRoot(): string {
@@ -126,7 +129,7 @@ describe('L4.3 — purge', () => {
         }
     });
 
-    test('SCN-09-1 · AC-09-1 — Purge · tdd-qc', async () => {
+    qcTest('SCN-09-1 · AC-09-1 — Purge · tdd-qc', async () => {
         const sql = new (globalThis as any).Bun.SQL(dbUrl());
         const store = new BunSqlPlatformStore(sql);
         const registry = new RegistryService(store);

@@ -396,6 +396,7 @@ export async function runEntrypoint(options: EntrypointOptions): Promise<RunRepo
         const adapterRequest: AdapterRequest = {
             workerId: current.worker.id,
             model: resolution.model,
+            ...(resolution.effort ? { effort: resolution.effort } : {}),
             prompt,
             timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
             cwd: options.cwd ?? snapshot.consumer.root ?? process.cwd(),

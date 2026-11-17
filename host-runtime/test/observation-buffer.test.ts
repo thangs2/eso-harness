@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import {
     DEFAULT_MAX_RETRIES,
@@ -220,6 +220,86 @@ describe('observation retry + buffer', () => {
             const flushed = await buffering.flushBuffer();
             expect(flushed).toEqual({ flushed: 0, remaining: 2 });
             expect(buffering.bufferedCount()).toBe(2);
+        } finally {
+            temp.cleanup();
+        }
+    });
+
+    it('claims the buffer so concurrent flushes cannot double-post (R7e)', async () => {
+        const temp = makeTempDir('hr-obs-');
+        const bufferDir = join(temp.dir, 'buffers');
+        try {
+            const failing: FetchLike = async () => {
+                throw new Error('offline');
+            };
+            const buffering = client(failing, bufferDir, { maxRetries: 0 });
+            await buffering.append(body('p5-race-a')).catch(() => undefined);
+            await buffering.append(body('p5-race-b')).catch(() => undefined);
+
+            const snapshot = await makeModeBSnapshot(null);
+            const fake = fakeEso(snapshot);
+            const first = client(fake.fetchImpl, bufferDir);
+            const second = client(fake.fetchImpl, bufferDir);
+            const [left, right] = await Promise.all([first.flushBuffer(), second.flushBuffer()]);
+            expect(left.flushed + right.flushed).toBe(2);
+            // The loser of the claim skips instead of replaying the same bodies twice.
+            expect([left.skipped, right.skipped].filter(Boolean)).toHaveLength(1);
+            expect(fake.observations).toHaveLength(2);
+            expect(first.bufferedCount()).toBe(0);
+            expect(existsSync(join(bufferDir, 'observations-testeso.jsonl.flush.lock'))).toBe(false);
+        } finally {
+            temp.cleanup();
+        }
+    });
+
+    it('skips a flush while another claim lock is held', () => {
+        const temp = makeTempDir('hr-obs-');
+        try {
+            const bufferDir = join(temp.dir, 'buffers');
+            const buffer = new ObservationBuffer(bufferDir, TEST_CONSUMER);
+            buffer.append(body('p5-locked'));
+            mkdirSync(`${buffer.filePath}.flush.lock`, { recursive: false });
+            const claim = buffer.claim();
+            expect(claim.claimed).toBe(false);
+            expect(claim.reason).toBe('claimed');
+            expect(buffer.pending()).toHaveLength(1);
+        } finally {
+            temp.cleanup();
+        }
+    });
+
+    it('recovers a stale claim left by a crashed flusher', async () => {
+        const temp = makeTempDir('hr-obs-');
+        try {
+            const bufferDir = join(temp.dir, 'buffers');
+            const buffer = new ObservationBuffer(bufferDir, TEST_CONSUMER);
+            const sentBody = body('p5-stale');
+            buffer.append(sentBody);
+            renameSync(buffer.filePath, buffer.claimPath);
+            mkdirSync(buffer.lockPath, { recursive: false });
+            await new Promise((resolve) => setTimeout(resolve, 5));
+
+            const recovering = new ObservationBuffer(bufferDir, TEST_CONSUMER, { claimTtlMs: 0 });
+            const claim = recovering.claim();
+            expect(claim.claimed).toBe(true);
+            expect(claim.bodies.map((row) => row.idempotencyKey)).toEqual([sentBody.idempotencyKey]);
+            recovering.finish([]);
+            expect(existsSync(recovering.claimPath)).toBe(false);
+            expect(existsSync(recovering.lockPath)).toBe(false);
+        } finally {
+            temp.cleanup();
+        }
+    });
+
+    it('writes the buffer file 0600 and its directory 0700 (R7f)', () => {
+        if (process.platform === 'win32') return;
+        const temp = makeTempDir('hr-obs-');
+        try {
+            const bufferDir = join(temp.dir, 'private', 'buffers');
+            const buffer = new ObservationBuffer(bufferDir, TEST_CONSUMER);
+            buffer.append(body('p5-perms'));
+            expect(statSync(buffer.filePath).mode & 0o777).toBe(0o600);
+            expect(statSync(bufferDir).mode & 0o777).toBe(0o700);
         } finally {
             temp.cleanup();
         }

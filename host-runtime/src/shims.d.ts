@@ -52,6 +52,7 @@ declare module 'node:child_process' {
 declare module 'node:fs' {
     export interface StatsLike {
         mode: number;
+        mtimeMs: number;
         isFile(): boolean;
         isDirectory(): boolean;
     }
@@ -59,13 +60,22 @@ declare module 'node:fs' {
     export function existsSync(path: string): boolean;
     export function statSync(path: string): StatsLike;
     export function readFileSync(path: string, encoding: 'utf8'): string;
-    export function writeFileSync(path: string, data: string, encoding?: 'utf8'): void;
-    export function appendFileSync(path: string, data: string, encoding?: 'utf8'): void;
+    export function writeFileSync(
+        path: string,
+        data: string,
+        options?: 'utf8' | { encoding?: 'utf8'; mode?: number },
+    ): void;
+    export function appendFileSync(
+        path: string,
+        data: string,
+        options?: 'utf8' | { encoding?: 'utf8'; mode?: number },
+    ): void;
+    export function chmodSync(path: string, mode: number): void;
     export function renameSync(oldPath: string, newPath: string): void;
     export function readdirSync(path: string): string[];
     export function realpathSync(path: string): string;
     export function mkdtempSync(prefix: string): string;
-    export function mkdirSync(path: string, options?: { recursive?: boolean }): string | undefined;
+    export function mkdirSync(path: string, options?: { recursive?: boolean; mode?: number }): string | undefined;
     export function rmSync(path: string, options?: { recursive?: boolean; force?: boolean }): void;
 }
 

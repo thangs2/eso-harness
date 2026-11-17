@@ -61,12 +61,31 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
     // plus ADD COLUMN IF NOT EXISTS) and runs on schema creation; an existing consumer would never
     // pick up new tables/columns on a control-plane upgrade otherwise. Best-effort: a broken consumer
     // schema must not stop the control plane from serving the others.
+    const observationRetentionDays = Number(process.env.ESO_OBSERVATION_RETENTION_DAYS || 0);
+    const observationCutoff = observationRetentionDays > 0
+        ? new Date(Date.now() - observationRetentionDays * 86_400_000).toISOString()
+        : null;
+    const pruneReadyConsumers = async (): Promise<void> => {
+        if (!observationCutoff) return;
+        for (const consumer of await store.listConsumers({ status: 'ready' })) {
+            try {
+                await store.pruneObservations(consumer.id, new Date(Date.now() - observationRetentionDays * 86_400_000).toISOString());
+            } catch (error) {
+                console.error(`OBSERVATION_RETENTION_FAILED:${consumer.id}:${(error as Error)?.message || error}`);
+            }
+        }
+    };
     for (const consumer of await store.listConsumers({ status: 'ready' })) {
         try {
             await store.ensureKnowledgeSchema(consumer.id);
+            if (observationCutoff) await store.pruneObservations(consumer.id, observationCutoff);
         } catch (error) {
             console.error(`KNOWLEDGE_SCHEMA_REFRESH_FAILED:${consumer.id}:${(error as Error)?.message || error}`);
         }
+    }
+    if (observationCutoff) {
+        const timer = setInterval(() => { void pruneReadyConsumers(); }, 60 * 60 * 1000);
+        timer.unref?.();
     }
     const registration = new RegistrationService(registry, store);
     const query = new RegistryQueryService(store);
@@ -323,18 +342,6 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
         await hostTokens.revoke((request.params as any).hostId, (request.params as any).runtimeId, (request.params as any).tokenId);
         return reply.code(204).send();
     });
-
-    // Legacy consumer-scoped host registry: hosts are global now, so this surface is gone.
-    const hostRegistryGlobal = async (_request: FastifyRequest, reply: FastifyReply) => {
-        return reply.code(410).send({ ok: false, reason: 'HOST_REGISTRY_GLOBAL' });
-    };
-    for (const url of [
-        '/api/v1/consumers/:id/host-runtimes',
-        '/api/v1/consumers/:id/host-runtimes/:hostId',
-        '/api/v1/consumers/:id/host-runtimes/:hostId/heartbeat',
-    ]) {
-        app.route({ method: ['GET', 'PUT', 'POST'], url, preHandler: requireAuth, handler: hostRegistryGlobal });
-    }
 
     app.get('/api/v1/consumers/:id/stack-versions', { preHandler: requireAuth }, async (request) => {
         const id = (request.params as any).id;
@@ -668,11 +675,6 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
             content: body.content,
             evidence: Array.isArray(body.evidence) ? body.evidence : [],
         });
-    });
-
-    // ESO is a control plane only. Host processes are started by the host runtime, never here.
-    app.post('/api/v1/consumers/:id/workers/:workerId/spawn', { preHandler: requireAuth }, async (_request, reply) => {
-        return reply.code(410).send({ ok: false, reason: 'ESO_RUNTIME_REMOVED' });
     });
 
     app.post('/api/v1/consumers/:id/workers/:workerId/handoff', { preHandler: requireAuth }, async (request) => {

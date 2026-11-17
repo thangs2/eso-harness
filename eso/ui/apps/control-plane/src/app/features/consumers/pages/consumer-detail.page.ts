@@ -1,12 +1,13 @@
 import { Component, ChangeDetectionStrategy, OnInit, inject, signal } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
+import { MatButtonModule } from '@angular/material/button';
 import { ConsumerProfileService } from '../../../core/consumers/consumer-profile.service.js';
 import type { ConsumerProfile } from '../../../../../../../libs/api-client/types.js';
 
 @Component({
     selector: 'eso-consumer-detail-page',
     standalone: true,
-    imports: [],
+    imports: [MatButtonModule, RouterLink],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         @if (profile(); as p) {
@@ -15,6 +16,9 @@ import type { ConsumerProfile } from '../../../../../../../libs/api-client/types
                     <p class="eyebrow">Consumer · v{{ p.version || 1 }}</p>
                     <h1>{{ p.name }}</h1>
                     <p class="subtitle"><code>{{ p.id }}</code> · {{ p.root }}</p>
+                </div>
+                <div class="page-header-actions">
+                    <a mat-stroked-button [routerLink]="['/consumers', p.id, 'settings']">Open settings</a>
                 </div>
             </header>
 
@@ -69,6 +73,9 @@ import type { ConsumerProfile } from '../../../../../../../libs/api-client/types
             <section class="panel"><p class="loading-label">Loading consumer…</p></section>
         }
     `,
+    styles: [`
+        .page-header-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+    `],
 })
 export class ConsumerDetailPage implements OnInit {
     private readonly service = inject(ConsumerProfileService);

@@ -1612,3 +1612,11 @@ button.mat-mdc-button-base { white-space: nowrap; }
 
 /* Hosts page — subtle remote endpoint on runtime cards */
 .runtime-remote { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+
+/* Hosts — optional per-tier model mapping on a runtime */
+.tier-grid { display: grid; gap: var(--space-2); }
+.tier-row { display: grid; grid-template-columns: 88px minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-2); align-items: start; }
+.tier-label { color: var(--muted); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .06em; padding-top: var(--space-3); }
+.tier-row mat-form-field { width: 100%; min-width: 0; }
+.runtime-tiers { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+@media (max-width: 600px) { .tier-row { grid-template-columns: minmax(0, 1fr); } .tier-label { padding-top: 0; } }

@@ -8,6 +8,7 @@ import {
 } from '../src/observation-client';
 import type { FetchLike } from '../src/config-client';
 import type { WorkerEvidence } from '../src/evidence';
+import { makeTempDir } from './remote-fixtures';
 
 const evidence: WorkerEvidence = {
     outcome: 'PASS',
@@ -159,6 +160,86 @@ describe('observation-client', () => {
             expect((error as ObservationClientError).status).toBe(422);
         }
         expect(attempts).toBe(1);
+    });
+
+    it('retries a malformed 2xx body and buffers it instead of losing the observation', async () => {
+        const temp = makeTempDir('hr-obs-');
+        let attempts = 0;
+        const fetchImpl: FetchLike = async () => {
+            attempts += 1;
+            return new Response('{not json', { status: 200, headers: { 'content-type': 'application/json' } });
+        };
+        const client = new ObservationClient({
+            baseUrl: 'http://cp.test',
+            consumer: 'testeso',
+            fetchImpl,
+            bufferDir: temp.dir,
+            sleepImpl: async () => undefined,
+        });
+        try {
+            const sentBody = buildObservationBody({
+                traceId: 't-malformed',
+                runtimeKey: 'cursor:cursor-agent',
+                workerId: 'worker-build',
+                hostStep: 1,
+                event: 'worker.completed',
+                outcome: 'PASS',
+                evidence,
+            });
+            try {
+                await client.append(sentBody);
+                throw new Error('expected buffered failure');
+            } catch (error) {
+                expect(error instanceof ObservationClientError).toBe(true);
+                expect((error as ObservationClientError).code).toBe('OBSERVATION_BUFFERED');
+                expect((error as ObservationClientError).buffered).toBe(true);
+                expect((error as ObservationClientError).observationId).toBe(sentBody.observationId);
+            }
+            expect(attempts).toBe(4); // 1 attempt + 3 retries
+            expect(client.bufferedCount()).toBe(1);
+        } finally {
+            temp.cleanup();
+        }
+    });
+
+    it('treats a 2xx body without created/observationId as malformed', async () => {
+        const temp = makeTempDir('hr-obs-');
+        let attempts = 0;
+        const fetchImpl: FetchLike = async () => {
+            attempts += 1;
+            return new Response(JSON.stringify({ ok: true, observation: {} }), { status: 200 });
+        };
+        const client = new ObservationClient({
+            baseUrl: 'http://cp.test',
+            consumer: 'testeso',
+            fetchImpl,
+            bufferDir: temp.dir,
+            sleepImpl: async () => undefined,
+            bufferEnabled: false,
+        });
+        try {
+            try {
+                await client.append(
+                    buildObservationBody({
+                        traceId: 't-malformed-2',
+                        runtimeKey: 'cursor:cursor-agent',
+                        workerId: 'worker-build',
+                        hostStep: 1,
+                        event: 'worker.completed',
+                        outcome: 'PASS',
+                        evidence,
+                    }),
+                );
+                throw new Error('expected failure');
+            } catch (error) {
+                expect(error instanceof ObservationClientError).toBe(true);
+                expect((error as ObservationClientError).code).toBe('OBSERVATION_INVALID_RESPONSE');
+                expect((error as ObservationClientError).buffered).toBe(false);
+            }
+            expect(attempts).toBe(4);
+        } finally {
+            temp.cleanup();
+        }
     });
 
     it('reports an unreachable observatory after retries (buffering disabled)', async () => {

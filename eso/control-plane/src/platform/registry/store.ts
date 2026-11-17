@@ -67,6 +67,7 @@ export interface PlatformStore {
     revokeHostToken(hostId: string, runtimeId: string, tokenId: string): Promise<any>;
     insertObservation(consumerId: string, observation: any): Promise<{ observation: any; created: boolean }>;
     listObservations(consumerId: string, limit?: number): Promise<any[]>;
+    pruneObservations(consumerId: string, before: string): Promise<number>;
     listWorkerHostPolicies(consumerId: string): Promise<any[]>;
     getWorkerHostPolicy(consumerId: string, workerId: string): Promise<any>;
     upsertWorkerHostPolicy(consumerId: string, workerId: string, config: any): Promise<any>;
@@ -439,6 +440,13 @@ export class MemoryPlatformStore implements PlatformStore {
             .sort((a, b) => String(b.received_at).localeCompare(String(a.received_at)))
             .slice(0, cap)
             .map((row) => clone(row));
+    }
+
+    async pruneObservations(consumerId: string, before: string): Promise<number> {
+        const rows = this.observations.get(consumerId) ?? [];
+        const kept = rows.filter((row) => String(row.received_at) >= String(before));
+        this.observations.set(consumerId, kept);
+        return rows.length - kept.length;
     }
 
     async listWorkerHostPolicies(consumerId: string): Promise<any[]> {
@@ -1245,6 +1253,15 @@ export class BunSqlPlatformStore implements PlatformStore {
              FROM ${schema}.knowledge_observation ORDER BY received_at DESC, observation_id DESC LIMIT $1`,
             [cap]
         );
+    }
+
+    async pruneObservations(consumerId: string, before: string): Promise<number> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        const rows = await this.sql.unsafe(
+            `DELETE FROM ${schema}.knowledge_observation WHERE received_at < $1::timestamptz RETURNING observation_id`,
+            [before]
+        );
+        return rows.length;
     }
 
     async listWorkerHostPolicies(consumerId: string): Promise<any[]> {

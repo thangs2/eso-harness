@@ -5,6 +5,11 @@
  *   <cursor-agent> -p --model <model> <prompt>
  * `cursor-agent` is frequently NOT on PATH (it lives in Cursor's agent-cli folder), so the binary
  * is resolved explicitly. Nothing here runs on ESO.
+ *
+ * Effort: the Cursor CLI has no `--effort` flag, so this adapter NEVER invents one. Cursor encodes
+ * effort in parameterized model ids (e.g. `claude-opus-4-8[context=1m,effort=high]`); when the
+ * resolved model already carries `effort=`, it is left untouched. Otherwise the effort is recorded
+ * in evidence only (model resolution + observation evidence).
  */
 
 import { join } from 'node:path';
@@ -64,6 +69,7 @@ export class CursorAdapter implements HostAdapter {
             });
         }
 
+        // Deliberately no --effort: cursor-agent does not support it (effort lives in the model id).
         const args = ['-p', '--model', request.model, request.prompt];
         const result = await spawnProcess(executable, args, {
             cwd: request.cwd,

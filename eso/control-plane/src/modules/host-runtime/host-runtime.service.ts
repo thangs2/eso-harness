@@ -12,6 +12,17 @@ import { PlatformError } from '../../platform/registry/errors.js';
 
 const MODEL_TIERS = ['fast', 'balanced', 'reasoning'] as const;
 const FALLBACKS = ['block', 'next-host', 'next-tier'] as const;
+/** Safe slug for hostId, hostType and runtimeId (R7g). */
+const SAFE_SLUG_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+
+function requiredSlug(value: unknown, field: string): string {
+    const text = typeof value === 'string' ? value.trim() : '';
+    if (!text) throw new PlatformError('HOST_RUNTIME_INVALID', `${field} is required`);
+    if (!SAFE_SLUG_PATTERN.test(text)) {
+        throw new PlatformError('HOST_RUNTIME_INVALID', `${field} must match ${SAFE_SLUG_PATTERN}`);
+    }
+    return text;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -257,8 +268,8 @@ export class HostRuntimeService {
     }
 
     async putHost(hostId: string, body: any): Promise<any> {
-        const host = requiredText(hostId, 'hostId', 'HOST_RUNTIME_INVALID');
-        const hostType = requiredText(body?.hostType, 'hostType', 'HOST_RUNTIME_INVALID');
+        const host = requiredSlug(hostId, 'hostId');
+        const hostType = requiredSlug(body?.hostType, 'hostType');
         const existing = await this.store.getHost(host);
         const label = body?.label === undefined
             ? (existing ? String(existing.label ?? host) : host)
@@ -268,8 +279,8 @@ export class HostRuntimeService {
     }
 
     async putHostRuntime(hostId: string, runtimeId: string, body: any): Promise<any> {
-        const host = requiredText(hostId, 'hostId', 'HOST_RUNTIME_INVALID');
-        const runtime = requiredText(runtimeId, 'runtimeId', 'HOST_RUNTIME_INVALID');
+        const host = requiredSlug(hostId, 'hostId');
+        const runtime = requiredSlug(runtimeId, 'runtimeId');
         const hostRow = await this.store.getHost(host);
         if (!hostRow) throw new PlatformError('HOST_RUNTIME_NOT_FOUND', `Host not registered: ${host}`);
         const existing = await this.store.getHostRuntime(host, runtime);
@@ -298,8 +309,8 @@ export class HostRuntimeService {
     }
 
     async heartbeat(hostId: string, runtimeId: string, body: any): Promise<any> {
-        const host = requiredText(hostId, 'hostId', 'HOST_RUNTIME_INVALID');
-        const runtime = requiredText(runtimeId, 'runtimeId', 'HOST_RUNTIME_INVALID');
+        const host = requiredSlug(hostId, 'hostId');
+        const runtime = requiredSlug(runtimeId, 'runtimeId');
         const [existing, hostRow] = await Promise.all([
             this.store.getHostRuntime(host, runtime),
             this.store.getHost(host),

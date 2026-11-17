@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { DispatchError, runDispatch } from '../src/remote/dispatch';
 import type { DispatchOptions } from '../src/remote/dispatch';
 import { startRemoteServer } from '../src/remote/server';
@@ -285,6 +287,44 @@ describe('Mode B dispatch (A -> B, in-process E2E)', () => {
             expect(offline.localObservationCreated).toBe(false);
             // Host B still wrote its observation through its own (working) ESO connection.
             expect(e2e.fake.observations.filter((row) => row.traceId === 'p4-unit-offline')).toHaveLength(1);
+        } finally {
+            await e2e.stop();
+            workspace.cleanup();
+            cache.cleanup();
+        }
+    });
+
+    it('falls back to the cached snapshot on a 5xx config fetch and leaves cachedAt unchanged (R6)', async () => {
+        const workspace = makeTempDir();
+        const cache = makeTempDir('hr-dispatch-cache-');
+        const e2e = await startE2E(workspace.dir);
+        const shared = { cacheDir: cache.dir, bufferDir: `${cache.dir}/observations` };
+        try {
+            const online = await runDispatch(dispatchOptions(e2e, workspace.dir, { ...shared }));
+            expect(online.snapshotSource).toBe('network');
+
+            const cacheFile = join(cache.dir, 'config-snapshot-testeso-cursor-cursor-agent.json');
+            const before = readFileSync(cacheFile, 'utf8');
+
+            const configDown: FetchLike = async (url, init) => {
+                if ((init?.method ?? 'GET') === 'GET' && url.includes('config-snapshot')) {
+                    return new Response('{"code":"BOOM","message":"boom"}', { status: 503 });
+                }
+                return e2e.fake.fetchImpl(url, init);
+            };
+            const fallback = await runDispatch(
+                dispatchOptions(e2e, workspace.dir, {
+                    ...shared,
+                    fetchImpl: configDown,
+                    traceId: 'p4-unit-r6',
+                }),
+            );
+            expect(fallback.ok).toBe(true);
+            expect(fallback.snapshotSource).toBe('cache');
+            expect(fallback.warnings.some((entry) => entry.startsWith('SNAPSHOT_CACHE_USED:ageMs='))).toBe(true);
+            const after = readFileSync(cacheFile, 'utf8');
+            expect(after).toBe(before);
+            expect((JSON.parse(after) as { cachedAt: string }).cachedAt).toBe((JSON.parse(before) as { cachedAt: string }).cachedAt);
         } finally {
             await e2e.stop();
             workspace.cleanup();

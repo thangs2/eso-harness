@@ -7,7 +7,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { ConsumerProfileService } from '../../../core/consumers/consumer-profile.service.js';
 import { HostModelSheetComponent } from '../components/host-model-sheet.component.js';
-import type { HostDto, HostRuntimeDto, HostRuntimeHealth, HostRuntimeKind } from '../../../../../../../libs/api-client/types.js';
+import type { HostDto, HostRuntimeDto, HostRuntimeHealth, HostRuntimeKind, HostModelTier, HostModelTierDto } from '../../../../../../../libs/api-client/types.js';
 
 const RUNTIME_KINDS: Array<{ value: HostRuntimeKind; label: string }> = [
     { value: 'ide-native', label: 'IDE native' },
@@ -16,6 +16,14 @@ const RUNTIME_KINDS: Array<{ value: HostRuntimeKind; label: string }> = [
 ];
 
 const HEALTH_STATES: HostRuntimeHealth[] = ['unknown', 'healthy', 'degraded', 'offline'];
+
+const MODEL_TIERS: HostModelTier[] = ['fast', 'balanced', 'reasoning'];
+
+type TierForm = Record<HostModelTier, { model: string; effort: string }>;
+
+function emptyTiers(): TierForm {
+    return { fast: { model: '', effort: '' }, balanced: { model: '', effort: '' }, reasoning: { model: '', effort: '' } };
+}
 
 const HOST_CATALOG: Array<{ type: string; label: string; runtimeId: string; kind: HostRuntimeKind }> = [
     { type: 'cursor', label: 'Cursor', runtimeId: 'cursor-agent', kind: 'cli' },
@@ -90,6 +98,7 @@ type DialogMode = 'register' | 'host' | 'runtime';
                                                     <code>{{ runtime.runtimeId }}</code>
                                                     <span class="runtime-key">{{ runtime.runtimeKey }}</span>
                                                     @if (runtime.remoteUrl) { <span class="runtime-remote" [attr.title]="runtime.remoteUrl">remote {{ runtime.remoteUrl }}</span> }
+                                                    @if (tierSummary(runtime); as tiers) { <span class="runtime-tiers">{{ tiers }}</span> }
                                                 </div>
                                                 <span class="health-badge"
                                                       [class.health-healthy]="runtime.health === 'healthy'"
@@ -212,6 +221,23 @@ type DialogMode = 'register' | 'host' | 'runtime';
                                     <input matInput type="url" [ngModel]="formRemoteUrl()" (ngModelChange)="formRemoteUrl.set($event)" placeholder="http://127.0.0.1:8788">
                                     <mat-hint>Optional HTTP endpoint for host-to-host Mode B. ESO stores config only.</mat-hint>
                                 </mat-form-field>
+                                <div class="dialog-section full">
+                                    <strong>Model tiers (optional)</strong>
+                                    <span>Map each tier to a model. ESO stores the mapping only; the host runtime picks the actual model and effort.</span>
+                                </div>
+                                <div class="tier-grid full">
+                                    @for (tier of modelTiers; track tier) {
+                                        <div class="tier-row">
+                                            <span class="tier-label">{{ tier }}</span>
+                                            <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Model</mat-label>
+                                                <input matInput [ngModel]="formModelTiers()[tier].model" (ngModelChange)="setTierModel(tier, $event)" placeholder="claude-sonnet-4.5">
+                                            </mat-form-field>
+                                            <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Effort</mat-label>
+                                                <input matInput [ngModel]="formModelTiers()[tier].effort" (ngModelChange)="setTierEffort(tier, $event)" placeholder="low / medium / high">
+                                            </mat-form-field>
+                                        </div>
+                                    }
+                                </div>
                                 <div class="host-model-note full">
                                     <strong>Models are reported by the host runtime</strong>
                                     <span>ESO never asks you to type a model catalog. The host runtime sends its available models on registration or heartbeat.</span>
@@ -321,6 +347,7 @@ export class HostsPage implements OnInit {
     readonly runtimeKinds = RUNTIME_KINDS;
     readonly healthStates = HEALTH_STATES;
     readonly hostCatalog = HOST_CATALOG;
+    readonly modelTiers = MODEL_TIERS;
 
     readonly loading = signal(true);
     readonly saving = signal(false);
@@ -344,6 +371,7 @@ export class HostsPage implements OnInit {
     readonly formLeadEligible = signal(false);
     readonly formHealth = signal<HostRuntimeHealth>('unknown');
     readonly formRemoteUrl = signal('');
+    readonly formModelTiers = signal<TierForm>(emptyTiers());
 
     private readonly dialogPanel = viewChild<ElementRef<HTMLElement>>('dialogPanel');
     private readonly hostIdInput = viewChild<ElementRef<HTMLInputElement>>('hostIdInput');
@@ -397,7 +425,7 @@ export class HostsPage implements OnInit {
         if (this.dialogMode() !== 'runtime') {
             const hostId = this.formHostId().trim();
             if (!hostId) return 'Host ID is required.';
-            if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(hostId)) return 'Host ID must be a slug: letters, digits, dot, dash, or underscore.';
+            if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(hostId)) return 'Host ID must be a lowercase slug: a-z, 0-9, dash, underscore.';
             if (this.dialogMode() === 'register' && this.hosts().some((host) => host.hostId === hostId)) return 'A host with this host ID already exists.';
             if (!this.formHostType().trim()) return 'Host type is required.';
             if (!this.formHostLabel().trim()) return 'Host label is required.';
@@ -405,6 +433,7 @@ export class HostsPage implements OnInit {
         if (this.dialogMode() === 'register' || (this.dialogMode() === 'runtime' && !this.editingRuntimeId())) {
             const runtimeId = this.formRuntimeId().trim();
             if (!runtimeId) return 'Runtime ID is required.';
+            if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(runtimeId)) return 'Runtime ID must be a lowercase slug: a-z, 0-9, dash, underscore.';
             const host = this.hosts().find((entry) => entry.hostId === this.editingHostId() || entry.hostId === this.formHostId().trim());
             if (host && host.runtimes.some((runtime) => runtime.runtimeId === runtimeId)) return 'This host already has a runtime with this runtime ID.';
         }
@@ -444,6 +473,7 @@ export class HostsPage implements OnInit {
         this.formLeadEligible.set(false);
         this.formHealth.set('unknown');
         this.formRemoteUrl.set('');
+        this.formModelTiers.set(emptyTiers());
     }
 
     openRegisterFor(type: string): void {
@@ -475,6 +505,7 @@ export class HostsPage implements OnInit {
         this.formLeadEligible.set(false);
         this.formHealth.set('unknown');
         this.formRemoteUrl.set('');
+        this.formModelTiers.set(emptyTiers());
     }
 
     openEditRuntime(host: HostDto, runtime: HostRuntimeDto): void {
@@ -488,6 +519,12 @@ export class HostsPage implements OnInit {
         this.formLeadEligible.set(runtime.leadEligible);
         this.formHealth.set(runtime.health);
         this.formRemoteUrl.set(runtime.remoteUrl || '');
+        const tiers = emptyTiers();
+        for (const tier of MODEL_TIERS) {
+            const value = runtime.modelTiers?.[tier];
+            if (value) tiers[tier] = { model: value.model || '', effort: value.effort || '' };
+        }
+        this.formModelTiers.set(tiers);
     }
 
     private configureDialog(mode: DialogMode, hostId: string | null): void {
@@ -555,6 +592,7 @@ export class HostsPage implements OnInit {
             health: this.formHealth(),
             lastHeartbeat: this.findRuntime(hostId, runtimeId)?.lastHeartbeat ?? null,
             remoteUrl: this.formRemoteUrl().trim() || null,
+            modelTiers: this.formModelTierPayload(),
         };
         const saveHost = mode === 'runtime' ? Promise.resolve(null) : this.service.saveHost({ hostId, hostType, label });
         saveHost
@@ -572,6 +610,33 @@ export class HostsPage implements OnInit {
             })
             .catch((err) => this.error.set(err?.detail || err?.message || 'Could not save host'))
             .finally(() => this.saving.set(false));
+    }
+
+    setTierModel(tier: HostModelTier, value: string): void {
+        this.formModelTiers.update((tiers) => ({ ...tiers, [tier]: { ...tiers[tier], model: value } }));
+    }
+
+    setTierEffort(tier: HostModelTier, value: string): void {
+        this.formModelTiers.update((tiers) => ({ ...tiers, [tier]: { ...tiers[tier], effort: value } }));
+    }
+
+    private formModelTierPayload(): Partial<Record<HostModelTier, HostModelTierDto>> | undefined {
+        const payload: Partial<Record<HostModelTier, HostModelTierDto>> = {};
+        const tiers = this.formModelTiers();
+        for (const tier of MODEL_TIERS) {
+            const model = tiers[tier].model.trim();
+            if (!model) continue;
+            const effort = tiers[tier].effort.trim();
+            payload[tier] = effort ? { model, effort } : { model };
+        }
+        return Object.keys(payload).length ? payload : undefined;
+    }
+
+    tierSummary(runtime: HostRuntimeDto): string {
+        const tiers = runtime.modelTiers;
+        if (!tiers) return '';
+        const names = MODEL_TIERS.filter((tier) => tiers[tier]?.model);
+        return names.length ? `tiers ${names.join(' / ')}` : '';
     }
 
     private findRuntime(hostId: string, runtimeId: string): HostRuntimeDto | undefined {

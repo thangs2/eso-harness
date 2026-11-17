@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ConfigClient, ConfigClientError } from '../src/config-client';
@@ -175,6 +175,42 @@ describe('offline config snapshot cache', () => {
                 () => cachingClient(temp.dir, async () => new Response('', { status: 503 }), { offline: true }).getSnapshot(),
                 'SNAPSHOT_CACHE_SCOPE_MISMATCH',
             );
+        } finally {
+            temp.cleanup();
+        }
+    });
+
+    it('writes cache files 0600 and directories 0700 (R7f)', async () => {
+        if (process.platform === 'win32') return;
+        const temp = makeTempDir('hr-cache-');
+        const snapshot = await snapshotFor();
+        const cacheDir = join(temp.dir, 'private', 'cache');
+        try {
+            const client = cachingClient(cacheDir, fakeEso(snapshot).fetchImpl);
+            client.saveSnapshot(await client.getSnapshot());
+            expect(statSync(client.cacheFilePath()).mode & 0o777).toBe(0o600);
+            expect(statSync(cacheDir).mode & 0o777).toBe(0o700);
+        } finally {
+            temp.cleanup();
+        }
+    });
+
+    it('online 5xx fallback returns the cache without rewriting cachedAt (R6)', async () => {
+        const temp = makeTempDir('hr-cache-');
+        const snapshot = await snapshotFor();
+        try {
+            const writer = cachingClient(temp.dir, fakeEso(snapshot).fetchImpl);
+            writer.saveSnapshot(await writer.getSnapshot());
+            const before = readFileSync(writer.cacheFilePath(), 'utf8');
+
+            const fiveHundred: FetchLike = async () => new Response('{"code":"BOOM","message":"boom"}', { status: 503 });
+            const client = cachingClient(temp.dir, fiveHundred);
+            const fallback = await client.getSnapshot();
+            expect(fallback.version).toBe(snapshot.version);
+            expect(client.lastSource).toBe('cache');
+            const after = readFileSync(writer.cacheFilePath(), 'utf8');
+            expect(after).toBe(before);
+            expect((JSON.parse(after) as { cachedAt: string }).cachedAt).toBe((JSON.parse(before) as { cachedAt: string }).cachedAt);
         } finally {
             temp.cleanup();
         }

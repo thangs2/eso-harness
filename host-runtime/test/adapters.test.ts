@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { CURSOR_AGENT_ENV_VAR, CursorAdapter, cursorAgentCandidates } from '../src/adapters/cursor';
-import { AgyAdapter, AGY_ENV_VAR } from '../src/adapters/agy';
+import { AGY_ENV_VAR, AgyAdapter, agyEffortArgs } from '../src/adapters/agy';
 import { sanitizeChildEnv, spawnProcess } from '../src/adapters/types';
 
 const request = {
@@ -42,6 +42,24 @@ describe('cursor adapter', () => {
         expect(result.exitCode).toBe(null);
     });
 
+    it('never adds a --effort flag (cursor has none; effort lives in the model id)', async () => {
+        const adapter = new CursorAdapter({ env: { [CURSOR_AGENT_ENV_VAR]: '/bin/echo', PATH: '' }, homeDir: '/nonexistent' });
+        const result = await adapter.run({ ...request, effort: 'high' });
+        expect(result.ok).toBe(true);
+        expect(result.stdout).not.toContain('--effort');
+        expect(result.stdout).toContain('--model auto');
+        expect(result.command?.includes('--effort')).toBe(false);
+
+        // A parameterized model that already carries effort= is passed through untouched.
+        const parameterized = await adapter.run({
+            ...request,
+            model: 'claude-opus-4-8[context=1m,effort=high]',
+            effort: 'high',
+        });
+        expect(parameterized.stdout).toContain('claude-opus-4-8[context=1m,effort=high]');
+        expect(parameterized.stdout).not.toContain('--effort');
+    });
+
     it('lists the known absolute Cursor agent locations', () => {
         const candidates = cursorAgentCandidates('/Users/someone');
         expect(candidates[0]).toContain('anysphere.cursor-agent-worker');
@@ -56,6 +74,25 @@ describe('agy adapter', () => {
         const result = await adapter.run(request);
         expect(result.ok).toBe(true);
         expect(result.stdout).toContain('-p --model auto');
+        expect(result.stdout).not.toContain('--effort');
+    });
+
+    it('passes a supported --effort flag to agy', async () => {
+        const adapter = new AgyAdapter({ env: { [AGY_ENV_VAR]: '/bin/echo', PATH: '' }, homeDir: '/nonexistent' });
+        const result = await adapter.run({ ...request, effort: 'high' });
+        expect(result.ok).toBe(true);
+        expect(result.stdout).toContain('-p --model auto --effort high');
+        expect(result.command).toEqual(['/bin/echo', '-p', '--model', 'auto', '--effort', 'high', '<prompt>']);
+    });
+
+    it('never invents an unsupported agy effort value', async () => {
+        const adapter = new AgyAdapter({ env: { [AGY_ENV_VAR]: '/bin/echo', PATH: '' }, homeDir: '/nonexistent' });
+        const result = await adapter.run({ ...request, effort: 'extreme' });
+        expect(result.stdout).not.toContain('--effort');
+        expect(agyEffortArgs('extreme')).toEqual([]);
+        expect(agyEffortArgs('xhigh')).toEqual(['--effort', 'xhigh']);
+        expect(agyEffortArgs(' HIGH ')).toEqual(['--effort', 'high']);
+        expect(agyEffortArgs(undefined)).toEqual([]);
     });
 
     it('blocks when agy cannot be found', async () => {

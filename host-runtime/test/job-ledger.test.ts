@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { JobLedger, DEFAULT_LEDGER_MAX_ENTRIES, resolveLedgerPath } from '../src/remote/job-ledger';
 import { signResult } from '../src/remote/envelope';
@@ -100,6 +100,20 @@ describe('persistent Mode B job ledger', () => {
             expect(existsSync(filePath)).toBe(false);
             ledger.set('job-1', await signedResult('job-1'));
             expect(new JobLedger({ filePath }).get('job-1')).not.toBe(null);
+        } finally {
+            temp.cleanup();
+        }
+    });
+
+    it('writes the ledger file 0600 and its directory 0700 (R7f)', async () => {
+        if (process.platform === 'win32') return;
+        const temp = makeTempDir('hr-ledger-');
+        try {
+            const filePath = join(temp.dir, 'private', 'modeb-jobs.json');
+            const ledger = new JobLedger({ filePath });
+            ledger.set('job-perms', await signedResult('job-perms'));
+            expect(statSync(filePath).mode & 0o777).toBe(0o600);
+            expect(statSync(join(temp.dir, 'private')).mode & 0o777).toBe(0o700);
         } finally {
             temp.cleanup();
         }

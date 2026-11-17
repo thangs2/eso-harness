@@ -16,6 +16,9 @@ import {
     type Actor,
 } from '../src/platform/registry/index.js';
 
+// DB-backed tdd-qc scenarios are explicitly skipped when ESO_TEST_DB_URL is absent.
+const qcTest = process.env.ESO_TEST_DB_URL ? test : test.skip;
+
 const actor: Actor = { kind: 'operator', label: 'operator@test' };
 const root = '/tmp/eso-l11';
 
@@ -118,7 +121,7 @@ describe('L1.1 — platform registry', () => {
         assert.equal((await store.listEvents('acme-dup')).length, 1);
     });
 
-    test('SCN-02-1 · AC-02-1 — Platform registry + create consumer schema · tdd-qc', async () => {
+    qcTest('SCN-02-1 · AC-02-1 — Platform registry + create consumer schema · tdd-qc', async () => {
         const sql = new (globalThis as any).Bun.SQL(dbUrl());
         const store = new BunSqlPlatformStore(sql);
         const service = new RegistryService(store);

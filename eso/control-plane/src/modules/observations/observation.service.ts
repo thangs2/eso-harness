@@ -9,6 +9,16 @@ import { assertConsumerId, type PlatformStore } from '../../platform/registry/st
  */
 
 export const OBSERVATION_RUNTIME_KEY_PATTERN = /^[^:\s]+:[^:\s]+$/;
+export const OBSERVATION_EVENT_PATTERN = /^[a-zA-Z0-9._-]+$/;
+
+/** Field/size limits for observation ingest (R7b). */
+export const OBSERVATION_LIMITS = {
+    eventMax: 128,
+    outcomeMax: 64,
+    traceIdMax: 200,
+    idMax: 128,
+    evidenceMaxBytes: 32768,
+} as const;
 
 export interface ObservationActor {
     kind?: string;
@@ -17,9 +27,21 @@ export interface ObservationActor {
     consumerId?: string;
 }
 
-function requiredText(value: unknown, field: string): string {
+function requiredText(value: unknown, field: string, max?: number): string {
     const text = typeof value === 'string' ? value.trim() : '';
     if (!text) throw new PlatformError('OBSERVATION_INVALID', `${field} is required`);
+    if (max !== undefined && text.length > max) {
+        throw new PlatformError('OBSERVATION_INVALID', `${field} must be at most ${max} characters`);
+    }
+    return text;
+}
+
+function optionalText(value: unknown, field: string, max: number): string | null {
+    if (value === undefined || value === null || value === '') return null;
+    if (typeof value !== 'string') throw new PlatformError('OBSERVATION_INVALID', `${field} must be a string`);
+    const text = value.trim();
+    if (!text) return null;
+    if (text.length > max) throw new PlatformError('OBSERVATION_INVALID', `${field} must be at most ${max} characters`);
     return text;
 }
 
@@ -64,16 +86,20 @@ export class ObservationService {
         const id = assertConsumerId(consumerId);
         const consumer = await this.store.getConsumer(id);
         if (!consumer) throw new PlatformError('CONSUMER_NOT_FOUND', `Consumer not found: ${id}`);
-        const traceId = requiredText(body?.traceId, 'traceId');
-        const hostId = requiredText(body?.hostId, 'hostId');
-        const runtimeKey = requiredText(body?.runtimeKey, 'runtimeKey');
-        const event = requiredText(body?.event, 'event');
+        const traceId = requiredText(body?.traceId, 'traceId', OBSERVATION_LIMITS.traceIdMax);
+        const hostId = requiredText(body?.hostId, 'hostId', OBSERVATION_LIMITS.idMax);
+        const runtimeKey = requiredText(body?.runtimeKey, 'runtimeKey', OBSERVATION_LIMITS.idMax);
+        const event = requiredText(body?.event, 'event', OBSERVATION_LIMITS.eventMax);
+        if (!OBSERVATION_EVENT_PATTERN.test(event)) {
+            throw new PlatformError('OBSERVATION_INVALID', 'event must match [a-zA-Z0-9._-]+');
+        }
         if (!OBSERVATION_RUNTIME_KEY_PATTERN.test(runtimeKey)) {
             throw new PlatformError('OBSERVATION_INVALID', 'runtimeKey must be hostId:runtimeId');
         }
         if (!runtimeKey.startsWith(`${hostId}:`)) {
             throw new PlatformError('OBSERVATION_INVALID', 'runtimeKey must match hostId');
         }
+        const outcome = optionalText(body?.outcome, 'outcome', OBSERVATION_LIMITS.outcomeMax);
         if (actor?.kind === 'host') {
             if (actor.consumerId !== id) throw new PlatformError('AUTH_INVALID', 'Host token consumer scope mismatch');
             if (`${actor.hostId}:${actor.runtimeId}` !== runtimeKey) {
@@ -81,8 +107,12 @@ export class ObservationService {
             }
         }
         const evidence = body?.evidence === undefined ? {} : body.evidence;
-        if (!evidence || typeof evidence !== 'object' || Array.isArray(evidence)) {
-            throw new PlatformError('OBSERVATION_INVALID', 'evidence must be an object');
+        if (!evidence || typeof evidence !== 'object') {
+            throw new PlatformError('OBSERVATION_INVALID', 'evidence must be a JSON object or array');
+        }
+        const evidenceBytes = Buffer.byteLength(JSON.stringify(evidence), 'utf8');
+        if (evidenceBytes > OBSERVATION_LIMITS.evidenceMaxBytes) {
+            throw new PlatformError('OBSERVATION_INVALID', `evidence must be at most ${OBSERVATION_LIMITS.evidenceMaxBytes} bytes`);
         }
         const observationId = String(body?.observationId || '').trim()
             || `obs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -94,7 +124,7 @@ export class ObservationService {
             runtimeKey,
             workerId: body?.workerId === undefined || body?.workerId === null || body?.workerId === '' ? null : String(body.workerId),
             event,
-            outcome: body?.outcome === undefined || body?.outcome === null || body?.outcome === '' ? null : String(body.outcome),
+            outcome,
             evidence,
             at: isoOrNull(body?.at),
             idempotencyKey,

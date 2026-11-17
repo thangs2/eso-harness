@@ -130,9 +130,37 @@ function errorFromResponse(status: number, text: string): ObservationClientError
     return new ObservationClientError(code, message, status, detail);
 }
 
+interface ParsedObservationSuccess {
+    ok: true;
+    result: ObservationWriteResult;
+}
+
+function parseObservationSuccess(text: string): ParsedObservationSuccess | { ok: false; reason: string } {
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(text);
+    } catch {
+        return { ok: false, reason: 'not valid JSON' };
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return { ok: false, reason: 'body is not an object' };
+    }
+    const record = parsed as { created?: unknown; observation?: unknown };
+    if (typeof record.created !== 'boolean') {
+        return { ok: false, reason: 'created boolean is missing' };
+    }
+    const observation = record.observation as ObservationRecord | undefined;
+    if (!observation || typeof observation !== 'object' || typeof observation.observationId !== 'string' || !observation.observationId.trim()) {
+        return { ok: false, reason: 'observation.observationId is missing' };
+    }
+    return { ok: true, result: { created: record.created, observation } };
+}
+
 export interface FlushResult {
     flushed: number;
     remaining: number;
+    /** True when another flush owns the buffer (this call did nothing). */
+    skipped?: boolean;
 }
 
 export class ObservationClient {
@@ -236,24 +264,19 @@ export class ObservationClient {
 
             const text = await response.text();
             if (response.ok) {
-                let parsed: { created?: boolean; observation?: ObservationRecord };
-                try {
-                    parsed = JSON.parse(text) as { created?: boolean; observation?: ObservationRecord };
-                } catch {
-                    throw new ObservationClientError(
-                        'OBSERVATION_INVALID_RESPONSE',
-                        'Observation response is not valid JSON',
-                        response.status,
-                    );
+                const parsedResult = parseObservationSuccess(text);
+                if (parsedResult.ok) return parsedResult.result;
+                // Malformed 2xx is treated as transient: retry, then buffer instead of losing it.
+                lastRetryableError = new ObservationClientError(
+                    'OBSERVATION_INVALID_RESPONSE',
+                    `Observation response is malformed: ${parsedResult.reason}`,
+                    response.status,
+                );
+                if (attempt < attempts) {
+                    await this.sleepImpl(this.delayForRetry(attempt));
+                    continue;
                 }
-                if (!parsed?.observation) {
-                    throw new ObservationClientError(
-                        'OBSERVATION_INVALID_RESPONSE',
-                        'Observation response is missing the observation record',
-                        response.status,
-                    );
-                }
-                return { created: parsed.created !== false, observation: parsed.observation };
+                break;
             }
 
             // Retry only transient failures: network (above), 5xx and 429.
@@ -286,22 +309,32 @@ export class ObservationClient {
         throw failure;
     }
 
-    /** Replay buffered observations (oldest first). Idempotent on the server key. */
+    /**
+     * Replay buffered observations (oldest first). Idempotent on the server key.
+     * A flush claims the buffer atomically; a concurrent flush skips instead of double-posting.
+     */
     async flushBuffer(): Promise<FlushResult> {
-        const pending = this.buffer.pending();
-        if (!pending.length) return { flushed: 0, remaining: 0 };
+        const claim = this.buffer.claim();
+        if (!claim.claimed) {
+            return { flushed: 0, remaining: this.buffer.pending().length, skipped: true };
+        }
 
         const remaining: ObservationBody[] = [];
         let flushed = 0;
-        for (const body of pending) {
-            try {
-                await this.append(body, { bufferOnFailure: false });
-                flushed += 1;
-            } catch {
-                remaining.push(body);
+        try {
+            for (const body of claim.bodies) {
+                try {
+                    await this.append(body, { bufferOnFailure: false });
+                    flushed += 1;
+                } catch {
+                    remaining.push(body);
+                }
             }
+            this.buffer.finish(remaining);
+        } catch (error) {
+            this.buffer.restore();
+            throw error;
         }
-        this.buffer.replace(remaining);
         return { flushed, remaining: remaining.length };
     }
 

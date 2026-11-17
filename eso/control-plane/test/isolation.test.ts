@@ -17,6 +17,9 @@ import {
     assertConsumerSlug,
 } from '../src/common/db/isolation.js';
 
+// DB-backed tdd-qc scenarios are explicitly skipped when ESO_TEST_DB_URL is absent.
+const qcTest = process.env.ESO_TEST_DB_URL ? test : test.skip;
+
 const actor: Actor = { kind: 'operator', label: 'operator@test' };
 const root = '/tmp/eso-l61';
 
@@ -105,7 +108,7 @@ describe('L6.1 — isolation middleware', () => {
         }
     });
 
-    test('SCN-12-1 · AC-12-1 — Isolation middleware + 6 tests · tdd-qc', async () => {
+    qcTest('SCN-12-1 · AC-12-1 — Isolation middleware + 6 tests · tdd-qc', async () => {
         const sql = new (globalThis as any).Bun.SQL(dbUrl());
         const store = new BunSqlPlatformStore(sql);
         const registry = new RegistryService(store);

@@ -44,9 +44,9 @@ host-runtime/
     remote/dispatch.ts   A-side orchestration + local worker.remote.* observation
     remote/job-ledger.ts persistent Mode B job ledger (atomic JSON, TTL 24h, max 200)
     offline-cache.ts     last-valid snapshot cache (atomic write, scope-checked, no tokens)
-    observation-buffer.ts local JSONL buffer for observations that could not be written
+    observation-buffer.ts local JSONL buffer (+ atomic flush claim, 0600/0700 perms)
     shims.d.ts           minimal Node/Bun ambient types (the package has zero npm dependencies)
-  test/                  bun test suites (180 tests)
+  test/                  bun test suites (195 tests)
   README.md
   integrations/cursor/README.md
   integrations/agy/README.md
@@ -115,9 +115,19 @@ bun run src/cli.ts flush-observations --consumer testeso --json
   `consumer + runtimeKey` (never by token). On network failure or 5xx it falls back to that cache
   and reports `SNAPSHOT_CACHE_USED:ageMs=…`; 4xx never falls back.
 - `ObservationClient` retries network/5xx/429 up to 3 times (exponential backoff + jitter); other
-  4xx are final. If all retries fail, the observation envelope is appended to a JSONL buffer and the
-  host reports `OBSERVATIONS_BUFFERED:<id>`. Entrypoints flush the buffer at start (best effort) and
-  report `OBSERVATIONS_FLUSHED:<n>`.
+  4xx are final; a malformed 2xx (no `created` boolean / `observation.observationId`) is treated as
+  transient and retried before buffering. If all retries fail, the observation envelope is appended
+  to a JSONL buffer and the host reports `OBSERVATIONS_BUFFERED:<id>`. Entrypoints flush the buffer at
+  start (best effort) and report `OBSERVATIONS_FLUSHED:<n>`.
+- A flush **claims** the buffer atomically (`.flush.lock` directory + `.jsonl.flushing` rename); a
+  concurrent flush skips instead of double-posting, unflushed bodies are merged back (so appends
+  during the flush are not lost), and a crashed claim is recovered after 5 minutes. The claim is a
+  local-filesystem lock: two *processes* on the same host serialize, but it is not a distributed lock
+  across hosts.
+- Cache/ledger/buffer **directories are 0700 and files are 0600** (host-local config and evidence;
+  no tokens are ever written).
+- An online 5xx fallback returns the cached snapshot **without rewriting it** (`cachedAt`/bytes
+  unchanged), so a transient outage cannot silently refresh or downgrade the fallback.
 - Cache keys are token-independent: rotating/revoking a host token never invalidates the cache, and
   neither cache nor buffer ever stores a token.
 
@@ -151,7 +161,8 @@ Mode B guarantees:
   `evidence.remoteObservationId`;
 - replaying the same `jobId` is idempotent: B returns the ledger-backed signed result (persisted
   across restarts, TTL 24h, max 200 jobs) and writes no second observation; A's observation dedupes
-  on its idempotency key;
+  on its idempotency key. The workspace is validated **before** a ledger replay is returned, so a
+  cached result is never served for a workspace that now fails policy;
 - prompts and tokens never appear in logs, results or observations.
 
 `--dry-run` forces the deterministic dry adapter. It does **not** skip the config snapshot, model
@@ -221,8 +232,8 @@ cd host-runtime && bun test     # Mode A + Mode B suites
 | Adapter | Command | Notes |
 |---|---|---|
 | `dry` | none | deterministic, no spawn, no model |
-| `cursor` | `<cursor-agent> -p --model <model> <prompt>` | absolute path resolved before spawn |
-| `agy` | `<agy> -p --model <model> <prompt>` | same contract |
+| `cursor` | `<cursor-agent> -p --model <model> <prompt>` | absolute path resolved before spawn; **no `--effort` flag** (cursor has none — effort lives in parameterized model ids such as `claude-opus-4-8[context=1m,effort=high]` and is otherwise recorded in evidence only) |
+| `agy` | `<agy> -p --model <model> [--effort <effort>] <prompt>` | `--effort` is added only for agy-supported values `low|medium|high|xhigh|max`; other values are recorded in evidence, never invented as flags |
 
 `cursor-agent` is usually **not on PATH**; the adapter checks `ESO_CURSOR_AGENT_BIN`, then PATH, then
 the Cursor agent-cli folder
@@ -243,7 +254,7 @@ the Cursor agent-cli folder
 
 ```bash
 cd host-runtime
-bun test                 # 180 tests
+bun test                 # 195 tests
 bun run typecheck        # tsc --noEmit
 ```
 

@@ -32,8 +32,9 @@
               "optimization": true,
               "budgets": [
                 {
+                  // host placement/observation UI: Hosts grouped runtimes, placement, observation timeline and catalogs.
                   "type": "initial",
-                  "maximumWarning": "550kB",
+                  "maximumWarning": "600kB",
                   "maximumError": "650kB"
                 },
                 {

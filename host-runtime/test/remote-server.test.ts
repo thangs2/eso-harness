@@ -297,6 +297,31 @@ describe('remote server (host B)', () => {
         }
     });
 
+    it('validates the workspace before returning a ledger replay (R7d)', async () => {
+        const temp = makeTempDir();
+        const harness = await startHarness(temp.dir);
+        try {
+            const firstJob = await signedJob(temp.dir);
+            const first = await postJobs(harness.url, firstJob, REMOTE_SECRET);
+            expect(first.status).toBe(200);
+
+            // Same jobId (already in the ledger) but the workspace is no longer valid.
+            const badWorkspaceReplay = await signedJob(temp.dir, {
+                workspaceRef: { repo: `${temp.dir}/gone` },
+            });
+            const rejected = await postJobs(harness.url, badWorkspaceReplay, REMOTE_SECRET);
+            expect(rejected.status).toBe(422);
+            expect(((await rejected.json()) as { code: string }).code).toBe('WORKSPACE_MISSING');
+
+            const validReplay = await postJobs(harness.url, firstJob, REMOTE_SECRET);
+            expect(validReplay.status).toBe(200);
+            expect(harness.logs.some((line) => line.includes('workspace rejected'))).toBe(true);
+        } finally {
+            await harness.stop();
+            temp.cleanup();
+        }
+    });
+
     it('rejects invalid JSON and oversized bodies', async () => {
         const temp = makeTempDir();
         const harness = await startHarness(temp.dir, { maxBodyBytes: 4000 });

@@ -18,6 +18,9 @@ import { RegistrationService } from '../src/modules/consumers/registration/regis
 import { RegistryQueryService } from '../src/modules/consumers/query/registry-query.service.js';
 import { LifecycleService } from '../src/modules/consumers/lifecycle/lifecycle.service.js';
 
+// DB-backed tdd-qc scenarios are explicitly skipped when ESO_TEST_DB_URL is absent.
+const qcTest = process.env.ESO_TEST_DB_URL ? test : test.skip;
+
 const actor: Actor = { kind: 'operator', label: 'operator@test' };
 
 function tempRoot(): string {
@@ -136,7 +139,7 @@ describe('L4.2 — retire / soft delete / restore', () => {
         }
     });
 
-    test('SCN-07-1 · AC-07-1 — Retire/soft delete/restore · tdd-qc', async () => {
+    qcTest('SCN-07-1 · AC-07-1 — Retire/soft delete/restore · tdd-qc', async () => {
         const sql = new (globalThis as any).Bun.SQL(dbUrl());
         const store = new BunSqlPlatformStore(sql);
         const registry = new RegistryService(store);

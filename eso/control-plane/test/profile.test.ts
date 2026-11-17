@@ -17,6 +17,9 @@ import {
 import { RegistrationService } from '../src/modules/consumers/registration/registration.service.js';
 import { ProfileService } from '../src/modules/profiles/profile.service.js';
 
+// DB-backed tdd-qc scenarios are explicitly skipped when ESO_TEST_DB_URL is absent.
+const qcTest = process.env.ESO_TEST_DB_URL ? test : test.skip;
+
 const actor: Actor = { kind: 'operator', label: 'operator@test' };
 
 function tempRoot(): string {
@@ -135,7 +138,7 @@ describe('L4.4 — materialize + drift check', () => {
         }
     });
 
-    test('SCN-10-1 · AC-10-1 — Materialize + drift check · tdd-qc', async () => {
+    qcTest('SCN-10-1 · AC-10-1 — Materialize + drift check · tdd-qc', async () => {
         const sql = new (globalThis as any).Bun.SQL(dbUrl());
         const store = new BunSqlPlatformStore(sql);
         const registry = new RegistryService(store);

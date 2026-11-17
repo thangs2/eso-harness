@@ -394,17 +394,28 @@ export class ControlPlaneApiClient {
     }
 
     async saveHostRuntime(runtime: HostRuntimeDto): Promise<HostRuntimeDto> {
+        const modelTiers: Record<string, { model: string; effort?: string }> = {};
+        for (const [tier, value] of Object.entries(runtime.modelTiers || {})) {
+            const model = typeof value?.model === 'string' ? value.model.trim() : '';
+            if (!model) continue;
+            const effort = typeof value?.effort === 'string' ? value.effort.trim() : '';
+            modelTiers[tier] = effort ? { model, effort } : { model };
+        }
+        const body: Record<string, unknown> = {
+            runtimeKind: runtime.runtimeKind,
+            models: [...runtime.models],
+            leadEligible: runtime.leadEligible,
+            health: runtime.health,
+            remoteUrl: runtime.remoteUrl?.trim() ? runtime.remoteUrl.trim() : null,
+            // Send {} to clear/edit tiers; never null (backend expects an object).
+            modelTiers,
+        };
+        // Empty means "not supplied": the backend keeps/derive the default from the catalog.
+        if (runtime.defaultModel?.trim()) body.defaultModel = runtime.defaultModel.trim();
         const res = await fetch(`${this.baseUrl}/api/v1/hosts/${encodeURIComponent(runtime.hostId)}/runtimes/${encodeURIComponent(runtime.runtimeId)}`, {
             method: 'PUT',
             headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                runtimeKind: runtime.runtimeKind,
-                models: [...runtime.models],
-                defaultModel: runtime.defaultModel || '',
-                leadEligible: runtime.leadEligible,
-                health: runtime.health,
-                remoteUrl: runtime.remoteUrl?.trim() ? runtime.remoteUrl.trim() : null,
-            }),
+            body: JSON.stringify(body),
         });
         if (!res.ok) throw await this.problem(res);
         const saved = this.readObject<HostRuntimeDto>(await this.optionalJson(res));

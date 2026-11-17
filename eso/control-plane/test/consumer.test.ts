@@ -19,6 +19,9 @@ import {
     RegistrationService,
 } from '../src/modules/consumers/registration/registration.service.js';
 
+// DB-backed tdd-qc scenarios are explicitly skipped when ESO_TEST_DB_URL is absent.
+const qcTest = process.env.ESO_TEST_DB_URL ? test : test.skip;
+
 const actor: Actor = { kind: 'operator', label: 'operator@test' };
 
 function tempRoot(): string {
@@ -145,7 +148,7 @@ describe('L3.1 — register consumer', () => {
         }
     });
 
-    test('SCN-02-2 · AC-02-2 — Đăng ký consumer (transaction) · tdd-qc', async () => {
+    qcTest('SCN-02-2 · AC-02-2 — Đăng ký consumer (transaction) · tdd-qc', async () => {
         const sql = new (globalThis as any).Bun.SQL(dbUrl());
         const store = new BunSqlPlatformStore(sql);
         const registry = new RegistryService(store);

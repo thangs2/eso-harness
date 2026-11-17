@@ -12,6 +12,14 @@ import { DEFAULT_TIMEOUT_MS, blockedResult, resolveExecutable, sanitizeChildEnv,
 
 export const AGY_ENV_VAR = 'ESO_AGY_BIN';
 
+/** Effort values the AGY CLI accepts (`agy --effort`). */
+export const AGY_EFFORT_VALUES = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+
+export function agyEffortArgs(effort: string | undefined): string[] {
+    const value = (effort ?? '').trim().toLowerCase();
+    return (AGY_EFFORT_VALUES as readonly string[]).includes(value) ? ['--effort', value] : [];
+}
+
 export function agyCandidates(homeDir: string): string[] {
     return [join(homeDir, '.gemini', 'bin', 'agy'), join(homeDir, '.local', 'bin', 'agy')];
 }
@@ -45,7 +53,8 @@ export class AgyAdapter implements HostAdapter {
             });
         }
 
-        const args = ['-p', '--model', request.model, request.prompt];
+        const effortArgs = agyEffortArgs(request.effort);
+        const args = ['-p', '--model', request.model, ...effortArgs, request.prompt];
         const result = await spawnProcess(executable, args, {
             cwd: request.cwd,
             env: sanitizeChildEnv(request.env ?? this.options.env ?? process.env),
@@ -54,7 +63,7 @@ export class AgyAdapter implements HostAdapter {
 
         return {
             adapter: this.name,
-            command: [executable, '-p', '--model', request.model, '<prompt>'],
+            command: [executable, '-p', '--model', request.model, ...effortArgs, '<prompt>'],
             ok: result.ok,
             exitCode: result.exitCode,
             stdout: result.stdout,

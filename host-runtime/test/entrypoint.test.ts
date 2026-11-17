@@ -5,7 +5,7 @@ import type { AdapterRequest, AdapterResult, HostAdapter } from '../src/adapters
 import type { ConfigSnapshot, FetchLike } from '../src/config-client';
 import { join } from 'node:path';
 import { makeSnapshot, TEST_CONSUMER, TEST_RUNTIME_KEY } from './fixtures';
-import { fakeEso, makeTempDir } from './remote-fixtures';
+import { AGY_RUNTIME_KEY, fakeEso, makeModeBSnapshot, makeTempDir } from './remote-fixtures';
 import { SnapshotCache } from '../src/offline-cache';
 import { readFileSync } from 'node:fs';
 
@@ -383,6 +383,48 @@ describe('entrypoint (dry integration, fake control plane)', () => {
             } catch (error) {
                 expect((error as { code?: string }).code).toBe('SNAPSHOT_CACHE_MISSING');
             }
+        } finally {
+            cache.cleanup();
+        }
+    });
+
+    it('passes the tier effort to the adapter request (R7a)', async () => {
+        const snapshot = await makeModeBSnapshot(null, {}, { modelTiers: { balanced: { model: 'auto', effort: 'high' } } });
+        const fake = fakeEso(snapshot);
+        let capturedEffort: string | undefined;
+        let capturedModel: string | undefined;
+        const adapter: HostAdapter = {
+            name: 'stub',
+            async run(request) {
+                capturedModel = request.model;
+                capturedEffort = request.effort;
+                return {
+                    adapter: 'stub',
+                    command: null,
+                    ok: true,
+                    exitCode: 0,
+                    stdout: 'OUTCOME: PASS\n',
+                    stderr: '',
+                    durationMs: 0,
+                    timedOut: false,
+                    blocked: false,
+                    dry: true,
+                };
+            },
+        };
+        const cache = makeTempDir('hr-entry-cache-');
+        try {
+            const report = await runEntrypoint(
+                options({ fetchImpl: fake.fetchImpl, posts: [], snapshotGets: [] }, adapter, {
+                    runtimeKey: AGY_RUNTIME_KEY,
+                    cacheDir: cache.dir,
+                    bufferDir: join(cache.dir, 'observations'),
+                }),
+            );
+            expect(report.ok).toBe(true);
+            expect(capturedModel).toBe('auto');
+            expect(capturedEffort).toBe('high');
+            expect(report.warnings).toEqual([]);
         } finally {
             cache.cleanup();
         }

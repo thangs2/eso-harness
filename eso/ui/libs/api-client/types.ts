@@ -407,6 +407,14 @@ export type HostRuntimeKind = 'ide-native' | 'cli' | 'acp';
 
 export type HostRuntimeHealth = 'unknown' | 'healthy' | 'degraded' | 'offline';
 
+export type HostModelTier = 'fast' | 'balanced' | 'reasoning';
+
+/** Optional per-tier model mapping reported/stored for a runtime. */
+export interface HostModelTierDto {
+    model: string;
+    effort?: string;
+}
+
 /** A runtime registered under one host machine. Placement targets `runtimeKey`. */
 export interface HostRuntimeDto {
     hostId: string;
@@ -422,6 +430,8 @@ export interface HostRuntimeDto {
     lastHeartbeat: string | null;
     /** Optional HTTP endpoint for host-to-host Mode B discovery. ESO stores config only. */
     remoteUrl?: string | null;
+    /** Optional model per tier; ESO stores the mapping only. */
+    modelTiers?: Partial<Record<HostModelTier, HostModelTierDto>> | null;
 }
 
 /** A host machine with its registered runtimes. Consumers bind hosts by `hostId`. */

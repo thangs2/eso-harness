@@ -17,6 +17,9 @@ import {
     type EventType,
 } from '../src/platform/events/write/event-writer.js';
 
+// DB-backed tdd-qc scenarios are explicitly skipped when ESO_TEST_DB_URL is absent.
+const qcTest = process.env.ESO_TEST_DB_URL ? test : test.skip;
+
 const actor: Actor = { kind: 'operator', label: 'operator@test' };
 const root = '/tmp/eso-l12';
 
@@ -122,7 +125,7 @@ describe('L1.2 — event store write', () => {
         assert.equal((await store.getConsumer('evt-rb'))?.status, 'purged');
     });
 
-    test('SCN-14-2 · AC-14-2 — Ghi event trong transaction khi tạo/đổi trạng thái consumer · tdd-qc', async () => {
+    qcTest('SCN-14-2 · AC-14-2 — Ghi event trong transaction khi tạo/đổi trạng thái consumer · tdd-qc', async () => {
         const sql = new (globalThis as any).Bun.SQL(dbUrl());
         const store = new BunSqlPlatformStore(sql);
         const registry = new RegistryService(store);
