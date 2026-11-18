@@ -4244,6 +4244,7 @@ export class ConsumerSettingsPage implements OnInit {
         if ((auto !== undefined && (!Number.isFinite(auto) || auto < 0 || auto > 1)) || (confirm !== undefined && (!Number.isFinite(confirm) || confirm < 0 || confirm > 1))) { this.saving.set(false); this.error.set('JEV thresholds must be between 0 and 1.'); return; }
         if (auto !== undefined && confirm !== undefined && auto < confirm) { this.saving.set(false); this.error.set('JEV auto threshold must be >= confirm threshold.'); return; }
         const previous = (profile.profile || {}) as Record<string, unknown>;
+        const previousSettings = (previous.settings as Record<string, unknown> | undefined) || {};
         const nextProfile: Record<string, unknown> = {
             ...previous,
             observation: { consent: this.consent(), events: this.events() },
@@ -4257,6 +4258,7 @@ export class ConsumerSettingsPage implements OnInit {
                 },
             },
             settings: {
+                ...previousSettings,
                 general: { owner: this.owner().trim(), locale: this.locale().trim(), tags: this.tags().split(',').map((tag) => tag.trim()).filter(Boolean), description: this.description().trim() },
                 harness: { stack: { version: this.activeStackVersion(), status: this.stackStatus(), layers: this.stackLayers(), versions: this.stackVersions() }, hostProfiles: this.hostProfiles(), developers: this.developers(), formationHostIds: this.formationHostIds(), plugins: this.plugins() },
                 jira: { enabled: this.jiraEnabled(), projectKey: this.jiraProject().trim(), syncMode: this.jiraSyncMode() },
