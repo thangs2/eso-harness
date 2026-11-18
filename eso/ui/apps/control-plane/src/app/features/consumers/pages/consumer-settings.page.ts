@@ -8,7 +8,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { ConsumerProfileService } from '../../../core/consumers/consumer-profile.service.js';
-import type { ConsumerProfile, HostDto, ObservationDto, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, McpProviderDto, WorkerConfigDto, EvidenceRequirementDto, FlowSummaryDto, FlowDefinitionDto, HostRuntimeDto, WorkerPlacementDto, WorkerModelTier, WorkerPlacementFallback } from '../../../../../../../libs/api-client/types.js';
+import type { ConsumerProfile, HostDto, ObservationDto, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, McpProviderDto, WorkerConfigDto, EvidenceRequirementDto, FlowSummaryDto, FlowDefinitionDto, HostRuntimeDto, WorkerPlacementDto, WorkerModelTier, WorkerPlacementFallback, LegacyHarnessReportDto, HarnessMigrationPreviewDto } from '../../../../../../../libs/api-client/types.js';
 
 /**
  * Only remaining occurrence of the pre-P0.3 host-binding key: settings saved by an older UI.
@@ -169,6 +169,71 @@ function defaultPlugins(): PluginEntry[] {
 
             @if (error(); as message) { <p class="form-error" role="alert">{{ message }}</p> }
             @if (saved()) { <p class="saved-banner" role="status">Settings saved.</p> }
+
+            @if (legacyNotice(); as notice) { <p class="saved-banner" role="status">{{ notice }}</p> }
+            @if (legacyError(); as legacyMessage) { <p class="form-error" role="alert">{{ legacyMessage }}</p> }
+            @if (migrationNotice(); as migrationMessage) { <p class="saved-banner" role="status">{{ migrationMessage }}</p> }
+            @if (migrationError(); as migrationErrorMessage) { <p class="form-error" role="alert">{{ migrationErrorMessage }}</p> }
+            @if (migrationPreview()?.detected) {
+                <section class="migration-panel" aria-label="Harness migration pipeline">
+                    <div class="migration-copy">
+                        <p class="eyebrow">Migration pipeline</p>
+                        <h2>Legacy host assets detected</h2>
+                        <p class="section-hint">Preview maps legacy rules, skills, agents, and hooks into ESO canonical <code>agents/</code>. Existing ESO files are never overwritten; conflicts are reported.</p>
+                        @if (migrationPreview(); as preview) {
+                            <div class="migration-metrics">
+                                <div><span>Rules</span><strong>{{ preview.totals.rules.new }} new · {{ preview.totals.rules.conflict }} conflict</strong></div>
+                                <div><span>Skills</span><strong>{{ preview.totals.skills.new }} new · {{ preview.totals.skills.conflict }} conflict</strong></div>
+                                <div><span>Agents</span><strong>{{ preview.totals.agents.new }} new · {{ preview.totals.agents.conflict }} conflict</strong></div>
+                                <div><span>Hooks</span><strong>{{ preview.totals.hooks.new }} new · {{ preview.totals.hooks.conflict }} conflict</strong></div>
+                            </div>
+                            <code class="plan-hash">plan {{ preview.planHash.slice(0, 16) }}</code>
+                        }
+                    </div>
+                    <div class="migration-actions">
+                        <button mat-stroked-button type="button" [disabled]="migrationLoading() || migrationApplying()" (click)="previewHarnessMigration()">{{ migrationLoading() ? 'Previewing…' : 'Refresh preview' }}</button>
+                        <button mat-flat-button color="primary" type="button" [disabled]="migrationApplying()" (click)="applyHarnessMigration()">{{ migrationApplying() ? 'Migrating…' : 'Migrate to ESO' }}</button>
+                    </div>
+                </section>
+            }
+
+            @if (finishPrompt()) {
+                <section class="legacy-panel" aria-label="Finish migration prompt">
+                    <div class="legacy-copy">
+                        <p class="eyebrow">Finish · migration required</p>
+                        <h2>Legacy harness detected</h2>
+                        <p class="section-hint">This consumer still has legacy rules/skills/agents/hooks. Migrate them to ESO before finishing? <strong>No</strong> keeps the settings save but does not provision the consumer.</p>
+                    </div>
+                    <div class="legacy-actions">
+                        <button mat-stroked-button type="button" [disabled]="finishing()" (click)="finishWithoutMigration()">No, save only</button>
+                        <button mat-flat-button color="primary" type="button" [disabled]="finishing()" (click)="finishWithMigration()">{{ finishing() ? 'Migrating…' : 'Yes, migrate & finish' }}</button>
+                    </div>
+                </section>
+            }
+            @if (legacyHarness()?.detected) {
+                <section class="legacy-panel" aria-label="Legacy harness archive">
+                    <div class="legacy-copy">
+                        <p class="eyebrow">Legacy harness</p>
+                        <h2>Old harness state detected</h2>
+                        <p class="section-hint">ESO can move known v1 harness state into this repo's <code>archive/</code> folder. Active host hooks and canonical ESO material are left untouched.</p>
+                        <ul class="legacy-list">
+                            @for (entry of legacyHarness()?.entries; track entry.path) {
+                                <li><code>{{ entry.path }}</code><span>{{ entry.kind }} · {{ entry.bytes }} bytes</span></li>
+                            }
+                        </ul>
+                        <p class="legacy-target">Archive target: <code>{{ legacyHarness()?.archivePath }}</code></p>
+                    </div>
+                    <div class="legacy-actions">
+                        <button mat-stroked-button type="button" [disabled]="legacyLoading() || legacyArchiving() || migrationLoading()" (click)="refreshLegacyHarness()">{{ legacyLoading() ? 'Scanning…' : 'Re-scan' }}</button>
+                        @if (legacyArchiveConfirm()) {
+                            <button mat-stroked-button type="button" [disabled]="legacyArchiving()" (click)="legacyArchiveConfirm.set(false)">Cancel</button>
+                            <button mat-flat-button color="warn" type="button" [disabled]="legacyArchiving()" (click)="archiveLegacyHarness()">{{ legacyArchiving() ? 'Archiving…' : 'Archive now' }}</button>
+                        } @else {
+                            <button mat-flat-button color="primary" type="button" [disabled]="legacyArchiving()" (click)="legacyArchiveConfirm.set(true)">Archive legacy</button>
+                        }
+                    </div>
+                </section>
+            }
 
             @if (loading()) {
                 <section class="panel settings-loading"><p class="loading-label">Loading settings…</p></section>
@@ -1765,6 +1830,25 @@ function defaultPlugins(): PluginEntry[] {
         .settings-step-no { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; border: 1px solid currentColor; font-size: var(--text-xs); font-weight: 700; flex: none; }
         .settings-tab-content { border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); }
         .tab-panel { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: var(--space-4); padding: var(--space-5); }
+        .migration-panel { display: grid; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--brand); border-radius: var(--radius-md); background: color-mix(in srgb, var(--surface) 94%, var(--brand)); }
+        .migration-copy { display: grid; gap: var(--space-2); }
+        .migration-copy h2 { margin: 0; font-size: var(--text-md); }
+        .migration-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
+        .migration-metrics div { display: grid; gap: 2px; padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); }
+        .migration-metrics span { color: var(--muted); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .06em; }
+        .migration-metrics strong { font-size: var(--text-sm); }
+        .migration-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; justify-content: flex-end; }
+        .plan-hash { color: var(--muted); font-size: var(--text-xs); }
+        .legacy-panel { display: grid; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--warn-ink); border-radius: var(--radius-md); background: var(--warn-bg); }
+        .legacy-copy { display: grid; gap: var(--space-2); }
+        .legacy-copy h2 { margin: 0; font-size: var(--text-md); }
+        .legacy-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; justify-content: flex-end; }
+        .legacy-list { display: grid; gap: 2px; margin: 0; padding-left: var(--space-4); }
+        .legacy-list li { display: flex; gap: var(--space-2); justify-content: space-between; font-size: var(--text-sm); }
+        .legacy-list li span { color: var(--muted); font-size: var(--text-xs); }
+        .legacy-target { margin: 0; font-size: var(--text-sm); }
+        .migration-preview { display: grid; gap: 2px; padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); font-size: var(--text-sm); }
+        .migration-preview span { color: var(--muted); font-size: var(--text-xs); }
         .jev-panel { margin-top: var(--space-5); padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-md); }
         .jev-head { display: flex; justify-content: space-between; gap: var(--space-3); align-items: flex-start; margin-bottom: var(--space-3); }
         .jev-head h3 { margin: 0 0 var(--space-1); }
@@ -1829,7 +1913,7 @@ function defaultPlugins(): PluginEntry[] {
         .loading-label { color: var(--muted); margin: 0; }
         .settings-loading { border: 1px solid var(--line); border-radius: var(--radius-md); padding: var(--space-5); background: var(--surface); }
         @media (max-width: 1100px) { .settings-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); } .host-grid { grid-template-columns: 1fr; } .layer-row { grid-template-columns: minmax(200px, 1fr) minmax(120px, .6fr) minmax(180px, 1fr) auto; gap: var(--space-3); height: auto; min-height: 100px; } .layer-columns { display: none; } }
-        @media (max-width: 700px) { .settings-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; } .settings-tabs .settings-tab { min-width: 0; overflow: hidden; } .form-grid, .event-grid, .stack-summary { grid-template-columns: 1fr; } .page-header { flex-direction: column; } .tab-panel { padding: var(--space-4); } .layer-row { grid-template-columns: 1fr; align-items: start; } .layer-state { justify-content: flex-start; } .group-head { flex-direction: column; } }
+        @media (max-width: 700px) { .migration-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .settings-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; } .settings-tabs .settings-tab { min-width: 0; overflow: hidden; } .form-grid, .event-grid, .stack-summary { grid-template-columns: 1fr; } .page-header { flex-direction: column; } .tab-panel { padding: var(--space-4); } .layer-row { grid-template-columns: 1fr; align-items: start; } .layer-state { justify-content: flex-start; } .group-head { flex-direction: column; } }
     `],
 })
 export class ConsumerSettingsPage implements OnInit {
@@ -1911,6 +1995,19 @@ export class ConsumerSettingsPage implements OnInit {
     readonly tags = signal('');
     readonly description = signal('');
     readonly jevMode = signal<'off' | 'shadow' | 'active'>('off');
+    readonly legacyHarness = signal<LegacyHarnessReportDto | null>(null);
+    readonly legacyLoading = signal(false);
+    readonly legacyArchiving = signal(false);
+    readonly legacyArchiveConfirm = signal(false);
+    readonly legacyNotice = signal('');
+    readonly legacyError = signal('');
+    readonly migrationPreview = signal<HarnessMigrationPreviewDto | null>(null);
+    readonly migrationLoading = signal(false);
+    readonly migrationApplying = signal(false);
+    readonly migrationNotice = signal('');
+    readonly migrationError = signal('');
+    readonly finishPrompt = signal(false);
+    readonly finishing = signal(false);
     readonly jevAutoThreshold = signal('');
     readonly jevConfirmThreshold = signal('');
     readonly stackLayers = signal<StackLayer[]>(defaultStackLayers());
@@ -2133,6 +2230,8 @@ export class ConsumerSettingsPage implements OnInit {
                 })));
                 this.current.set(profile);
                 this.hydrate(profile);
+                void this.refreshLegacyHarness();
+                void this.loadMigrationPreview();
                 if (this.activeTab() === 'observation') this.loadObservations();
             })
             .catch((err) => this.error.set(err?.detail || err?.message || 'Unable to load consumer'))
@@ -3106,6 +3205,7 @@ export class ConsumerSettingsPage implements OnInit {
     }
 
     finish(): void {
+        this.finishing.set(true);
         this.save(true);
     }
 
@@ -3836,6 +3936,117 @@ export class ConsumerSettingsPage implements OnInit {
         void this.router.navigate(['/hosts']);
     }
 
+    loadMigrationPreview(): void {
+        if (this.migrationLoading()) return;
+        this.migrationLoading.set(true);
+        this.service.previewHarnessMigration(this.consumerId)
+            .then((preview) => this.migrationPreview.set(preview))
+            .catch(() => this.migrationPreview.set(null))
+            .finally(() => this.migrationLoading.set(false));
+    }
+
+    previewHarnessMigration(): void {
+        if (this.migrationLoading() || this.migrationApplying()) return;
+        this.migrationLoading.set(true);
+        this.migrationError.set('');
+        this.migrationNotice.set('');
+        this.service.previewHarnessMigration(this.consumerId)
+            .then((preview) => {
+                this.migrationPreview.set(preview);
+                if (!preview.detected) this.migrationNotice.set('No migratable rules/skills/agents/hooks found.');
+            })
+            .catch((err) => this.migrationError.set(err?.detail || err?.message || 'Could not preview migration'))
+            .finally(() => this.migrationLoading.set(false));
+    }
+
+    applyHarnessMigration(): void {
+        if (this.migrationApplying()) return;
+        this.migrationApplying.set(true);
+        this.migrationError.set('');
+        this.migrationNotice.set('');
+        this.service.applyHarnessMigration(this.consumerId)
+            .then((result) => {
+                this.migrationNotice.set(`Migration applied: ${result.applied.length} new, ${result.skipped.length} conflict(s) kept. Manifest: ${result.manifestPath}.`);
+                this.migrationPreview.set(null);
+                this.refreshLegacyHarness();
+                this.loadMigrationPreview();
+            })
+            .catch((err) => this.migrationError.set(err?.detail || err?.message || 'Could not apply migration'))
+            .finally(() => this.migrationApplying.set(false));
+    }
+
+    finishWithoutMigration(): void {
+        this.finishPrompt.set(false);
+        this.finishing.set(false);
+        this.legacyNotice.set('Settings saved. Finish blocked: legacy harness remains. Migrate it when ready, then Finish again.');
+    }
+
+    finishWithMigration(): void {
+        if (this.finishing()) return;
+        this.finishing.set(true);
+        this.migrationError.set('');
+        this.service.applyHarnessMigration(this.consumerId)
+            .then(() => this.provisionAndLeave())
+            .catch((err) => {
+                this.migrationError.set(err?.detail || err?.message || 'Could not migrate before finish');
+                this.finishing.set(false);
+            });
+    }
+
+    private provisionAndLeave(): void {
+        this.service.provision(this.consumerId)
+            .then(() => this.router.navigate(['/consumers', this.consumerId]))
+            .catch((err) => {
+                this.error.set(err?.detail || err?.message || 'Could not provision consumer');
+                this.finishing.set(false);
+            });
+    }
+
+    private completeFinish(): void {
+        Promise.all([
+            this.service.getLegacyHarness(this.consumerId),
+            this.service.previewHarnessMigration(this.consumerId),
+        ])
+            .then(([legacy, migration]) => {
+                this.legacyHarness.set(legacy);
+                this.migrationPreview.set(migration);
+                if (legacy.detected || migration.detected) {
+                    this.finishPrompt.set(true);
+                    this.finishing.set(false);
+                    return;
+                }
+                this.provisionAndLeave();
+            })
+            .catch((err) => {
+                this.error.set(err?.detail || err?.message || 'Could not inspect legacy harness before finish');
+                this.finishing.set(false);
+            });
+    }
+
+    refreshLegacyHarness(): void {
+        if (this.legacyLoading()) return;
+        this.legacyLoading.set(true);
+        this.legacyError.set('');
+        this.service.getLegacyHarness(this.consumerId)
+            .then((report) => this.legacyHarness.set(report))
+            .catch((err) => this.legacyError.set(err?.detail || err?.message || 'Could not inspect legacy harness'))
+            .finally(() => this.legacyLoading.set(false));
+    }
+
+    archiveLegacyHarness(): void {
+        if (this.legacyArchiving()) return;
+        this.legacyArchiving.set(true);
+        this.legacyError.set('');
+        this.service.archiveLegacyHarness(this.consumerId)
+            .then((result) => {
+                this.legacyArchiveConfirm.set(false);
+                this.legacyNotice.set(`Legacy harness archived to ${result.archivePath}.`);
+                this.legacyHarness.set({ consumerId: result.consumerId, detected: false, entries: [], archivePath: null });
+            })
+            .catch((err) => this.legacyError.set(err?.detail || err?.message || 'Could not archive legacy harness'))
+            .finally(() => this.legacyArchiving.set(false));
+    }
+
     save(navigateAfter = false): void {
         const profile = this.current();
         if (!profile) return;
@@ -3927,7 +4138,7 @@ export class ConsumerSettingsPage implements OnInit {
                 this.hydrate(updated);
                 this.saved.set(true);
                 this.workerImportDirty.set(false);
-                if (navigateAfter) this.router.navigate(['/consumers', profile.id]);
+                if (navigateAfter) void this.completeFinish();
             })
             .catch((err) => this.error.set(err?.detail || err?.message || 'Unable to save settings'))
             .finally(() => this.saving.set(false));

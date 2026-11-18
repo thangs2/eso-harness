@@ -43,6 +43,10 @@ import type {
     HostDto,
     WorkerPlacementDto,
     ObservationDto,
+    LegacyHarnessReportDto,
+    LegacyHarnessArchiveDto,
+    HarnessMigrationPreviewDto,
+    HarnessMigrationResultDto,
 } from './types.js';
 
 export class ControlPlaneApiClient {
@@ -728,5 +732,41 @@ export class ControlPlaneApiClient {
         });
         if (!res.ok) throw await this.problem(res);
         return (await res.json()) as ConsumerSetupResponse;
+    }
+
+    async getLegacyHarness(id: string): Promise<LegacyHarnessReportDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/legacy-harness`, {
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as LegacyHarnessReportDto;
+    }
+
+    async archiveLegacyHarness(id: string): Promise<LegacyHarnessArchiveDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/legacy-harness/archive`, {
+            method: 'POST',
+            headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as LegacyHarnessArchiveDto;
+    }
+
+    async previewHarnessMigration(id: string): Promise<HarnessMigrationPreviewDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/harness-migration/preview`, {
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as HarnessMigrationPreviewDto;
+    }
+
+    async applyHarnessMigration(id: string): Promise<HarnessMigrationResultDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/harness-migration/apply`, {
+            method: 'POST',
+            headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as HarnessMigrationResultDto;
     }
 }

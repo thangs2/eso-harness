@@ -17,6 +17,8 @@ import { RegistryQueryService } from '../../modules/consumers/query/registry-que
 import { UpdateConsumerService } from '../../modules/consumers/update/update.service.js';
 import { LifecycleService } from '../../modules/consumers/lifecycle/lifecycle.service.js';
 import { PurgeService } from '../../modules/consumers/purge/purge.service.js';
+import { LegacyHarnessService } from '../../modules/consumers/legacy/legacy-harness.service.js';
+import { HarnessMigrationService } from '../../modules/consumers/migration/harness-migration.service.js';
 import { ProfileService } from '../../modules/profiles/profile.service.js';
 import { BunScopedDb, IsolationService } from '../db/isolation.js';
 import { FsBrowseService } from '../fs/fs-browse.service.js';
@@ -92,6 +94,8 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
     const updates = new UpdateConsumerService(store);
     const lifecycle = new LifecycleService(store);
     const purge = new PurgeService(store);
+    const legacyHarness = new LegacyHarnessService(store);
+    const harnessMigration = new HarnessMigrationService(store);
     const profiles = new ProfileService(store);
     const events = new EventReader(store);
     const scoped = options.scoped ?? null;
@@ -376,7 +380,8 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
     app.put('/api/v1/consumers/:id', { preHandler: requireAuth }, async (request) => {
         const actor = (request as any).actor;
         const body = request.body as any;
-        const result = await updates.update((request.params as any).id, {
+        const id = (request.params as any).id;
+        const result = await updates.update(id, {
             id: body?.id,
             name: body?.name,
             profile: body?.profile,
@@ -384,6 +389,9 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
             expected_version: body?.expected_version,
             actor,
         });
+        // The update writes config.json, but the manifest embeds that file's hash. Re-run the
+        // material pass so config + manifest + materializedHash stay one consistent bundle.
+        await materialProvisioning.provision(id, { profile: body?.profile, zones: body?.zones });
         return result.consumer;
     });
 
@@ -392,6 +400,22 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
             return lifecycle.transition((request.params as any).id, action, (request as any).actor);
         });
     }
+
+    app.get('/api/v1/consumers/:id/harness-migration/preview', { preHandler: requireAuth }, async (request) => {
+        return harnessMigration.preview((request.params as any).id);
+    });
+
+    app.post('/api/v1/consumers/:id/harness-migration/apply', { preHandler: requireAuth }, async (request) => {
+        return harnessMigration.apply((request.params as any).id, (request as any).actor);
+    });
+
+    app.get('/api/v1/consumers/:id/legacy-harness', { preHandler: requireAuth }, async (request) => {
+        return legacyHarness.inspect((request.params as any).id);
+    });
+
+    app.post('/api/v1/consumers/:id/legacy-harness/archive', { preHandler: requireAuth }, async (request) => {
+        return legacyHarness.archive((request.params as any).id, (request as any).actor);
+    });
 
     app.post('/api/v1/consumers/:id/purge', { preHandler: requireAuth }, async (request) => {
         const body = request.body as any;

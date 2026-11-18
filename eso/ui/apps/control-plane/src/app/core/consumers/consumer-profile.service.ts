@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { CONTROL_PLANE_API_CLIENT } from '../tokens.js';
-import type { ConsumerListResponse, ConsumerPlan, ConsumerProfile, FsBrowseResponse, FsResolveDirectoryResponse, HostDiscoveryDto, McpDiscoveryDto, SetupConsumerPayload, StackVersionsDto, WorkerConfigDto, WorkerPolicyResultDto, WorkerImportPreviewDto, WorkerImportRecordDto, RuleFileDto, RuleImportPreviewDto, MaterialSummaryDto, FlowDefinitionDto, FlowSummaryDto, FlowValidationDto, FlowProposalDto, WorkerSourceStatusDto, PluginManifestDto, ConsumerPluginDto, ProviderRecordDto, JiraProjectDto, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, KnowledgeEmbeddingResultDto, HostRuntimeDto, HostDto, WorkerPlacementDto, ObservationDto } from '../../../../../../libs/api-client/types.js';
+import type { ConsumerListResponse, ConsumerPlan, ConsumerProfile, FsBrowseResponse, FsResolveDirectoryResponse, HostDiscoveryDto, McpDiscoveryDto, SetupConsumerPayload, StackVersionsDto, WorkerConfigDto, WorkerPolicyResultDto, WorkerImportPreviewDto, WorkerImportRecordDto, RuleFileDto, RuleImportPreviewDto, MaterialSummaryDto, FlowDefinitionDto, FlowSummaryDto, FlowValidationDto, FlowProposalDto, WorkerSourceStatusDto, PluginManifestDto, ConsumerPluginDto, ProviderRecordDto, JiraProjectDto, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, KnowledgeEmbeddingResultDto, HostRuntimeDto, HostDto, WorkerPlacementDto, ObservationDto, LegacyHarnessReportDto, LegacyHarnessArchiveDto, HarnessMigrationPreviewDto, HarnessMigrationResultDto, ProvisionConsumerResponse } from '../../../../../../libs/api-client/types.js';
 
 @Injectable({ providedIn: 'root' })
 export class ConsumerProfileService {
@@ -22,6 +22,31 @@ export class ConsumerProfileService {
         }
         if (inner && typeof inner === 'object') profile.profile = inner as ConsumerProfile['profile'];
         return profile;
+    }
+
+    getLegacyHarness(id: string): Promise<LegacyHarnessReportDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.getLegacyHarness(id);
+    }
+
+    archiveLegacyHarness(id: string): Promise<LegacyHarnessArchiveDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.archiveLegacyHarness(id);
+    }
+
+    provision(id: string): Promise<ProvisionConsumerResponse> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.provisionConsumer(id);
+    }
+
+    previewHarnessMigration(id: string): Promise<HarnessMigrationPreviewDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.previewHarnessMigration(id);
+    }
+
+    applyHarnessMigration(id: string): Promise<HarnessMigrationResultDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.applyHarnessMigration(id);
     }
 
     plan(profile: ConsumerProfile): Promise<ConsumerPlan> {

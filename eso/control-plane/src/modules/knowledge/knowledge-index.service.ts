@@ -147,7 +147,10 @@ export class KnowledgeIndexService {
                 const match = /^(#{1,6})\s+(.+?)\s*$/.exec(line);
                 if (!match) continue;
                 const heading = match[2].trim();
-                const anchor = slug(heading);
+                const baseAnchor = slug(heading);
+                let anchor = baseAnchor;
+                let suffix = 1;
+                while (sections.some((section) => section.anchor === anchor)) anchor = `${baseAnchor}-${suffix++}`;
                 sections.push({ sectionId: `s${++ordinal}`, parentSectionId: null, ordinal, level: match[1].length, heading, anchor, contentHash: hash });
             }
             const doc: ScannedDoc = { abs, path: rel, body, header, hash, docId, sections };
@@ -253,8 +256,8 @@ export class KnowledgeIndexService {
         };
         await this.store.replaceKnowledgeIndex(id, payload);
         mkdirSync(join(root, '.harness'), { recursive: true });
-        atomicWrite(join(root, '.harness', 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
-        return { ...(await this.store.knowledgeSummary(id)), manifestPath: '.harness/manifest.json', buildId, chunks: chunks.length };
+        atomicWrite(join(root, '.harness', 'knowledge-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+        return { ...(await this.store.knowledgeSummary(id)), manifestPath: '.harness/knowledge-manifest.json', buildId, chunks: chunks.length };
     }
 }
 

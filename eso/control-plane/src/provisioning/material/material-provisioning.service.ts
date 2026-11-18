@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 
 import { fail, PlatformError } from '../../platform/registry/errors.js';
@@ -39,6 +39,31 @@ export function assertValidRoot(root: string): void {
     if (stats.isSymbolicLink()) {
         fail('ROOT_NOT_FOUND', `Root path must not be a symbolic link: ${root}`);
     }
+}
+
+function roleForAgentPath(relative: string): string {
+    if (relative.startsWith('rules/')) return 'rule';
+    if (relative.startsWith('skills/')) return 'skill';
+    if (relative.startsWith('subagents/')) return 'subagent';
+    if (relative.startsWith('hooks/')) return 'hook';
+    if (relative.startsWith('mcp/')) return 'mcp';
+    return 'agent-material';
+}
+
+function collectAgentFiles(dir: string, prefix = ''): Array<{ path: string; content: string; role: string }> {
+    const out: Array<{ path: string; content: string; role: string }> = [];
+    if (!existsSync(dir)) return out;
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        if (entry.name.startsWith('.')) continue;
+        const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+        const absolute = join(dir, entry.name);
+        if (entry.isDirectory()) {
+            out.push(...collectAgentFiles(absolute, relative));
+        } else if (entry.isFile()) {
+            out.push({ path: `agents/${relative}`, content: readFileSync(absolute, 'utf8'), role: roleForAgentPath(relative) });
+        }
+    }
+    return out;
 }
 
 export class MaterialProvisioningService {
@@ -256,6 +281,12 @@ export class MaterialProvisioningService {
             ...agentsFiles.map((file) => ({ path: file.relative, content: file.content, role: file.role })),
             { path: '.harness/config.json', content: configContent, role: 'config' },
         ];
+        // ESO owns the whole agents/ tree, including files migrated/imported after the starter set.
+        // The manifest must inventory them or `setup.materialized` becomes a false claim.
+        const known = new Set(materialFiles.map((file) => file.path));
+        for (const file of collectAgentFiles(agentsDir)) {
+            if (!known.has(file.path)) materialFiles.push(file);
+        }
         const manifest: HarnessManifest = {
             _schema: HARNESS_MANIFEST_SCHEMA,
             _generated: GENERATED_MARKER,

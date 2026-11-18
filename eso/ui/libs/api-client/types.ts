@@ -554,6 +554,55 @@ export interface ConsumerSetupResponse {
 }
 
 
+
+
+export interface HarnessMigrationEntryDto {
+    category: 'rules' | 'skills' | 'agents' | 'hooks';
+    source: string;
+    target: string;
+    kind: 'file' | 'directory';
+    status: 'new' | 'conflict';
+    reason?: string;
+    bytes: number;
+}
+
+export interface HarnessMigrationPreviewDto {
+    consumerId: string;
+    root: string;
+    planHash: string;
+    detected: boolean;
+    totals: Record<'rules' | 'skills' | 'agents' | 'hooks', { new: number; conflict: number }>;
+    entries: HarnessMigrationEntryDto[];
+}
+
+export interface HarnessMigrationResultDto {
+    consumerId: string;
+    planHash: string;
+    applied: HarnessMigrationEntryDto[];
+    skipped: HarnessMigrationEntryDto[];
+    manifestPath: string;
+}
+
+export interface LegacyHarnessEntryDto {
+    path: string;
+    kind: 'file' | 'directory';
+    bytes: number;
+}
+
+export interface LegacyHarnessReportDto {
+    consumerId: string;
+    detected: boolean;
+    entries: LegacyHarnessEntryDto[];
+    archivePath: string | null;
+}
+
+export interface LegacyHarnessArchiveDto {
+    consumerId: string;
+    archivePath: string;
+    entries: LegacyHarnessEntryDto[];
+    totalBytes: number;
+}
+
 export interface FsDirectoryEntry {
     name: string;
     path: string;
