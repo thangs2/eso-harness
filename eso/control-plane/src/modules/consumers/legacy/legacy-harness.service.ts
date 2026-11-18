@@ -2,8 +2,8 @@
  * Legacy harness detection + operator-triggered archive.
  *
  * ESO owns configuration, not the old v1 host pack. When a consumer repo still has known legacy
- * `.harness` state, Settings can show it and move it into `<root>/archive/...` only after the
- * operator clicks Archive legacy. Nothing is deleted automatically.
+ * `.harness` state, Settings can show it and move it into `<root>/.harness/archive/...` only after
+ * the operator clicks Archive legacy. Nothing is deleted automatically.
  */
 import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
@@ -140,7 +140,7 @@ export class LegacyHarnessService {
     }
 
     private nextArchivePath(root: string): string {
-        const base = `archive/harness-legacy-${archiveStamp(new Date())}`;
+        const base = `.harness/archive/harness-legacy-${archiveStamp(new Date())}`;
         let candidate = base;
         let suffix = 1;
         while (existsSync(join(root, candidate)) || existsSync(join(root, `${candidate}.tmp`))) {

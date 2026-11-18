@@ -1,0 +1,122 @@
+#!/usr/bin/env node
+/**
+ * Host write gate hook.
+ *
+ * The host executes this hook. ESO is not involved at runtime. The hook reads the materialized
+ * Boundaries policy and grants from `<repo>/.harness/policy/` and answers the host in its native
+ * hook protocol.
+ */
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const ROOT = resolve(HERE, '..', '..');
+const POLICY = join(ROOT, '.harness', 'policy', 'folder-policy.json');
+const GRANTS = join(ROOT, '.harness', 'policy', 'grants.json');
+
+function readJson(path) {
+    try { return JSON.parse(readFileSync(path, 'utf8')); } catch { return null; }
+}
+
+function detectShape(data) {
+    if (data && (data.hook_event_name || data.hookEventName)) return 'cursor';
+    if (data && (data.toolCall || data.conversationId)) return 'antigravity';
+    return 'cursor';
+}
+
+function extractPaths(value, out = []) {
+    if (typeof value === 'string') {
+        if (/[\\/]/.test(value) || value.startsWith('.')) out.push(value);
+        return out;
+    }
+    if (Array.isArray(value)) { for (const item of value) extractPaths(item, out); return out; }
+    if (!value || typeof value !== 'object') return out;
+    for (const [key, item] of Object.entries(value)) {
+        if (/^(path|file_path|target_file|filePath|absolutePath|AbsolutePath|TargetFile)$/i.test(key) && typeof item === 'string') out.push(item);
+        else if (/^(tool_input|input|arguments|args|toolCall)$/i.test(key)) extractPaths(item, out);
+    }
+    return out;
+}
+
+function glob(pattern, value) {
+    let out = '^';
+    for (let i = 0; i < pattern.length; i += 1) {
+        const ch = pattern[i];
+        if (ch === '*' && pattern[i + 1] === '*') { out += '.*'; i += 1; }
+        else if (ch === '*') out += '[^/]*';
+        else if (ch === '?') out += '[^/]';
+        else out += ch.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+    }
+    return new RegExp(`${out}$`);
+}
+
+function match(policy, rel) {
+    const pattern = String(policy.path || '').replace(/\\/g, '/');
+    if (policy.pathType === 'file') return rel === pattern;
+    if (policy.pathType === 'directory') return rel === pattern || rel.startsWith(`${pattern.replace(/\/$/, '')}/`);
+    return glob(pattern, rel).test(rel);
+}
+
+function specificity(policy) {
+    return (policy.pathType === 'file' ? 10000 : policy.pathType === 'directory' ? 5000 : 0)
+        + String(policy.path || '').replace(/[*?]/g, '').length
+        + (String(policy.path || '').includes('**') ? 0 : 100);
+}
+
+function grantFor(grants, target, kind) {
+    const now = Date.now();
+    return (grants || []).find((grant) => {
+        if (grant.kind !== kind || grant.revokedAt) return false;
+        if (grant.expiresAt && Date.parse(grant.expiresAt) <= now) return false;
+        return target === grant.targetPrefix || target.startsWith(`${String(grant.targetPrefix).replace(/\/$/, '')}/`);
+    });
+}
+
+function evaluate(targets, kind, doc, grants) {
+    const policies = doc?.policies || [];
+    if (policies.length === 0) return { allow: true, reason: 'no boundary policy installed' };
+    for (const target of targets) {
+        const absolute = isAbsolute(target) ? resolve(target) : resolve(ROOT, target);
+        const rel = relative(ROOT, absolute).split('\\').join('/');
+        const external = rel.startsWith('..') || isAbsolute(rel);
+        if (external) {
+            const grant = grantFor(grants, absolute, kind);
+            if (grant) continue;
+            return { allow: false, reason: `outside repo root: ${absolute}` };
+        }
+        const policy = policies.filter((item) => match(item, rel)).sort((a, b) => specificity(b) - specificity(a))[0];
+        if (!policy) return { allow: false, reason: `no policy matched: ${rel}` };
+        if (kind === 'read') {
+            if (policy.read !== 'allow') return { allow: false, reason: `read denied: ${rel}` };
+            continue;
+        }
+        if (policy.write === 'deny') return { allow: false, reason: `write denied: ${rel}` };
+        if (policy.write === 'gated' && !grantFor(grants, rel, 'write')) return { allow: false, reason: `write gated: ${rel}` };
+    }
+    return { allow: true, reason: 'boundaries allow' };
+}
+
+function allow(message) {
+    if (message) process.stdout.write(`${JSON.stringify({ permission: 'allow', agent_message: message })}\n`);
+    else process.stdout.write('{"permission":"allow"}\n');
+}
+
+function deny(message) {
+    process.stdout.write(`${JSON.stringify({ permission: 'deny', user_message: message, agent_message: message })}\n`);
+}
+
+let input = '';
+for await (const chunk of process.stdin) input += chunk;
+let data = {};
+try { data = JSON.parse(input); } catch { allow(); process.exit(0); }
+
+const doc = readJson(POLICY);
+const enforcement = doc?.enforcement === 'enforce' ? 'enforce' : 'audit';
+const targets = extractPaths(data);
+const kind = /read/i.test(String(data?.hook_event_name || data?.hookEventName || '')) ? 'read' : 'write';
+const decision = evaluate(targets, kind, doc, readJson(GRANTS) || []);
+
+if (decision.allow) allow();
+else if (enforcement === 'audit') allow(`Boundaries audit: would deny — ${decision.reason}`);
+else deny(`Boundaries deny: ${decision.reason}`);

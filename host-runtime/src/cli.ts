@@ -30,12 +30,16 @@ import { DEFAULT_DISPATCH_TIMEOUT_MS, DispatchError, runDispatch } from './remot
 import type { DispatchOptions, DispatchReport } from './remote/dispatch';
 import { DEFAULT_REMOTE_HOST, DEFAULT_REMOTE_PORT, startRemoteServer } from './remote/server';
 import { ObservationClient } from './observation-client';
+import { installHostHooks } from './hooks';
+import { evaluateAccess } from './write-policy';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 export const DEFAULT_BASE_URL = 'http://127.0.0.1:8787';
 export const ADAPTER_NAMES: AdapterName[] = ['dry', 'cursor', 'agy'];
 const DEFAULT_REMOTE_TIMEOUT_MS = DEFAULT_DISPATCH_TIMEOUT_MS;
 
-export type CliCommand = 'run' | 'dispatch' | 'serve' | 'flush-observations' | 'help';
+export type CliCommand = 'run' | 'dispatch' | 'serve' | 'flush-observations' | 'install-hooks' | 'check-write' | 'help';
 
 export interface ParsedRunOptions {
     kind: 'run';
@@ -110,7 +114,20 @@ export interface ParsedFlushOptions {
     bufferDir?: string;
 }
 
-export type ParsedOptions = ParsedRunOptions | ParsedDispatchOptions | ParsedServeOptions | ParsedFlushOptions;
+export interface ParsedInstallHooksOptions {
+    kind: 'install-hooks';
+    root: string;
+    host: string;
+}
+
+export interface ParsedCheckWriteOptions {
+    kind: 'check-write';
+    root: string;
+    target: string;
+    access: 'read' | 'write';
+}
+
+export type ParsedOptions = ParsedRunOptions | ParsedDispatchOptions | ParsedServeOptions | ParsedFlushOptions | ParsedInstallHooksOptions | ParsedCheckWriteOptions;
 
 export interface ParsedCli {
     command: CliCommand;
@@ -134,6 +151,8 @@ export function helpText(): string {
         '  bun run src/cli.ts dispatch --consumer <id> --from-runtime-key <key> --to-runtime-key <key> --prompt <text> [options]',
         '  bun run src/server.ts serve --runtime-key <hostId:runtimeId> --port 8788 [options]',
         '  bun run src/cli.ts flush-observations --consumer <id> [options]',
+        '  bun run src/cli.ts install-hooks --hook-host <host> [--consumer-root <dir>]',
+        '  bun run src/cli.ts check-write --target <path> --access read|write [--consumer-root <dir>]',
         '  bun run src/cli.ts --help',
         '',
         'RUN (Mode A, local worker)',
@@ -148,7 +167,7 @@ export function helpText(): string {
         '  --cwd <dir>            adapter working directory (default: consumer.root, else current dir)',
         '  --trace-id <id>        reuse a trace/job id (idempotency checks)',
         '  --offline              config must come from the local snapshot cache (env ESO_OFFLINE=1)',
-        '  --cache-dir <dir>      local cache root (env ESO_CONFIG_CACHE_DIR, default ~/.eso/host-runtime)',
+        '  --cache-dir <dir>      local cache root (env ESO_CONFIG_CACHE_DIR, default <consumer-root>/.harness/runtime)',
         '  --buffer-dir <dir>     buffered observation dir (env ESO_OBS_BUFFER_DIR)',
         '',
         'DISPATCH (Mode B, host A -> host B)',
@@ -170,6 +189,14 @@ export function helpText(): string {
         '  ESO_HOST_TOKEN         host B scoped bearer token for observation writes',
         '  ESO_REMOTE_TOKEN       shared Mode B secret (bearer + HMAC)',
         '',
+        'INSTALL-HOOKS',
+        '  --hook-host <host>    cursor | claude | agents | agy',
+        '  --consumer-root <dir> consumer repo root (env ESO_CONSUMER_ROOT, default cwd)',
+        '',
+        'CHECK-WRITE',
+        '  --target <path>       path the host is about to read/write',
+        '  --access <mode>       read | write',
+        '',
         'FLUSH-OBSERVATIONS',
         '  replay observations buffered while ESO was unavailable (idempotent)',
         '',
@@ -185,7 +212,7 @@ export function helpText(): string {
         'ENV',
         '  ESO_BASE_URL · ESO_CONSUMER · ESO_RUNTIME_KEY · ESO_HOST_TOKEN · ESO_OPERATOR_TOKEN ·',
         '  ESO_AUTH_TOKEN · ESO_REMOTE_TOKEN · ESO_REMOTE_ALLOWED_WS · ESO_REMOTE_URL ·',
-        '  ESO_CONFIG_CACHE_DIR · ESO_OBS_BUFFER_DIR · ESO_REMOTE_LEDGER · ESO_OFFLINE',
+        '  ESO_CONSUMER_ROOT · ESO_CONFIG_CACHE_DIR · ESO_OBS_BUFFER_DIR · ESO_REMOTE_LEDGER · ESO_OFFLINE',
         '',
         'EXIT CODES',
         '  0 PASS (flow-end / max-steps) · 1 FAIL · 2 BLOCKED or usage/config error',
@@ -217,7 +244,7 @@ function parsePositiveInt(name: string, value: string, max?: number): number {
     return parsed;
 }
 
-const COMMANDS: CliCommand[] = ['run', 'dispatch', 'serve', 'flush-observations'];
+const COMMANDS: CliCommand[] = ['run', 'dispatch', 'serve', 'flush-observations', 'install-hooks', 'check-write'];
 
 interface RawFlags {
     values: Record<string, string>;
@@ -258,6 +285,10 @@ const VALUE_FLAGS = new Set([
     '--cache-dir',
     '--buffer-dir',
     '--ledger-path',
+    '--consumer-root',
+    '--hook-host',
+    '--target',
+    '--access',
 ]);
 
 const FLAG_KEYS: Record<string, string> = {
@@ -289,6 +320,10 @@ const FLAG_KEYS: Record<string, string> = {
     '--cache-dir': 'cacheDir',
     '--buffer-dir': 'bufferDir',
     '--ledger-path': 'ledgerPath',
+    '--consumer-root': 'consumerRoot',
+    '--hook-host': 'hookHost',
+    '--target': 'target',
+    '--access': 'access',
 };
 
 function parseRaw(argv: string[]): RawFlags {
@@ -385,6 +420,22 @@ export function parseArgs(argv: string[], env: Record<string, string | undefined
     const command = raw.command ?? 'run';
 
     const baseUrl = (raw.values.baseUrl ?? '').trim() || envText(env, 'ESO_BASE_URL') || DEFAULT_BASE_URL;
+
+    if (command === 'check-write') {
+        const root = (raw.values.consumerRoot ?? '').trim() || envText(env, 'ESO_CONSUMER_ROOT') || process.cwd();
+        const target = (raw.values.target ?? '').trim();
+        const access = (raw.values.access ?? '').trim();
+        if (!target) throw new CliUsageError('check-write requires --target <path>');
+        if (access !== 'read' && access !== 'write') throw new CliUsageError('check-write requires --access read|write');
+        return { command, json: raw.json, options: { kind: 'check-write', root, target, access } };
+    }
+
+    if (command === 'install-hooks') {
+        const root = (raw.values.consumerRoot ?? '').trim() || envText(env, 'ESO_CONSUMER_ROOT') || process.cwd();
+        const host = (raw.values.hookHost ?? '').trim();
+        if (!host) throw new CliUsageError('install-hooks requires --hook-host <cursor|claude|agents|agy>');
+        return { command, json: raw.json, options: { kind: 'install-hooks', root, host } };
+    }
 
     if (command === 'run') {
         const consumer = requireConsumer(raw, env);
@@ -746,6 +797,27 @@ export async function main(
         }
         if (parsed.command === 'flush-observations') {
             return await flushCommand(parsed.options as ParsedFlushOptions, parsed.json, io);
+        }
+        if (parsed.command === 'check-write') {
+            const options = parsed.options as ParsedCheckWriteOptions;
+            const policyFile = join(options.root, '.harness', 'policy', 'folder-policy.json');
+            const grantsFile = join(options.root, '.harness', 'policy', 'grants.json');
+            const policyDoc = existsSync(policyFile) ? JSON.parse(readFileSync(policyFile, 'utf8')) : {};
+            const policies = policyDoc.policies ?? [];
+            const grants = existsSync(grantsFile) ? JSON.parse(readFileSync(grantsFile, 'utf8')) : [];
+            const decision = evaluateAccess({ root: options.root, target: options.target, kind: options.access, policies, grants });
+            const enforcement = policyDoc.enforcement === 'enforce' ? 'enforce' : 'audit';
+            const auditOnly = enforcement === 'audit' && !decision.allowed;
+            const allowed = decision.allowed || auditOnly;
+            const payload = { ...decision, allowed, enforcement, auditOnly };
+            io.stdout(parsed.json ? `${JSON.stringify(payload, null, 2)}\n` : `${allowed ? (auditOnly ? 'AUDIT-ALLOW' : 'ALLOW') : 'DENY'} ${decision.effect} ${decision.reason}\n`);
+            return allowed ? 0 : 1;
+        }
+        if (parsed.command === 'install-hooks') {
+            const options = parsed.options as ParsedInstallHooksOptions;
+            const result = installHostHooks(options.root, options.host);
+            io.stdout(parsed.json ? `${JSON.stringify(result, null, 2)}\n` : `${result.installed ? 'installed' : 'skipped'} ${result.host} ${result.file}\n`);
+            return 0;
         }
 
         const options = toEntrypointOptions(parsed.options as ParsedRunOptions);

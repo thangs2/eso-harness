@@ -8,7 +8,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { ConsumerProfileService } from '../../../core/consumers/consumer-profile.service.js';
-import type { ConsumerProfile, HostDto, ObservationDto, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, McpProviderDto, WorkerConfigDto, EvidenceRequirementDto, FlowSummaryDto, FlowDefinitionDto, HostRuntimeDto, WorkerPlacementDto, WorkerModelTier, WorkerPlacementFallback, LegacyHarnessReportDto, HarnessMigrationPreviewDto } from '../../../../../../../libs/api-client/types.js';
+import type { ConsumerProfile, HostDto, ObservationDto, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, McpProviderDto, WorkerConfigDto, EvidenceRequirementDto, FlowSummaryDto, FlowDefinitionDto, HostRuntimeDto, WorkerPlacementDto, WorkerModelTier, WorkerPlacementFallback, LegacyHarnessReportDto, HarnessMigrationPreviewDto, BoundaryViewDto, FolderPolicyDto, BoundaryPathType, BoundaryReadMode, BoundaryWriteMode } from '../../../../../../../libs/api-client/types.js';
 
 /**
  * Only remaining occurrence of the pre-P0.3 host-binding key: settings saved by an older UI.
@@ -182,10 +182,10 @@ function defaultPlugins(): PluginEntry[] {
                         <p class="section-hint">Preview maps legacy rules, skills, agents, and hooks into ESO canonical <code>agents/</code>. Existing ESO files are never overwritten; conflicts are reported.</p>
                         @if (migrationPreview(); as preview) {
                             <div class="migration-metrics">
-                                <div><span>Rules</span><strong>{{ preview.totals.rules.new }} new · {{ preview.totals.rules.conflict }} conflict</strong></div>
-                                <div><span>Skills</span><strong>{{ preview.totals.skills.new }} new · {{ preview.totals.skills.conflict }} conflict</strong></div>
-                                <div><span>Agents</span><strong>{{ preview.totals.agents.new }} new · {{ preview.totals.agents.conflict }} conflict</strong></div>
-                                <div><span>Hooks</span><strong>{{ preview.totals.hooks.new }} new · {{ preview.totals.hooks.conflict }} conflict</strong></div>
+                                <div><span>Rules</span><strong>{{ preview.totals.rules.new }} new · {{ preview.totals.rules.same }} same · {{ preview.totals.rules.conflict }} conflict</strong></div>
+                                <div><span>Skills</span><strong>{{ preview.totals.skills.new }} new · {{ preview.totals.skills.same }} same · {{ preview.totals.skills.conflict }} conflict</strong></div>
+                                <div><span>Agents</span><strong>{{ preview.totals.agents.new }} new · {{ preview.totals.agents.same }} same · {{ preview.totals.agents.conflict }} conflict</strong></div>
+                                <div><span>Hooks</span><strong>{{ preview.totals.hooks.new }} new · {{ preview.totals.hooks.same }} same · {{ preview.totals.hooks.conflict }} conflict</strong></div>
                             </div>
                             <code class="plan-hash">plan {{ preview.planHash.slice(0, 16) }}</code>
                         }
@@ -1155,7 +1155,7 @@ function defaultPlugins(): PluginEntry[] {
                                     <div>
                                         <p class="eyebrow">Knowledge &amp; Artifact Governance</p>
                                         <h2>Make project knowledge findable, owned, and traceable</h2>
-                                        <p>Files are the source. The index and graph are derived. Providers are optional and selected per work area.</p>
+                                        <p>Files are the source. The index and graph are derived. Providers are optional and selected per work area. Read/index authority lives in <strong>Boundaries</strong>.</p>
                                         <div class="knowledge-hero-meta">
                                             <span><strong>{{ knowledgeSummary()?.docs || 0 }}</strong> documents</span>
                                             <span><strong>{{ knowledgeSummary()?.edges || 0 }}</strong> graph edges</span>
@@ -1478,7 +1478,7 @@ function defaultPlugins(): PluginEntry[] {
 
                                         <section class="knowledge-section knowledge-selectable knowledge-source-section" [class.zone-hidden]="knowledgeSection() !== 'sources'" [class.active]="selectedKnowledgeTopic() === 'docgraph'" (click)="selectKnowledgeTopic('docgraph')">
                                             <header class="knowledge-section-head"><div><h3>Document graph</h3><p>Derived index of document relationships. Never the source of content.</p></div><mat-slide-toggle [ngModel]="docgraphIndex()" (ngModelChange)="docgraphIndex.set($event)">Index</mat-slide-toggle></header>
-                                            <mat-form-field appearance="outline" class="full-width"><mat-label>Index scope</mat-label><input matInput [ngModel]="docgraphScope()" (ngModelChange)="docgraphScope.set($event)" placeholder="docs/**, sdlc/**, agents/**"></mat-form-field>
+                                            <p class="field-help">Index authority is <strong>Boundaries</strong>: a folder is indexed only when read=allow and index=yes. <button type="button" class="link-button" (click)="selectTab('boundaries')">Open Boundaries</button></p>
                                             <p class="knowledge-note">Generated files and provider copies are excluded by default.</p>
                                         </section>
 
@@ -1705,6 +1705,70 @@ function defaultPlugins(): PluginEntry[] {
                             </section>
                         }
 
+                        @case ('boundaries') {
+                            <section class="tab-panel" role="tabpanel">
+                                <header class="tab-intro">
+                                    <p class="eyebrow">Boundaries</p>
+                                    <h2>Read, write, and index policy</h2>
+                                    <p>Default policy is deny outside the repo root. Gated writes and external reads need an operator grant. Host hooks enforce; ESO publishes policy and records observations.</p>
+                                </header>
+                                @if (boundaryError(); as message) { <p class="form-error" role="alert">{{ message }}</p> }
+                                @if (boundaryNotice(); as notice) { <p class="saved-banner" role="status">{{ notice }}</p> }
+                                <div class="boundary-mode">
+                                    <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Enforcement</mat-label>
+                                        <mat-select [ngModel]="boundaryEnforcement()" (ngModelChange)="boundaryEnforcement.set($event)">
+                                            <mat-option value="audit">audit only — allow + record</mat-option>
+                                            <mat-option value="enforce">enforce — host hook denies</mat-option>
+                                        </mat-select>
+                                    </mat-form-field>
+                                </div>
+                                <div class="boundary-list">
+                                    @for (policy of boundaryPolicies(); track policy.id; let i = $index) {
+                                        <article class="boundary-row">
+                                            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="boundary-path"><mat-label>Path</mat-label><input matInput [ngModel]="policy.path" (ngModelChange)="updateBoundary(i, 'path', $event)"></mat-form-field>
+                                            <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Type</mat-label>
+                                                <mat-select [ngModel]="policy.pathType" (ngModelChange)="updateBoundary(i, 'pathType', $event)">
+                                                    <mat-option value="file">file</mat-option><mat-option value="directory">directory</mat-option><mat-option value="glob">glob</mat-option>
+                                                </mat-select>
+                                            </mat-form-field>
+                                            <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Read</mat-label>
+                                                <mat-select [ngModel]="policy.read" (ngModelChange)="updateBoundary(i, 'read', $event)">
+                                                    <mat-option value="allow">allow</mat-option><mat-option value="deny">deny</mat-option>
+                                                </mat-select>
+                                            </mat-form-field>
+                                            <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Write</mat-label>
+                                                <mat-select [ngModel]="policy.write" (ngModelChange)="updateBoundary(i, 'write', $event)">
+                                                    <mat-option value="bypass">bypass</mat-option><mat-option value="gated">gated</mat-option><mat-option value="warn">warn</mat-option><mat-option value="deny">deny</mat-option>
+                                                </mat-select>
+                                            </mat-form-field>
+                                            <mat-checkbox [checked]="policy.index" (change)="updateBoundary(i, 'index', $event.checked)">Index</mat-checkbox>
+                                            <button mat-button type="button" color="warn" (click)="removeBoundary(i)" aria-label="Remove policy">Remove</button>
+                                        </article>
+                                    }
+                                </div>
+                                <div class="boundary-actions">
+                                    <button mat-stroked-button type="button" (click)="addBoundary()">Add policy</button>
+                                    <button mat-flat-button color="primary" type="button" [disabled]="boundarySaving()" (click)="saveBoundaries()">{{ boundarySaving() ? 'Saving…' : 'Save boundaries' }}</button>
+                                </div>
+                                <section class="boundary-grants">
+                                    <header><h3>Grants</h3><p>Write grants are single-use and expire. Read grants can be once or always.</p></header>
+                                    <div class="grant-create">
+                                        <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Target prefix</mat-label><input matInput [ngModel]="grantTarget()" (ngModelChange)="grantTarget.set($event)" placeholder="data-lake/**"></mat-form-field>
+                                        <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Kind</mat-label><mat-select [ngModel]="grantKind()" (ngModelChange)="grantKind.set($event)"><mat-option value="write">write</mat-option><mat-option value="read">read</mat-option></mat-select></mat-form-field>
+                                        <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Mode</mat-label><mat-select [ngModel]="grantMode()" (ngModelChange)="grantMode.set($event)"><mat-option value="once">once</mat-option><mat-option value="always">always (read only)</mat-option></mat-select></mat-form-field>
+                                        <button mat-stroked-button type="button" [disabled]="!grantTarget().trim()" (click)="createBoundaryGrant()">Create grant</button>
+                                    </div>
+                                    @if (boundaryGrants().length === 0) { <p class="muted">No active grants.</p> } @else {
+                                        <div class="grant-list">
+                                            @for (grant of boundaryGrants(); track grant.grantId) {
+                                                <div class="grant-row"><code>{{ grant.kind }} · {{ grant.targetPrefix }}</code><span>{{ grant.mode }}{{ grant.expiresAt ? ' · expires ' + grant.expiresAt : '' }}</span><button mat-button type="button" color="warn" (click)="revokeBoundaryGrant(grant.grantId)">Revoke</button></div>
+                                            }
+                                        </div>
+                                    }
+                                </section>
+                            </section>
+                        }
+
                         @case ('observation') {
                             <section class="tab-panel" role="tabpanel">
                                 <p class="section-hint">Only enabled events are recorded; no secrets, prompt bodies, or file content. JEV decides on evidence, so its mode and consent live here.</p>
@@ -1817,7 +1881,7 @@ function defaultPlugins(): PluginEntry[] {
         .page-header h1 { margin: 0 0 var(--space-1); }
         .eyebrow { color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-size: var(--text-xs); margin: 0 0 var(--space-1); }
         .subtitle { color: var(--muted); margin: 0; }
-        .settings-tabs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); min-width: 0; gap: 2px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); overflow: hidden; }
+        .settings-tabs { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); min-width: 0; gap: 2px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); overflow: hidden; }
         .settings-tab { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border: 0; border-right: 1px solid var(--line); background: transparent; color: var(--muted); font: inherit; text-align: left; cursor: pointer; }
         .settings-tab-copy { display: grid; gap: 2px; min-width: 0; }
         .settings-tab-copy strong { color: var(--ink); font-size: var(--text-sm); font-weight: 650; line-height: 1.2; }
@@ -1839,6 +1903,19 @@ function defaultPlugins(): PluginEntry[] {
         .migration-metrics strong { font-size: var(--text-sm); }
         .migration-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; justify-content: flex-end; }
         .plan-hash { color: var(--muted); font-size: var(--text-xs); }
+        .boundary-mode { margin-bottom: var(--space-3); }
+        .link-button { border: 0; background: transparent; color: var(--brand); font: inherit; cursor: pointer; padding: 0; text-decoration: underline; }
+        .boundary-list { display: grid; gap: var(--space-2); }
+        .boundary-row { display: grid; grid-template-columns: minmax(220px, 2fr) 120px 110px 110px auto auto; gap: var(--space-2); align-items: center; padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-sm); }
+        .boundary-path { min-width: 0; }
+        .boundary-actions { display: flex; gap: var(--space-2); justify-content: flex-end; margin-top: var(--space-3); }
+        .boundary-grants { margin-top: var(--space-5); padding-top: var(--space-4); border-top: 1px solid var(--line); display: grid; gap: var(--space-3); }
+        .boundary-grants h3 { margin: 0; }
+        .boundary-grants p { margin: 0; color: var(--muted); font-size: var(--text-sm); }
+        .grant-create { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
+        .grant-list { display: grid; gap: 2px; }
+        .grant-row { display: flex; gap: var(--space-3); align-items: center; justify-content: space-between; padding: var(--space-2); border-bottom: 1px solid var(--line); }
+        .grant-row span { color: var(--muted); font-size: var(--text-xs); }
         .legacy-panel { display: grid; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--warn-ink); border-radius: var(--radius-md); background: var(--warn-bg); }
         .legacy-copy { display: grid; gap: var(--space-2); }
         .legacy-copy h2 { margin: 0; font-size: var(--text-md); }
@@ -1913,7 +1990,7 @@ function defaultPlugins(): PluginEntry[] {
         .loading-label { color: var(--muted); margin: 0; }
         .settings-loading { border: 1px solid var(--line); border-radius: var(--radius-md); padding: var(--space-5); background: var(--surface); }
         @media (max-width: 1100px) { .settings-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); } .host-grid { grid-template-columns: 1fr; } .layer-row { grid-template-columns: minmax(200px, 1fr) minmax(120px, .6fr) minmax(180px, 1fr) auto; gap: var(--space-3); height: auto; min-height: 100px; } .layer-columns { display: none; } }
-        @media (max-width: 700px) { .migration-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .settings-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; } .settings-tabs .settings-tab { min-width: 0; overflow: hidden; } .form-grid, .event-grid, .stack-summary { grid-template-columns: 1fr; } .page-header { flex-direction: column; } .tab-panel { padding: var(--space-4); } .layer-row { grid-template-columns: 1fr; align-items: start; } .layer-state { justify-content: flex-start; } .group-head { flex-direction: column; } }
+        @media (max-width: 700px) { .boundary-row { grid-template-columns: 1fr; } .migration-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .settings-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; } .settings-tabs .settings-tab { min-width: 0; overflow: hidden; } .form-grid, .event-grid, .stack-summary { grid-template-columns: 1fr; } .page-header { flex-direction: column; } .tab-panel { padding: var(--space-4); } .layer-row { grid-template-columns: 1fr; align-items: start; } .layer-state { justify-content: flex-start; } .group-head { flex-direction: column; } }
     `],
 })
 export class ConsumerSettingsPage implements OnInit {
@@ -1934,7 +2011,8 @@ export class ConsumerSettingsPage implements OnInit {
         { id: 'hosts', n: 3, label: 'Host Bindings', hint: 'Developer × host runtime' },
         { id: 'workers', n: 4, label: 'Agent Workers', hint: 'Agent identities & roles' },
         { id: 'knowledge', n: 5, label: 'Knowledge', hint: 'Knowledge & Artifact Governance' },
-        { id: 'observation', n: 6, label: 'Observatory', hint: 'Evidence & JEV' },
+        { id: 'boundaries', n: 6, label: 'Boundaries', hint: 'Read / write / index policy' },
+        { id: 'observation', n: 7, label: 'Observatory', hint: 'Evidence & JEV' },
     ];
 
     readonly consumerId = this.route.snapshot.paramMap.get('id') || 'unknown';
@@ -2006,6 +2084,15 @@ export class ConsumerSettingsPage implements OnInit {
     readonly migrationApplying = signal(false);
     readonly migrationNotice = signal('');
     readonly migrationError = signal('');
+    readonly boundaryPolicies = signal<FolderPolicyDto[]>([]);
+    readonly boundaryGrants = signal<BoundaryViewDto['grants']>([]);
+    readonly boundarySaving = signal(false);
+    readonly boundaryEnforcement = signal<'audit' | 'enforce'>('audit');
+    readonly boundaryNotice = signal('');
+    readonly boundaryError = signal('');
+    readonly grantTarget = signal('');
+    readonly grantKind = signal<'read' | 'write'>('write');
+    readonly grantMode = signal<'once' | 'always'>('once');
     readonly finishPrompt = signal(false);
     readonly finishing = signal(false);
     readonly jevAutoThreshold = signal('');
@@ -2232,6 +2319,7 @@ export class ConsumerSettingsPage implements OnInit {
                 this.hydrate(profile);
                 void this.refreshLegacyHarness();
                 void this.loadMigrationPreview();
+                void this.loadBoundaries();
                 if (this.activeTab() === 'observation') this.loadObservations();
             })
             .catch((err) => this.error.set(err?.detail || err?.message || 'Unable to load consumer'))
@@ -3966,7 +4054,7 @@ export class ConsumerSettingsPage implements OnInit {
         this.migrationNotice.set('');
         this.service.applyHarnessMigration(this.consumerId)
             .then((result) => {
-                this.migrationNotice.set(`Migration applied: ${result.applied.length} new, ${result.skipped.length} conflict(s) kept. Manifest: ${result.manifestPath}.`);
+                this.migrationNotice.set(`Migration applied: ${result.applied.length} new, ${result.skipped.length} unchanged/conflict kept. Manifest: ${result.manifestPath}.`);
                 this.migrationPreview.set(null);
                 this.refreshLegacyHarness();
                 this.loadMigrationPreview();
@@ -4021,6 +4109,51 @@ export class ConsumerSettingsPage implements OnInit {
                 this.error.set(err?.detail || err?.message || 'Could not inspect legacy harness before finish');
                 this.finishing.set(false);
             });
+    }
+
+    loadBoundaries(): void {
+        this.service.getBoundaries(this.consumerId)
+            .then((view) => { this.boundaryPolicies.set(view.policies); this.boundaryGrants.set(view.grants); this.boundaryEnforcement.set(view.enforcement); })
+            .catch((err) => this.boundaryError.set(err?.detail || err?.message || 'Could not load boundaries'));
+    }
+
+    updateBoundary(index: number, field: keyof FolderPolicyDto, value: unknown): void {
+        this.boundaryPolicies.update((policies) => policies.map((policy, i) => i === index ? { ...policy, [field]: value } : policy));
+    }
+
+    addBoundary(): void {
+        this.boundaryPolicies.update((policies) => [...policies, {
+            id: `policy-${Date.now()}`, path: '', pathType: 'glob', read: 'deny', write: 'deny', index: false, priority: 50,
+        }]);
+    }
+
+    removeBoundary(index: number): void {
+        this.boundaryPolicies.update((policies) => policies.filter((_, i) => i !== index));
+    }
+
+    saveBoundaries(): void {
+        if (this.boundarySaving()) return;
+        this.boundarySaving.set(true);
+        this.boundaryError.set('');
+        this.boundaryNotice.set('');
+        this.service.saveBoundaries(this.consumerId, this.boundaryPolicies(), this.boundaryEnforcement())
+            .then((view) => { this.boundaryPolicies.set(view.policies); this.boundaryGrants.set(view.grants); this.boundaryEnforcement.set(view.enforcement); this.boundaryNotice.set('Boundaries saved.'); })
+            .catch((err) => this.boundaryError.set(err?.detail || err?.message || 'Could not save boundaries'))
+            .finally(() => this.boundarySaving.set(false));
+    }
+
+    createBoundaryGrant(): void {
+        this.boundaryError.set('');
+        this.service.createBoundaryGrant(this.consumerId, {
+            kind: this.grantKind(), targetPrefix: this.grantTarget().trim(), mode: this.grantKind() === 'write' ? 'once' : this.grantMode(),
+        }).then(() => { this.grantTarget.set(''); this.loadBoundaries(); })
+            .catch((err) => this.boundaryError.set(err?.detail || err?.message || 'Could not create grant'));
+    }
+
+    revokeBoundaryGrant(grantId: string): void {
+        this.service.revokeBoundaryGrant(this.consumerId, grantId)
+            .then(() => this.loadBoundaries())
+            .catch((err) => this.boundaryError.set(err?.detail || err?.message || 'Could not revoke grant'));
     }
 
     refreshLegacyHarness(): void {

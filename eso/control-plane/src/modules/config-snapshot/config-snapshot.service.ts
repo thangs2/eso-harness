@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
+import { DEFAULT_POLICIES } from '../boundaries/boundary-policy.service.js';
 import { join } from 'node:path';
 
 import { PlatformError } from '../../platform/registry/errors.js';
@@ -60,6 +61,22 @@ function readJev(config: any): any {
     return jev && typeof jev === 'object' ? jev : { mode: 'off' };
 }
 
+function readBoundaries(config: any, root: string): any {
+    const explicit = config?.profile?.settings?.boundaries?.policies;
+    const policies = Array.isArray(explicit) && explicit.length > 0 ? explicit : DEFAULT_POLICIES.map((policy) => ({ ...policy }));
+    let grants: any[] = [];
+    const grantsPath = join(root, '.harness', 'policy', 'grants.json');
+    if (existsSync(grantsPath)) {
+        try {
+            const parsed = JSON.parse(readFileSync(grantsPath, 'utf8'));
+            if (Array.isArray(parsed)) grants = parsed.filter((grant) => !grant.revokedAt);
+        } catch {
+            grants = [];
+        }
+    }
+    return { policies, grants, enforcement: config?.profile?.settings?.boundaries?.enforcement === 'enforce' ? 'enforce' : 'audit' };
+}
+
 /** Map legacy bare hostIds to the first runtimeKey for that host. */
 function normalizePlacements(placements: any[], hosts: any[]): any[] {
     const first = new Map<string, string>();
@@ -107,6 +124,7 @@ export class ConfigSnapshotService {
         const config = consumer.root ? readConfigFile(consumer.root) : {};
         const settings = readSettings(config);
         const jev = readJev(config);
+        const boundaries = readBoundaries(config, consumer.root);
         const activeStack = (stackVersions as any[]).find((version) => version?.status === 'published') ?? null;
         const payload = {
             consumer: {
@@ -117,6 +135,7 @@ export class ConfigSnapshotService {
                 status: consumer.status,
                 version: consumer.version,
                 jev,
+                boundaries,
             },
             flow: flow
                 ? {

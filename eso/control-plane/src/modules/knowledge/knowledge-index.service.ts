@@ -4,6 +4,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 
 import { fail } from '../../platform/registry/errors.js';
 import { assertConsumerId, type PlatformStore } from '../../platform/registry/store.js';
+import { DEFAULT_POLICIES, type FolderPolicy } from '../boundaries/boundary-policy.service.js';
 
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', '.harness', '.cursor', '.agents', '.claude', 'coverage']);
 const STATUSES = new Set(['DRAFT', 'OPEN', 'READY', 'READY-SPLIT', 'BLOCKED']);
@@ -57,6 +58,52 @@ function walk(dir: string, root: string, out: string[]): void {
             out.push(join(dir, entry.name));
         }
     }
+}
+
+
+
+function globMatches(pattern: string, value: string): boolean {
+    let out = '^';
+    const normalized = pattern.replace(/\\/g, '/');
+    for (let index = 0; index < normalized.length; index += 1) {
+        const char = normalized[index];
+        if (char === '*' && normalized[index + 1] === '*') { out += '.*'; index += 1; }
+        else if (char === '*') out += '[^/]*';
+        else if (char === '?') out += '[^/]';
+        else out += char.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+    }
+    return new RegExp(`${out}$`).test(value);
+}
+
+function policyMatches(policy: FolderPolicy, value: string): boolean {
+    const path = policy.path.replace(/\\/g, '/');
+    if (policy.pathType === 'file') return value === path;
+    if (policy.pathType === 'directory') return value === path || value.startsWith(`${path.replace(/\/$/, '')}/`);
+    return globMatches(path, value);
+}
+
+function policySpecificity(policy: FolderPolicy): number {
+    const exact = policy.pathType === 'file' ? 10_000 : policy.pathType === 'directory' ? 5_000 : 0;
+    return exact + policy.path.replace(/[*?]/g, '').length + (policy.path.includes('**') ? 0 : 100);
+}
+
+function indexAllowed(root: string, abs: string, policies: FolderPolicy[]): boolean {
+    const rel = relative(root, abs).split(sep).join('/');
+    const match = policies
+        .filter((policy) => policyMatches(policy, rel))
+        .sort((left, right) => policySpecificity(right) - policySpecificity(left) || right.priority - left.priority)[0];
+    return Boolean(match && match.read === 'allow' && match.index);
+}
+
+function loadIndexPolicies(root: string): FolderPolicy[] {
+    try {
+        const config = JSON.parse(readFileSync(join(root, '.harness', 'config.json'), 'utf8'));
+        const explicit = config?.profile?.settings?.boundaries?.policies;
+        if (Array.isArray(explicit) && explicit.length > 0) return explicit as FolderPolicy[];
+    } catch {
+        // fall through to defaults
+    }
+    return DEFAULT_POLICIES.map((policy) => ({ ...policy }));
 }
 
 function atomicWrite(path: string, body: string): void {
@@ -122,12 +169,14 @@ export class KnowledgeIndexService {
 
         const files: string[] = [];
         walk(root, root, files);
-        files.sort();
+        const policies = loadIndexPolicies(root);
+        const indexable = files.filter((abs) => indexAllowed(root, abs, policies));
+        indexable.sort();
 
         const docs: ScannedDoc[] = [];
         const byPath = new Map<string, ScannedDoc>();
         const sourceHash = createHash('sha256');
-        for (const abs of files) {
+        for (const abs of indexable) {
             const text = readFileSync(abs, 'utf8');
             sourceHash.update(text);
             const rel = relative(root, abs).split(sep).join('/');

@@ -70,7 +70,7 @@ TypeScript is a dev dependency for `bun run typecheck`; `node_modules/` is gitig
 | `ESO_REMOTE_TOKEN` | Mode B shared secret (bearer + HMAC, min 8 chars) |
 | `ESO_REMOTE_ALLOWED_WS` | **required** comma-separated workspace roots host B may run in |
 | `ESO_REMOTE_URL` | fallback remote endpoint when the snapshot has no `remoteUrl` |
-| `ESO_CONFIG_CACHE_DIR` | snapshot/cache root (default `~/.eso/host-runtime`) |
+| `ESO_CONFIG_CACHE_DIR` | snapshot/cache root (default `<consumer root>/.harness/runtime`) |
 | `ESO_OFFLINE` | `1` forces config from the local cache (`--offline` on the CLI) |
 | `ESO_OBS_BUFFER_DIR` | observation buffer dir (default `<cache>/observations`) |
 | `ESO_REMOTE_LEDGER` | persistent Mode B job ledger (default `<cache>/modeb-jobs.json`) |

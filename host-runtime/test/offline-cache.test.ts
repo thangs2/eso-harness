@@ -219,7 +219,7 @@ describe('offline config snapshot cache', () => {
     it('resolves the cache dir from options and the environment', () => {
         expect(resolveCacheDir('/tmp/explicit', {})).toBe('/tmp/explicit');
         expect(resolveCacheDir(undefined, { ESO_CONFIG_CACHE_DIR: '/tmp/env-dir' })).toBe('/tmp/env-dir');
-        expect(resolveCacheDir(undefined, {}).endsWith(join('.eso', 'host-runtime'))).toBe(true);
+        expect(resolveCacheDir(undefined, {}).endsWith(join('.harness', 'runtime'))).toBe(true);
     });
 
     it('keeps the cache valid across host token rotation and never persists a token', async () => {

@@ -556,12 +556,51 @@ export interface ConsumerSetupResponse {
 
 
 
+
+export type BoundaryPathType = 'file' | 'directory' | 'glob';
+export type BoundaryReadMode = 'allow' | 'deny';
+export type BoundaryWriteMode = 'allow' | 'bypass' | 'gated' | 'warn' | 'deny';
+
+export interface FolderPolicyDto {
+    id: string;
+    path: string;
+    pathType: BoundaryPathType;
+    read: BoundaryReadMode;
+    write: BoundaryWriteMode;
+    index: boolean;
+    priority: number;
+    reason?: string;
+}
+
+export interface BoundaryGrantDto {
+    grantId: string;
+    kind: 'read' | 'write';
+    policyId: string | null;
+    targetPrefix: string;
+    mode: 'once' | 'always';
+    actor: string;
+    purpose: string;
+    expiresAt: string | null;
+    issuedBy: string;
+    issuedAt: string;
+    revokedAt: string | null;
+    signature: string;
+}
+
+export interface BoundaryViewDto {
+    consumerId: string;
+    policies: FolderPolicyDto[];
+    grants: BoundaryGrantDto[];
+    defaults: boolean;
+    enforcement: 'audit' | 'enforce';
+}
+
 export interface HarnessMigrationEntryDto {
     category: 'rules' | 'skills' | 'agents' | 'hooks';
     source: string;
     target: string;
     kind: 'file' | 'directory';
-    status: 'new' | 'conflict';
+    status: 'new' | 'same' | 'conflict';
     reason?: string;
     bytes: number;
 }
@@ -571,7 +610,7 @@ export interface HarnessMigrationPreviewDto {
     root: string;
     planHash: string;
     detected: boolean;
-    totals: Record<'rules' | 'skills' | 'agents' | 'hooks', { new: number; conflict: number }>;
+    totals: Record<'rules' | 'skills' | 'agents' | 'hooks', { new: number; same: number; conflict: number }>;
     entries: HarnessMigrationEntryDto[];
 }
 

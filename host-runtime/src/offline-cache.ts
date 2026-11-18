@@ -11,13 +11,13 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { ConfigSnapshot } from './config-client';
 
-export const DEFAULT_CACHE_DIR = join(homedir(), '.eso', 'host-runtime');
+export const DEFAULT_CACHE_DIR = join(process.env.ESO_CONSUMER_ROOT?.trim() || process.cwd(), '.harness', 'runtime');
 export const DEFAULT_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 /** Cache/ledger/buffer directories are private (0700) and files are private (0600). */
 export const PRIVATE_DIR_MODE = 0o700;
 export const PRIVATE_FILE_MODE = 0o600;
 
-/** Cache root: explicit option → ESO_CONFIG_CACHE_DIR → ~/.eso/host-runtime. */
+/** Cache root: explicit option → ESO_CONFIG_CACHE_DIR → <consumer root>/.harness/runtime. */
 export function resolveCacheDir(explicit?: string, env: Record<string, string | undefined> = process.env): string {
     const fromOption = (explicit ?? '').trim();
     if (fromOption) return fromOption;

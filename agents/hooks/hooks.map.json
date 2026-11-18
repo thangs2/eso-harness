@@ -6,10 +6,22 @@
             "version": 1,
             "hooks": {
                 "afterAgentResponse": [
-                    { "command": "node {tree}/hooks/detect-json-wrapper.mjs --hook" }
+                    {
+                        "command": "node {tree}/hooks/detect-json-wrapper.mjs --hook"
+                    }
                 ],
                 "stop": [
-                    { "command": "node {tree}/hooks/wrapped-output-guard.mjs --stop", "loop_limit": 2 }
+                    {
+                        "command": "node {tree}/hooks/wrapped-output-guard.mjs --stop",
+                        "loop_limit": 2
+                    }
+                ],
+                "preToolUse": [
+                    {
+                        "matcher": "Write|StrReplace|Delete",
+                        "command": "node {tree}/hooks/write-gate.mjs",
+                        "failClosed": true
+                    }
                 ]
             }
         }

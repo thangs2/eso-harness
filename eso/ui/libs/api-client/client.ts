@@ -47,6 +47,9 @@ import type {
     LegacyHarnessArchiveDto,
     HarnessMigrationPreviewDto,
     HarnessMigrationResultDto,
+    BoundaryViewDto,
+    FolderPolicyDto,
+    BoundaryGrantDto,
 } from './types.js';
 
 export class ControlPlaneApiClient {
@@ -768,5 +771,40 @@ export class ControlPlaneApiClient {
         });
         if (!res.ok) throw await this.problem(res);
         return (await res.json()) as HarnessMigrationResultDto;
+    }
+
+    async getBoundaries(id: string): Promise<BoundaryViewDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/boundaries`, { headers: this.getHeaders() });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as BoundaryViewDto;
+    }
+
+    async saveBoundaries(id: string, policies: FolderPolicyDto[], enforcement: 'audit' | 'enforce' = 'audit'): Promise<BoundaryViewDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/boundaries`, {
+            method: 'PUT',
+            headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ policies, enforcement }),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as BoundaryViewDto;
+    }
+
+    async createBoundaryGrant(id: string, body: Record<string, unknown>): Promise<BoundaryGrantDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/boundaries/grants`, {
+            method: 'POST',
+            headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as BoundaryGrantDto;
+    }
+
+    async revokeBoundaryGrant(id: string, grantId: string): Promise<{ revoked: boolean }> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/boundaries/grants/${encodeURIComponent(grantId)}`, {
+            method: 'DELETE',
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as { revoked: boolean };
     }
 }

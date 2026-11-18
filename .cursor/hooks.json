@@ -11,6 +11,13 @@
                 "command": "node .cursor/hooks/wrapped-output-guard.mjs --stop",
                 "loop_limit": 2
             }
+        ],
+        "preToolUse": [
+            {
+                "matcher": "Write|StrReplace|Delete",
+                "command": "node .cursor/hooks/write-gate.mjs",
+                "failClosed": true
+            }
         ]
     }
 }

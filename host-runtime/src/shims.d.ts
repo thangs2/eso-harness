@@ -71,6 +71,7 @@ declare module 'node:fs' {
         options?: 'utf8' | { encoding?: 'utf8'; mode?: number },
     ): void;
     export function chmodSync(path: string, mode: number): void;
+    export function copyFileSync(src: string, dest: string): void;
     export function renameSync(oldPath: string, newPath: string): void;
     export function readdirSync(path: string): string[];
     export function realpathSync(path: string): string;
@@ -86,6 +87,7 @@ declare module 'node:path' {
     export function dirname(path: string): string;
     export function basename(path: string): string;
     export function isAbsolute(path: string): boolean;
+    export function relative(from: string, to: string): string;
 }
 
 declare module 'node:os' {

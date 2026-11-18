@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { CONTROL_PLANE_API_CLIENT } from '../tokens.js';
-import type { ConsumerListResponse, ConsumerPlan, ConsumerProfile, FsBrowseResponse, FsResolveDirectoryResponse, HostDiscoveryDto, McpDiscoveryDto, SetupConsumerPayload, StackVersionsDto, WorkerConfigDto, WorkerPolicyResultDto, WorkerImportPreviewDto, WorkerImportRecordDto, RuleFileDto, RuleImportPreviewDto, MaterialSummaryDto, FlowDefinitionDto, FlowSummaryDto, FlowValidationDto, FlowProposalDto, WorkerSourceStatusDto, PluginManifestDto, ConsumerPluginDto, ProviderRecordDto, JiraProjectDto, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, KnowledgeEmbeddingResultDto, HostRuntimeDto, HostDto, WorkerPlacementDto, ObservationDto, LegacyHarnessReportDto, LegacyHarnessArchiveDto, HarnessMigrationPreviewDto, HarnessMigrationResultDto, ProvisionConsumerResponse } from '../../../../../../libs/api-client/types.js';
+import type { ConsumerListResponse, ConsumerPlan, ConsumerProfile, FsBrowseResponse, FsResolveDirectoryResponse, HostDiscoveryDto, McpDiscoveryDto, SetupConsumerPayload, StackVersionsDto, WorkerConfigDto, WorkerPolicyResultDto, WorkerImportPreviewDto, WorkerImportRecordDto, RuleFileDto, RuleImportPreviewDto, MaterialSummaryDto, FlowDefinitionDto, FlowSummaryDto, FlowValidationDto, FlowProposalDto, WorkerSourceStatusDto, PluginManifestDto, ConsumerPluginDto, ProviderRecordDto, JiraProjectDto, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, KnowledgeEmbeddingResultDto, HostRuntimeDto, HostDto, WorkerPlacementDto, ObservationDto, LegacyHarnessReportDto, LegacyHarnessArchiveDto, HarnessMigrationPreviewDto, HarnessMigrationResultDto, ProvisionConsumerResponse, BoundaryViewDto, FolderPolicyDto, BoundaryGrantDto } from '../../../../../../libs/api-client/types.js';
 
 @Injectable({ providedIn: 'root' })
 export class ConsumerProfileService {
@@ -37,6 +37,26 @@ export class ConsumerProfileService {
     provision(id: string): Promise<ProvisionConsumerResponse> {
         if (!this.client) throw new Error('API client is not configured');
         return this.client.provisionConsumer(id);
+    }
+
+    getBoundaries(id: string): Promise<BoundaryViewDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.getBoundaries(id);
+    }
+
+    saveBoundaries(id: string, policies: FolderPolicyDto[], enforcement: 'audit' | 'enforce' = 'audit'): Promise<BoundaryViewDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.saveBoundaries(id, policies, enforcement);
+    }
+
+    createBoundaryGrant(id: string, body: Record<string, unknown>): Promise<BoundaryGrantDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.createBoundaryGrant(id, body);
+    }
+
+    revokeBoundaryGrant(id: string, grantId: string): Promise<{ revoked: boolean }> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.revokeBoundaryGrant(id, grantId);
     }
 
     previewHarnessMigration(id: string): Promise<HarnessMigrationPreviewDto> {

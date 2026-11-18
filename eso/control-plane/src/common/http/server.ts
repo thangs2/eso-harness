@@ -19,6 +19,7 @@ import { LifecycleService } from '../../modules/consumers/lifecycle/lifecycle.se
 import { PurgeService } from '../../modules/consumers/purge/purge.service.js';
 import { LegacyHarnessService } from '../../modules/consumers/legacy/legacy-harness.service.js';
 import { HarnessMigrationService } from '../../modules/consumers/migration/harness-migration.service.js';
+import { BoundaryPolicyService } from '../../modules/boundaries/boundary-policy.service.js';
 import { ProfileService } from '../../modules/profiles/profile.service.js';
 import { BunScopedDb, IsolationService } from '../db/isolation.js';
 import { FsBrowseService } from '../fs/fs-browse.service.js';
@@ -96,6 +97,7 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
     const purge = new PurgeService(store);
     const legacyHarness = new LegacyHarnessService(store);
     const harnessMigration = new HarnessMigrationService(store);
+    const boundaries = new BoundaryPolicyService(store);
     const profiles = new ProfileService(store);
     const events = new EventReader(store);
     const scoped = options.scoped ?? null;
@@ -400,6 +402,27 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
             return lifecycle.transition((request.params as any).id, action, (request as any).actor);
         });
     }
+
+    app.post('/api/v1/boundaries/rollout', { preHandler: requireAuth }, async (request) => {
+        return boundaries.rollout((request as any).actor);
+    });
+
+    app.get('/api/v1/consumers/:id/boundaries', { preHandler: requireAuth }, async (request) => {
+        return boundaries.get((request.params as any).id);
+    });
+
+    app.put('/api/v1/consumers/:id/boundaries', { preHandler: requireAuth }, async (request) => {
+        const body = request.body as any;
+        return boundaries.save((request.params as any).id, body?.policies, (request as any).actor, body?.enforcement);
+    });
+
+    app.post('/api/v1/consumers/:id/boundaries/grants', { preHandler: requireAuth }, async (request) => {
+        return boundaries.createGrant((request.params as any).id, request.body, (request as any).actor);
+    });
+
+    app.delete('/api/v1/consumers/:id/boundaries/grants/:grantId', { preHandler: requireAuth }, async (request) => {
+        return boundaries.revokeGrant((request.params as any).id, (request.params as any).grantId, (request as any).actor);
+    });
 
     app.get('/api/v1/consumers/:id/harness-migration/preview', { preHandler: requireAuth }, async (request) => {
         return harnessMigration.preview((request.params as any).id);

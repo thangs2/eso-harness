@@ -57,14 +57,14 @@ describe('legacy harness archive', () => {
             '.harness/WORKFLOW_GUIDE.md',
             '.harness/diagnostics',
         ]);
-        assert.match(report.archivePath || '', /^archive\/harness-legacy-\d{8}T\d{6}Z$/);
+        assert.match(report.archivePath || '', /^\.harness\/archive\/harness-legacy-\d{8}T\d{6}Z$/);
         assert.equal(existsSync(join(dir, '.harness', 'config.json')), true);
     });
 
-    it('moves legacy paths into <root>/archive and writes a manifest', async () => {
+    it('moves legacy paths into <root>/.harness/archive and writes a manifest', async () => {
         const { service, dir } = await fixture();
         const result = await service.archive('legacy-consumer', { kind: 'operator', label: 'operator@test' });
-        assert.match(result.archivePath, /^archive\/harness-legacy-/);
+        assert.match(result.archivePath, /^\.harness\/archive\/harness-legacy-/);
         assert.equal(existsSync(join(dir, result.archivePath, '.harness', 'ONBOARDING.md')), true);
         assert.equal(existsSync(join(dir, result.archivePath, 'ARCHIVE_MANIFEST.json')), true);
         const manifest = JSON.parse(readFileSync(join(dir, result.archivePath, 'ARCHIVE_MANIFEST.json'), 'utf8'));

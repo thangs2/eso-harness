@@ -20,6 +20,7 @@ export interface SnapshotConsumer {
     status: string;
     version: number;
     jev?: { mode?: string; consent?: boolean; autoThreshold?: number; confirmThreshold?: number } | null;
+    boundaries?: { policies?: unknown[]; grants?: unknown[] } | null;
 }
 
 export interface SnapshotHostRuntime {
@@ -138,7 +139,7 @@ export interface ConfigClientOptions {
     runtimeKey: string;
     token?: string;
     fetchImpl?: FetchLike;
-    /** Snapshot cache root (default: ESO_CONFIG_CACHE_DIR or ~/.eso/host-runtime). */
+    /** Snapshot cache root (default: ESO_CONFIG_CACHE_DIR or <consumer root>/.harness/runtime). */
     cacheDir?: string;
     /** Cache-only mode (default: ESO_OFFLINE=1). */
     offline?: boolean;
