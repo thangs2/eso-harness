@@ -11,9 +11,17 @@ export class ConsumerProfileService {
         return this.client.listConsumers();
     }
 
-    get(project: string): Promise<ConsumerProfile> {
+    async get(project: string): Promise<ConsumerProfile> {
         if (!this.client) throw new Error('API client is not configured');
-        return this.client.getConsumer(project);
+        const profile = await this.client.getConsumer(project);
+        // The API returns the generated `.harness/config.json` wrapper; the UI edits the
+        // canonical profile inside it. Older consumers may contain more than one wrapper.
+        let inner = profile.profile as unknown as Record<string, any>;
+        for (let depth = 0; depth < 4 && inner && typeof inner === 'object' && inner.profile && typeof inner.profile === 'object'; depth += 1) {
+            inner = inner.profile;
+        }
+        if (inner && typeof inner === 'object') profile.profile = inner as ConsumerProfile['profile'];
+        return profile;
     }
 
     plan(profile: ConsumerProfile): Promise<ConsumerPlan> {

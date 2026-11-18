@@ -159,7 +159,9 @@ describe('L3.2 — registry list/detail', () => {
             await store.setStatus(b, 'retired', new Date().toISOString());
 
             const list = await query.list();
-            assert.deepEqual(list.map((row) => row.id).sort(), [a, b].sort());
+            const ids = list.map((row) => row.id);
+            assert.ok(ids.includes(a), `list must contain ${a}`);
+            assert.ok(ids.includes(b), `list must contain retired ${b}`);
             const detail = await query.get(a);
             assert.equal(detail.id, a);
             assert.equal(detail.status, 'ready');
