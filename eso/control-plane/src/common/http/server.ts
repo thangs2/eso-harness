@@ -428,6 +428,11 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
         return harnessMigration.preview((request.params as any).id);
     });
 
+    app.post('/api/v1/consumers/:id/harness-migration/conflicts/:entryId/resolve', { preHandler: requireAuth }, async (request) => {
+        const body = request.body as any;
+        return harnessMigration.resolveConflict((request.params as any).id, (request.params as any).entryId, body?.strategy, (request as any).actor);
+    });
+
     app.post('/api/v1/consumers/:id/harness-migration/apply', { preHandler: requireAuth }, async (request) => {
         return harnessMigration.apply((request.params as any).id, (request as any).actor);
     });

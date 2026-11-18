@@ -600,8 +600,11 @@ export interface HarnessMigrationEntryDto {
     source: string;
     target: string;
     kind: 'file' | 'directory';
-    status: 'new' | 'same' | 'conflict';
+    id: string;
+    status: 'new' | 'same' | 'conflict' | 'resolved';
     reason?: string;
+    sourceHash?: string;
+    targetHash?: string;
     bytes: number;
 }
 
@@ -610,8 +613,16 @@ export interface HarnessMigrationPreviewDto {
     root: string;
     planHash: string;
     detected: boolean;
-    totals: Record<'rules' | 'skills' | 'agents' | 'hooks', { new: number; same: number; conflict: number }>;
+    totals: Record<'rules' | 'skills' | 'agents' | 'hooks', { new: number; same: number; conflict: number; resolved: number }>;
     entries: HarnessMigrationEntryDto[];
+}
+
+export interface ConflictResolutionResultDto {
+    consumerId: string;
+    entryId: string;
+    strategy: 'keep-eso' | 'adopt-legacy';
+    backupPath: string | null;
+    preview: HarnessMigrationPreviewDto;
 }
 
 export interface HarnessMigrationResultDto {

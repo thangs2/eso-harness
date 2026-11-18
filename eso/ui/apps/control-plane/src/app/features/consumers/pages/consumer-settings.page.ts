@@ -174,7 +174,7 @@ function defaultPlugins(): PluginEntry[] {
             @if (legacyError(); as legacyMessage) { <p class="form-error" role="alert">{{ legacyMessage }}</p> }
             @if (migrationNotice(); as migrationMessage) { <p class="saved-banner" role="status">{{ migrationMessage }}</p> }
             @if (migrationError(); as migrationErrorMessage) { <p class="form-error" role="alert">{{ migrationErrorMessage }}</p> }
-            @if (migrationPreview()?.detected) {
+            @if (migrationActionable()) {
                 <section class="migration-panel" aria-label="Harness migration pipeline">
                     <div class="migration-copy">
                         <p class="eyebrow">Migration pipeline</p>
@@ -188,11 +188,31 @@ function defaultPlugins(): PluginEntry[] {
                                 <div><span>Hooks</span><strong>{{ preview.totals.hooks.new }} new · {{ preview.totals.hooks.same }} same · {{ preview.totals.hooks.conflict }} conflict</strong></div>
                             </div>
                             <code class="plan-hash">plan {{ preview.planHash.slice(0, 16) }}</code>
+                            @if (migrationConflictCount() > 0) {
+                                <p class="migration-conflict-note" role="status">{{ migrationConflictCount() }} conflict(s) cannot be migrated automatically. Apply will skip them; resolve canonical vs legacy first.</p>
+                            }
                         }
                     </div>
+                    @if (migrationConflicts().length > 0) {
+                        <div class="conflict-list">
+                            @for (entry of migrationConflicts(); track entry.id) {
+                                <article class="conflict-row">
+                                    <div class="conflict-copy">
+                                        <code>{{ entry.target }}</code>
+                                        <span>source: {{ entry.source }}</span>
+                                        <small>{{ entry.reason }}</small>
+                                    </div>
+                                    <div class="conflict-actions">
+                                        <button mat-stroked-button type="button" (click)="resolveMigrationConflict(entry.id, 'keep-eso')">Keep ESO</button>
+                                        <button mat-flat-button color="primary" type="button" (click)="resolveMigrationConflict(entry.id, 'adopt-legacy')">Adopt legacy</button>
+                                    </div>
+                                </article>
+                            }
+                        </div>
+                    }
                     <div class="migration-actions">
                         <button mat-stroked-button type="button" [disabled]="migrationLoading() || migrationApplying()" (click)="previewHarnessMigration()">{{ migrationLoading() ? 'Previewing…' : 'Refresh preview' }}</button>
-                        <button mat-flat-button color="primary" type="button" [disabled]="migrationApplying()" (click)="applyHarnessMigration()">{{ migrationApplying() ? 'Migrating…' : 'Migrate to ESO' }}</button>
+                        <button mat-flat-button color="primary" type="button" [disabled]="migrationApplying() || migrationNewCount() === 0 || migrationConflictCount() > 0" (click)="applyHarnessMigration()">{{ migrationApplying() ? 'Migrating…' : (migrationConflictCount() > 0 ? 'Resolve conflicts first' : (migrationNewCount() > 0 ? 'Migrate ' + migrationNewCount() + ' new' : 'No new files to migrate')) }}</button>
                     </div>
                 </section>
             }
@@ -1903,6 +1923,14 @@ function defaultPlugins(): PluginEntry[] {
         .migration-metrics strong { font-size: var(--text-sm); }
         .migration-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; justify-content: flex-end; }
         .plan-hash { color: var(--muted); font-size: var(--text-xs); }
+        .migration-conflict-note { margin: 0; color: var(--warning, #f5a524); font-size: var(--text-sm); }
+        .conflict-list { display: grid; gap: var(--space-2); }
+        .conflict-row { display: flex; gap: var(--space-3); align-items: center; justify-content: space-between; padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-sm); }
+        .conflict-copy { display: grid; gap: 2px; min-width: 0; }
+        .conflict-copy code { overflow-wrap: anywhere; }
+        .conflict-copy span, .conflict-copy small { color: var(--muted); font-size: var(--text-xs); }
+        .conflict-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+        @media (max-width: 700px) { .conflict-row { flex-direction: column; align-items: stretch; } }
         .boundary-mode { margin-bottom: var(--space-3); }
         .link-button { border: 0; background: transparent; color: var(--brand); font: inherit; cursor: pointer; padding: 0; text-decoration: underline; }
         .boundary-list { display: grid; gap: var(--space-2); }
@@ -2093,6 +2121,13 @@ export class ConsumerSettingsPage implements OnInit {
     readonly grantTarget = signal('');
     readonly grantKind = signal<'read' | 'write'>('write');
     readonly grantMode = signal<'once' | 'always'>('once');
+    readonly migrationActionable = computed(() => {
+        const preview = this.migrationPreview();
+        return Boolean(preview && preview.entries.some((entry) => entry.status === 'new' || entry.status === 'conflict'));
+    });
+    readonly migrationNewCount = computed(() => (this.migrationPreview()?.entries || []).filter((entry) => entry.status === 'new').length);
+    readonly migrationConflictCount = computed(() => (this.migrationPreview()?.entries || []).filter((entry) => entry.status === 'conflict').length);
+    readonly migrationConflicts = computed(() => (this.migrationPreview()?.entries || []).filter((entry) => entry.status === 'conflict'));
     readonly finishPrompt = signal(false);
     readonly finishing = signal(false);
     readonly jevAutoThreshold = signal('');
@@ -4033,6 +4068,18 @@ export class ConsumerSettingsPage implements OnInit {
             .finally(() => this.migrationLoading.set(false));
     }
 
+    resolveMigrationConflict(entryId: string, strategy: 'keep-eso' | 'adopt-legacy'): void {
+        if (strategy === 'adopt-legacy' && !window.confirm('Adopt legacy will overwrite the canonical file after backing it up. Continue?')) return;
+        this.migrationError.set('');
+        this.migrationNotice.set('');
+        this.service.resolveMigrationConflict(this.consumerId, entryId, strategy)
+            .then((result) => {
+                this.migrationPreview.set(result.preview);
+                this.migrationNotice.set(result.backupPath ? `Conflict resolved (${strategy}); canonical backup: ${result.backupPath}.` : `Conflict resolved (${strategy}).`);
+            })
+            .catch((err) => this.migrationError.set(err?.detail || err?.message || 'Could not resolve migration conflict'));
+    }
+
     previewHarnessMigration(): void {
         if (this.migrationLoading() || this.migrationApplying()) return;
         this.migrationLoading.set(true);
@@ -4041,7 +4088,8 @@ export class ConsumerSettingsPage implements OnInit {
         this.service.previewHarnessMigration(this.consumerId)
             .then((preview) => {
                 this.migrationPreview.set(preview);
-                if (!preview.detected) this.migrationNotice.set('No migratable rules/skills/agents/hooks found.');
+                if (!preview.detected) this.migrationNotice.set('No legacy host assets found.');
+                else if (!preview.entries.some((entry) => entry.status === 'new' || entry.status === 'conflict')) this.migrationNotice.set('Legacy host assets already match ESO canonical; nothing to migrate.');
             })
             .catch((err) => this.migrationError.set(err?.detail || err?.message || 'Could not preview migration'))
             .finally(() => this.migrationLoading.set(false));
@@ -4098,7 +4146,13 @@ export class ConsumerSettingsPage implements OnInit {
             .then(([legacy, migration]) => {
                 this.legacyHarness.set(legacy);
                 this.migrationPreview.set(migration);
-                if (legacy.detected || migration.detected) {
+                if (migration.entries.some((entry) => entry.status === 'conflict')) {
+                    this.error.set('Resolve migration conflicts before finishing.');
+                    this.finishing.set(false);
+                    return;
+                }
+                const pendingMigration = migration.entries.some((entry) => entry.status === 'new');
+                if (legacy.detected || pendingMigration) {
                     this.finishPrompt.set(true);
                     this.finishing.set(false);
                     return;
@@ -4272,6 +4326,7 @@ export class ConsumerSettingsPage implements OnInit {
                 this.saved.set(true);
                 this.workerImportDirty.set(false);
                 if (navigateAfter) void this.completeFinish();
+                else { void this.loadMigrationPreview(); void this.refreshLegacyHarness(); }
             })
             .catch((err) => this.error.set(err?.detail || err?.message || 'Unable to save settings'))
             .finally(() => this.saving.set(false));

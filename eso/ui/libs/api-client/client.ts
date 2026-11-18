@@ -47,6 +47,7 @@ import type {
     LegacyHarnessArchiveDto,
     HarnessMigrationPreviewDto,
     HarnessMigrationResultDto,
+    ConflictResolutionResultDto,
     BoundaryViewDto,
     FolderPolicyDto,
     BoundaryGrantDto,
@@ -771,6 +772,16 @@ export class ControlPlaneApiClient {
         });
         if (!res.ok) throw await this.problem(res);
         return (await res.json()) as HarnessMigrationResultDto;
+    }
+
+    async resolveMigrationConflict(id: string, entryId: string, strategy: 'keep-eso' | 'adopt-legacy'): Promise<ConflictResolutionResultDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/harness-migration/conflicts/${encodeURIComponent(entryId)}/resolve`, {
+            method: 'POST',
+            headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ strategy }),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as ConflictResolutionResultDto;
     }
 
     async getBoundaries(id: string): Promise<BoundaryViewDto> {
