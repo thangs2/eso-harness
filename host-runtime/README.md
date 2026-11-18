@@ -223,6 +223,9 @@ them: it never dispatches, queues, claims or runs anything.
 
 ## Tests
 
+Property tests (Mode A/B invariants) live in `test/modeab.property.test.ts` and use the seeded
+`test/property-harness.ts`; replay a failure with `PROPERTY_SEED=<seed> bun test`.
+
 ```bash
 cd host-runtime && bun test     # Mode A + Mode B suites
 ```
