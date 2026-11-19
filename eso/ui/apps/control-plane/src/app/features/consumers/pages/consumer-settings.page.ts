@@ -8,7 +8,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { ConsumerProfileService } from '../../../core/consumers/consumer-profile.service.js';
-import type { ConsumerProfile, HostDto, ObservationDto, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, McpProviderDto, WorkerConfigDto, EvidenceRequirementDto, FlowSummaryDto, FlowDefinitionDto, HostRuntimeDto, WorkerPlacementDto, WorkerModelTier, WorkerPlacementFallback, LegacyHarnessReportDto, HarnessMigrationPreviewDto, BoundaryViewDto, FolderPolicyDto, BoundaryPathType, BoundaryReadMode, BoundaryWriteMode } from '../../../../../../../libs/api-client/types.js';
+import type { ConsumerProfile, HostDto, ObservationDto, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, McpProviderDto, WorkerConfigDto, EvidenceRequirementDto, FlowSummaryDto, FlowDefinitionDto, HostRuntimeDto, WorkerPlacementDto, WorkerModelTier, WorkerPlacementFallback, LegacyHarnessReportDto, HarnessMigrationPreviewDto, BoundaryViewDto, FolderPolicyDto, BoundaryPathType, BoundaryReadMode, BoundaryWriteMode, JudgmentResponseDto, JevDecisionDto } from '../../../../../../../libs/api-client/types.js';
 
 /**
  * Only remaining occurrence of the pre-P0.3 host-binding key: settings saved by an older UI.
@@ -1801,6 +1801,27 @@ function defaultPlugins(): PluginEntry[] {
                                     }
                                 </div>
 
+                                <section class="judgment-panel" aria-label="Judgment sufficiency">
+                                    <header class="jev-head">
+                                        <div>
+                                            <h3>Judgment / sufficiency</h3>
+                                            <p class="section-hint">Verdict evidence only. Host executes the gate; ESO computes and displays the verdict. unknown is not absent; cannot-judge never allows.</p>
+                                        </div>
+                                        @if (judgmentResult(); as result) { <span class="tag" [class.tag-muted]="result.decision === 'allow'">{{ result.verdict.level }}</span> }
+                                    </header>
+                                    <mat-form-field appearance="outline" class="full">
+                                        <mat-label>Verdict input JSON</mat-label>
+                                        <textarea matInput rows="7" [ngModel]="judgmentInput()" (ngModelChange)="judgmentInput.set($event)"></textarea>
+                                    </mat-form-field>
+                                    <div class="judgment-actions">
+                                        <button mat-flat-button color="primary" type="button" [disabled]="judgmentLoading()" (click)="runJudgment()">{{ judgmentLoading() ? 'Judging…' : 'Run verdict' }}</button>
+                                        @if (judgmentResult(); as result) {
+                                            <span class="judgment-summary">{{ result.verdict.level }} · basis {{ result.verdict.basis }} · mode {{ result.verdict.mode }} · decision {{ result.decision }}<br>{{ result.gaps.total_gaps || 0 }} gap(s) · wouldBlock {{ result.wouldBlock }}</span>
+                                        }
+                                    </div>
+                                    @if (judgmentError(); as message) { <p class="form-error" role="alert">{{ message }}</p> }
+                                </section>
+
                                 <section class="jev-panel" aria-label="JEV integration">
                                     <header class="jev-head">
                                         <div>
@@ -1832,6 +1853,14 @@ function defaultPlugins(): PluginEntry[] {
                                     } @else {
                                         <p class="section-hint">Threshold rule: auto ≥ confirm. Empty thresholds leave the host default.</p>
                                     }
+                                    <div class="jev-evaluate">
+                                        <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Confidence (0–1)</mat-label><input matInput type="number" min="0" max="1" step="0.01" [ngModel]="jevConfidence()" (ngModelChange)="jevConfidence.set($event)"></mat-form-field>
+                                        <button mat-stroked-button type="button" [disabled]="jevDecisionLoading()" (click)="evaluateJev()">{{ jevDecisionLoading() ? 'Evaluating…' : 'Evaluate decision' }}</button>
+                                        @if (jevDecision(); as decision) {
+                                            <span class="judgment-summary">{{ decision.mode }} · {{ decision.band || '—' }} → {{ decision.decision }}<br>{{ decision.reason }}</span>
+                                        }
+                                    </div>
+                                    @if (jevDecisionError(); as message) { <p class="form-error" role="alert">{{ message }}</p> }
                                 </section>
 
                                 <section class="observation-timeline" aria-label="Observation timeline">
@@ -1954,6 +1983,10 @@ function defaultPlugins(): PluginEntry[] {
         .legacy-target { margin: 0; font-size: var(--text-sm); }
         .migration-preview { display: grid; gap: 2px; padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); font-size: var(--text-sm); }
         .migration-preview span { color: var(--muted); font-size: var(--text-xs); }
+        .judgment-panel { display: grid; gap: var(--space-3); margin-bottom: var(--space-5); padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); }
+        .judgment-actions { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; }
+        .judgment-summary { color: var(--muted); font-size: var(--text-sm); line-height: 1.5; }
+        .jev-evaluate { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; margin-top: var(--space-3); }
         .jev-panel { margin-top: var(--space-5); padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-md); }
         .jev-head { display: flex; justify-content: space-between; gap: var(--space-3); align-items: flex-start; margin-bottom: var(--space-3); }
         .jev-head h3 { margin: 0 0 var(--space-1); }
@@ -2101,6 +2134,14 @@ export class ConsumerSettingsPage implements OnInit {
     readonly tags = signal('');
     readonly description = signal('');
     readonly jevMode = signal<'off' | 'shadow' | 'active'>('off');
+    readonly jevConfidence = signal('0.9');
+    readonly jevDecision = signal<JevDecisionDto | null>(null);
+    readonly jevDecisionLoading = signal(false);
+    readonly jevDecisionError = signal('');
+    readonly judgmentInput = signal(JSON.stringify({ requirements: [], answers: [], enforcement: 'shadow' }, null, 2));
+    readonly judgmentResult = signal<JudgmentResponseDto | null>(null);
+    readonly judgmentLoading = signal(false);
+    readonly judgmentError = signal('');
     readonly legacyHarness = signal<LegacyHarnessReportDto | null>(null);
     readonly legacyLoading = signal(false);
     readonly legacyArchiving = signal(false);
@@ -4232,6 +4273,36 @@ export class ConsumerSettingsPage implements OnInit {
             })
             .catch((err) => this.legacyError.set(err?.detail || err?.message || 'Could not archive legacy harness'))
             .finally(() => this.legacyArchiving.set(false));
+    }
+
+    evaluateJev(): void {
+        const confidence = Number(this.jevConfidence());
+        if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) {
+            this.jevDecisionError.set('Confidence must be between 0 and 1.');
+            return;
+        }
+        this.jevDecisionLoading.set(true);
+        this.jevDecisionError.set('');
+        this.service.decideJev(this.consumerId, confidence)
+            .then((decision) => this.jevDecision.set(decision))
+            .catch((err) => this.jevDecisionError.set(err?.detail || err?.message || 'Could not evaluate JEV decision'))
+            .finally(() => this.jevDecisionLoading.set(false));
+    }
+
+    runJudgment(): void {
+        this.judgmentError.set('');
+        let body: Record<string, unknown>;
+        try {
+            body = JSON.parse(this.judgmentInput());
+        } catch {
+            this.judgmentError.set('Verdict input must be valid JSON.');
+            return;
+        }
+        this.judgmentLoading.set(true);
+        this.service.evaluateSufficiency(this.consumerId, body)
+            .then((result) => this.judgmentResult.set(result))
+            .catch((err) => this.judgmentError.set(err?.detail || err?.message || 'Could not compute verdict'))
+            .finally(() => this.judgmentLoading.set(false));
     }
 
     save(navigateAfter = false): void {

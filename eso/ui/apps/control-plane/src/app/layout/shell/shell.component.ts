@@ -44,6 +44,7 @@ import { AuthService } from '../../core/auth/auth.service.js';
                                 <a [routerLink]="['/consumers', id, 'settings']" routerLinkActive="active" class="side-link">Settings</a>
                                 <a [routerLink]="['/consumers', id, 'flows']" routerLinkActive="active" class="side-link">Flows</a>
                                 <a [routerLink]="['/consumers', id, 'plugins']" routerLinkActive="active" class="side-link">Providers</a>
+                                <a [routerLink]="['/consumers', id, 'architecture']" routerLinkActive="active" class="side-link">Architecture</a>
                                 <a [routerLink]="['/work-overview']" [queryParams]="{ project: id }" class="side-link" [class.active]="onWork() && consumerId() === id">Work</a>
                             }
 

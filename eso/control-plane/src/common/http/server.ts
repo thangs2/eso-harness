@@ -20,6 +20,10 @@ import { PurgeService } from '../../modules/consumers/purge/purge.service.js';
 import { LegacyHarnessService } from '../../modules/consumers/legacy/legacy-harness.service.js';
 import { HarnessMigrationService } from '../../modules/consumers/migration/harness-migration.service.js';
 import { BoundaryPolicyService } from '../../modules/boundaries/boundary-policy.service.js';
+import { JudgmentService } from '../../modules/judgment/judgment.service.js';
+import { JevService } from '../../modules/judgment/jev.service.js';
+import { GraphImpactService } from '../../modules/graph/application/services/graph-impact.service.js';
+import { KnowledgeMappingService } from '../../modules/knowledge/knowledge-mapping.service.js';
 import { ProfileService } from '../../modules/profiles/profile.service.js';
 import { BunScopedDb, IsolationService } from '../db/isolation.js';
 import { FsBrowseService } from '../fs/fs-browse.service.js';
@@ -98,6 +102,10 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
     const legacyHarness = new LegacyHarnessService(store);
     const harnessMigration = new HarnessMigrationService(store);
     const boundaries = new BoundaryPolicyService(store);
+    const judgment = new JudgmentService(store);
+    const jev = new JevService(store);
+    const graphImpact = new GraphImpactService(store, options.scoped ?? null);
+    const knowledgeMapping = new KnowledgeMappingService(store);
     const profiles = new ProfileService(store);
     const events = new EventReader(store);
     const scoped = options.scoped ?? null;
@@ -405,6 +413,31 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
 
     app.post('/api/v1/boundaries/rollout', { preHandler: requireAuth }, async (request) => {
         return boundaries.rollout((request as any).actor);
+    });
+
+    app.post('/api/v1/consumers/:id/jev/decide', { preHandler: requireAuth }, async (request) => {
+        return jev.decide((request.params as any).id, request.body ?? {}, (request as any).actor);
+    });
+
+    app.get('/api/v1/consumers/:id/knowledge/mapping', { preHandler: requireAuth }, async (request) => {
+        return knowledgeMapping.mapping((request.params as any).id);
+    });
+
+    app.get('/api/v1/consumers/:id/graph/impact', { preHandler: requireAuth }, async (request) => {
+        const query = request.query as any;
+        return graphImpact.impact((request.params as any).id, {
+            target: query.target,
+            kind: query.kind,
+            direction: query.direction,
+            depth: query.depth,
+            fanout: query.fanout,
+            project: query.project,
+            buildId: query.buildId,
+        });
+    });
+
+    app.post('/api/v1/consumers/:id/sufficiency', { preHandler: requireAuth }, async (request) => {
+        return judgment.evaluate((request.params as any).id, (request.body as any) ?? {}, (request as any).actor);
     });
 
     app.get('/api/v1/consumers/:id/boundaries', { preHandler: requireAuth }, async (request) => {

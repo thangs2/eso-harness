@@ -48,6 +48,9 @@ import type {
     HarnessMigrationPreviewDto,
     HarnessMigrationResultDto,
     ConflictResolutionResultDto,
+    JudgmentResponseDto,
+    GraphImpactResponseDto,
+    JevDecisionDto,
     BoundaryViewDto,
     FolderPolicyDto,
     BoundaryGrantDto,
@@ -782,6 +785,34 @@ export class ControlPlaneApiClient {
         });
         if (!res.ok) throw await this.problem(res);
         return (await res.json()) as ConflictResolutionResultDto;
+    }
+
+    async evaluateSufficiency(id: string, body: Record<string, unknown>): Promise<JudgmentResponseDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/sufficiency`, {
+            method: 'POST',
+            headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as JudgmentResponseDto;
+    }
+
+    async decideJev(id: string, confidence: number): Promise<JevDecisionDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/jev/decide`, {
+            method: 'POST',
+            headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ confidence }),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as JevDecisionDto;
+    }
+
+    async graphImpact(id: string, query: Record<string, string | number | undefined>): Promise<GraphImpactResponseDto> {
+        const params = new URLSearchParams();
+        for (const [key, value] of Object.entries(query)) if (value !== undefined && value !== '') params.set(key, String(value));
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/graph/impact?${params.toString()}`, { headers: this.getHeaders() });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as GraphImpactResponseDto;
     }
 
     async getBoundaries(id: string): Promise<BoundaryViewDto> {

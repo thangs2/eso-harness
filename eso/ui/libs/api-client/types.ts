@@ -587,6 +587,49 @@ export interface BoundaryGrantDto {
     signature: string;
 }
 
+export interface JevDecisionDto {
+    consumerId: string;
+    mode: 'off' | 'shadow' | 'active';
+    consent: boolean;
+    confidence: number;
+    band: 'auto' | 'confirm' | 'open' | null;
+    decision: 'auto' | 'confirm' | 'ask' | 'observe';
+    reason: string;
+}
+
+export interface GraphImpactResponseDto {
+    status: 'ready' | 'unknown' | 'not-found';
+    consumerId: string;
+    project: string;
+    target: string;
+    direction: 'downstream' | 'upstream';
+    depth: number;
+    coverage: number;
+    reason?: string;
+    nodes: Array<{ node_id: string; kind: string; node_key: string; path?: string | null }>;
+    edges: Array<{ edge_id: string; from_node_id: string; to_node_id: string; kind: string; depth: number; conflict?: boolean; provenance?: { authority?: string | null; claims?: Array<{ source_kind: string; claim: string; at?: string }> } }>;
+    capped: boolean;
+    totalFound: number;
+}
+
+export interface JudgmentResponseDto {
+    consumerId: string;
+    enforcement: 'shadow' | 'enforce';
+    actor: Record<string, unknown>;
+    verdict: {
+        level: 'sufficient' | 'insufficient' | 'partial' | 'cannot-judge' | 'unsurfaced';
+        basis: string;
+        mode: string;
+        ratio?: string;
+        assurance?: string;
+        gaps?: Array<Record<string, unknown>>;
+        unknowns?: Array<Record<string, unknown>>;
+    };
+    gaps: { level?: string; total_gaps?: number; gap_items?: Array<Record<string, unknown>> };
+    wouldBlock: boolean;
+    decision: 'allow' | 'block';
+}
+
 export interface BoundaryViewDto {
     consumerId: string;
     policies: FolderPolicyDto[];

@@ -20,6 +20,8 @@ import { buildPrompt } from './prompt-builder';
 import { buildBlockedEvidence, buildEvidence, eventForOutcome } from './evidence';
 import type { EvidenceRedaction, Outcome, WorkerEvidence } from './evidence';
 import { ObservationClient, ObservationClientError, buildObservationBody } from './observation-client';
+import { evaluateJudgment } from './judgment-client';
+import type { JudgmentGateOptions } from './judgment-client';
 import { DryAdapter } from './adapters/dry';
 import { CursorAdapter } from './adapters/cursor';
 import { AgyAdapter } from './adapters/agy';
@@ -54,6 +56,8 @@ export interface EntrypointOptions {
     offline?: boolean;
     cacheDir?: string;
     bufferDir?: string;
+    /** Optional Phase 2 pre-execution judgment gate. Shadow by default; enforce blocks. */
+    judgment?: JudgmentGateOptions;
     /** Test seam: use this adapter instead of constructing one by name. */
     adapterOverride?: HostAdapter;
     env?: Record<string, string | undefined>;
@@ -395,6 +399,54 @@ export async function runEntrypoint(options: EntrypointOptions): Promise<RunRepo
             maxSteps,
         });
         log(`[step ${hostStep}/${maxSteps}] worker=${current.worker.id} model=${resolution.model} adapter=${adapterName}`);
+
+        if (options.judgment) {
+            const enforcement = options.judgment.enforcement ?? 'shadow';
+            try {
+                const gate = await evaluateJudgment({
+                    baseUrl: options.baseUrl,
+                    consumer,
+                    token: options.authToken,
+                    fetchImpl: options.fetchImpl,
+                    options: {
+                        ...options.judgment,
+                        enforcement,
+                        flowId: flow.id,
+                        workerId: current.worker.id,
+                        intent: options.prompt,
+                    },
+                });
+                if (gate.wouldBlock) {
+                    if (enforcement === 'enforce' && gate.decision === 'block') {
+                        steps.push(
+                            await blockStep({
+                                code: 'JUDGMENT_BLOCKED',
+                                message: `Judgment blocked: ${gate.level} (${gate.totalGaps} gaps)`,
+                                workerId: current.worker.id,
+                                hostStep,
+                                tier: resolution.tier,
+                            }),
+                        );
+                        return finalReport(false, 'JUDGMENT_BLOCKED');
+                    }
+                    log(`[warn] judgment shadow: ${gate.level} would block (${gate.totalGaps} gaps)`);
+                }
+            } catch (error) {
+                if (enforcement === 'enforce') {
+                    steps.push(
+                        await blockStep({
+                            code: 'JUDGMENT_UNAVAILABLE',
+                            message: error instanceof Error ? error.message : 'judgment unavailable',
+                            workerId: current.worker.id,
+                            hostStep,
+                            tier: resolution.tier,
+                        }),
+                    );
+                    return finalReport(false, 'JUDGMENT_UNAVAILABLE');
+                }
+                log(`[warn] judgment shadow unavailable: ${error instanceof Error ? error.message : String(error)}`);
+            }
+        }
 
         const adapterRequest: AdapterRequest = {
             workerId: current.worker.id,

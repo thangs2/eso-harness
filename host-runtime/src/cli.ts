@@ -31,6 +31,7 @@ import type { DispatchOptions, DispatchReport } from './remote/dispatch';
 import { DEFAULT_REMOTE_HOST, DEFAULT_REMOTE_PORT, startRemoteServer } from './remote/server';
 import { ObservationClient } from './observation-client';
 import { installHostHooks } from './hooks';
+import type { JudgmentGateOptions } from './judgment-client';
 import { evaluateAccess } from './write-policy';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -61,6 +62,7 @@ export interface ParsedRunOptions {
     offline: boolean;
     cacheDir?: string;
     bufferDir?: string;
+    judgment?: JudgmentGateOptions;
 }
 
 export interface ParsedDispatchOptions {
@@ -169,6 +171,9 @@ export function helpText(): string {
         '  --offline              config must come from the local snapshot cache (env ESO_OFFLINE=1)',
         '  --cache-dir <dir>      local cache root (env ESO_CONFIG_CACHE_DIR, default <consumer-root>/.harness/runtime)',
         '  --buffer-dir <dir>     buffered observation dir (env ESO_OBS_BUFFER_DIR)',
+        '  --judgment-requirements <json>  Phase 2 gate requirements array',
+        '  --judgment-answers <json>       gate answers array/object',
+        '  --judgment-enforcement <mode>   shadow (default) | enforce',
         '',
         'DISPATCH (Mode B, host A -> host B)',
         '  --from-runtime-key <k> host A runtimeKey (env ESO_RUNTIME_KEY)',
@@ -287,6 +292,9 @@ const VALUE_FLAGS = new Set([
     '--ledger-path',
     '--consumer-root',
     '--hook-host',
+    '--judgment-requirements',
+    '--judgment-answers',
+    '--judgment-enforcement',
     '--target',
     '--access',
 ]);
@@ -322,6 +330,9 @@ const FLAG_KEYS: Record<string, string> = {
     '--ledger-path': 'ledgerPath',
     '--consumer-root': 'consumerRoot',
     '--hook-host': 'hookHost',
+    '--judgment-requirements': 'judgmentRequirements',
+    '--judgment-answers': 'judgmentAnswers',
+    '--judgment-enforcement': 'judgmentEnforcement',
     '--target': 'target',
     '--access': 'access',
 };
@@ -470,6 +481,17 @@ export function parseArgs(argv: string[], env: Record<string, string | undefined
         if (raw.values.traceId) options.traceId = raw.values.traceId;
         if (raw.values.cacheDir) options.cacheDir = raw.values.cacheDir;
         if (raw.values.bufferDir) options.bufferDir = raw.values.bufferDir;
+        if (raw.values.judgmentRequirements) {
+            let requirements: unknown;
+            try { requirements = JSON.parse(raw.values.judgmentRequirements); } catch { throw new CliUsageError('--judgment-requirements must be valid JSON'); }
+            if (!Array.isArray(requirements)) throw new CliUsageError('--judgment-requirements must be a JSON array');
+            let answers: unknown = [];
+            if (raw.values.judgmentAnswers) {
+                try { answers = JSON.parse(raw.values.judgmentAnswers); } catch { throw new CliUsageError('--judgment-answers must be valid JSON'); }
+            }
+            const enforcement = raw.values.judgmentEnforcement === 'enforce' ? 'enforce' : 'shadow';
+            options.judgment = { requirements, answers: answers as unknown[] | Record<string, unknown>, enforcement };
+        }
         return { command, json: raw.json, options };
     }
 
@@ -598,6 +620,7 @@ export function toEntrypointOptions(parsed: ParsedRunOptions): EntrypointOptions
     if (parsed.traceId) options.traceId = parsed.traceId;
     if (parsed.cacheDir) options.cacheDir = parsed.cacheDir;
     if (parsed.bufferDir) options.bufferDir = parsed.bufferDir;
+    if (parsed.judgment) options.judgment = parsed.judgment;
     return options;
 }
 
