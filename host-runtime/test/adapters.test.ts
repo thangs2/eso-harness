@@ -23,10 +23,10 @@ describe('cursor adapter', () => {
         expect(result.exitCode).toBe(0);
         expect(result.blocked).toBe(false);
         expect(result.dry).toBe(false);
-        expect(result.stdout).toContain('-p --model auto');
+        expect(result.stdout).toContain('--trust -p --model auto');
         expect(result.stdout).toContain(request.prompt);
         // The command recorded for logs masks the prompt body.
-        expect(result.command).toEqual(['/bin/echo', '-p', '--model', 'auto', '<prompt>']);
+        expect(result.command).toEqual(['/bin/echo', '--trust', '-p', '--model', 'auto', '<prompt>']);
         expect(result.command?.includes(request.prompt)).toBe(false);
     });
 
@@ -73,7 +73,7 @@ describe('agy adapter', () => {
         expect(adapter.resolve()).toBe('/bin/echo');
         const result = await adapter.run(request);
         expect(result.ok).toBe(true);
-        expect(result.stdout).toContain('-p --model auto');
+        expect(result.stdout).toContain('--model auto -p');
         expect(result.stdout).not.toContain('--effort');
     });
 
@@ -81,8 +81,8 @@ describe('agy adapter', () => {
         const adapter = new AgyAdapter({ env: { [AGY_ENV_VAR]: '/bin/echo', PATH: '' }, homeDir: '/nonexistent' });
         const result = await adapter.run({ ...request, effort: 'high' });
         expect(result.ok).toBe(true);
-        expect(result.stdout).toContain('-p --model auto --effort high');
-        expect(result.command).toEqual(['/bin/echo', '-p', '--model', 'auto', '--effort', 'high', '<prompt>']);
+        expect(result.stdout).toContain('--model auto --effort high -p');
+        expect(result.command).toEqual(['/bin/echo', '--model', 'auto', '--effort', 'high', '-p', '<prompt>']);
     });
 
     it('never invents an unsupported agy effort value', async () => {

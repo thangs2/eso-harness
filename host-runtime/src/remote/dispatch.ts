@@ -78,6 +78,7 @@ export interface DispatchOptions {
     fetchImpl?: FetchLike;
     /** Remote transport fetch seam (defaults to the real fetch). */
     remoteFetchImpl?: FetchLike;
+    remoteTls?: { ca?: string; cert?: string; key?: string; rejectUnauthorized?: boolean };
     sleepImpl?: (ms: number) => Promise<void>;
     /** Offline mode: config must come from the local snapshot cache. */
     offline?: boolean;
@@ -334,6 +335,7 @@ export async function runDispatch(options: DispatchOptions): Promise<DispatchRep
             secret: options.remoteToken,
             timeoutMs: options.remoteTimeoutMs ?? DEFAULT_DISPATCH_TIMEOUT_MS,
             fetchImpl: options.remoteFetchImpl,
+            tls: options.remoteTls,
         });
     } catch (error) {
         const code = error instanceof RemoteClientError || error instanceof EnvelopeError ? error.code : 'DISPATCH_FAILED';

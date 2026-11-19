@@ -50,6 +50,7 @@ import type {
     ConflictResolutionResultDto,
     JudgmentResponseDto,
     GraphImpactResponseDto,
+    LearningProposalDto,
     JevDecisionDto,
     BoundaryViewDto,
     FolderPolicyDto,
@@ -805,6 +806,22 @@ export class ControlPlaneApiClient {
         });
         if (!res.ok) throw await this.problem(res);
         return (await res.json()) as JevDecisionDto;
+    }
+
+    async learningProposals(id: string): Promise<{ consumerId: string; proposals: LearningProposalDto[] }> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/learning/proposals`, { headers: this.getHeaders() });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as { consumerId: string; proposals: LearningProposalDto[] };
+    }
+
+    async learningAction(id: string, proposalId: string, action: 'approve' | 'reject' | 'apply' | 'revert', body: Record<string, unknown> = {}): Promise<LearningProposalDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/learning/proposals/${encodeURIComponent(proposalId)}/${action}`, {
+            method: 'POST',
+            headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as LearningProposalDto;
     }
 
     async graphImpact(id: string, query: Record<string, string | number | undefined>): Promise<GraphImpactResponseDto> {

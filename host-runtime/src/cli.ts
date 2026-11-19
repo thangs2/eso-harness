@@ -84,6 +84,7 @@ export interface ParsedDispatchOptions {
     timeoutMs: number;
     remoteTimeoutMs: number;
     remoteUrl?: string;
+    remoteTls?: { ca?: string; cert?: string; key?: string; rejectUnauthorized?: boolean };
     workspaceRepo?: string;
     workspaceBranch?: string;
     workspaceCommit?: string;
@@ -104,6 +105,8 @@ export interface ParsedServeOptions {
     remoteToken: string;
     allowedWorkspaces: string[];
     ledgerPath?: string;
+    tls?: { key: string; cert: string };
+    mtls?: { ca: string };
 }
 
 export interface ParsedFlushOptions {
@@ -191,6 +194,11 @@ export function helpText(): string {
         '  --port <n>             listen port (default: ' + DEFAULT_REMOTE_PORT + ')',
         '  --allowed-workspace <p> repeatable allowed workspace root (env ESO_REMOTE_ALLOWED_WS, comma-separated)',
         '  --ledger-path <p>      persistent Mode B job ledger (env ESO_REMOTE_LEDGER)',
+        '  --tls-key <path>       TLS private key for production Mode B',
+        '  --tls-cert <path>      TLS certificate for production Mode B',
+        '  --mtls-ca <path>       require + verify client cert (server) / trust server CA (dispatch)',
+        '  --mtls-cert <path>     client certificate for mTLS dispatch',
+        '  --mtls-key <path>      client private key for mTLS dispatch',
         '  ESO_HOST_TOKEN         host B scoped bearer token for observation writes',
         '  ESO_REMOTE_TOKEN       shared Mode B secret (bearer + HMAC)',
         '',
@@ -295,6 +303,11 @@ const VALUE_FLAGS = new Set([
     '--judgment-requirements',
     '--judgment-answers',
     '--judgment-enforcement',
+    '--tls-key',
+    '--tls-cert',
+    '--mtls-ca',
+    '--mtls-cert',
+    '--mtls-key',
     '--target',
     '--access',
 ]);
@@ -333,6 +346,11 @@ const FLAG_KEYS: Record<string, string> = {
     '--judgment-requirements': 'judgmentRequirements',
     '--judgment-answers': 'judgmentAnswers',
     '--judgment-enforcement': 'judgmentEnforcement',
+    '--tls-key': 'tlsKey',
+    '--tls-cert': 'tlsCert',
+    '--mtls-ca': 'mtlsCa',
+    '--mtls-cert': 'mtlsCert',
+    '--mtls-key': 'mtlsKey',
     '--target': 'target',
     '--access': 'access',
 };
@@ -550,6 +568,14 @@ export function parseArgs(argv: string[], env: Record<string, string | undefined
         if (raw.values.traceId) options.traceId = raw.values.traceId;
         if (raw.values.cacheDir) options.cacheDir = raw.values.cacheDir;
         if (raw.values.bufferDir) options.bufferDir = raw.values.bufferDir;
+        if (raw.values.mtlsCa || raw.values.mtlsCert || raw.values.mtlsKey) {
+            if (!raw.values.mtlsCert || !raw.values.mtlsKey) throw new CliUsageError('--mtls-cert and --mtls-key must be provided together');
+            options.remoteTls = {
+                ...(raw.values.mtlsCa ? { ca: readFileSync(raw.values.mtlsCa, 'utf8') } : {}),
+                cert: readFileSync(raw.values.mtlsCert, 'utf8'),
+                key: readFileSync(raw.values.mtlsKey, 'utf8'),
+            };
+        }
         return { command, json: raw.json, options };
     }
 
@@ -595,6 +621,11 @@ export function parseArgs(argv: string[], env: Record<string, string | undefined
         allowedWorkspaces: resolveAllowedWorkspaces(raw, env),
     };
     if (raw.values.ledgerPath) options.ledgerPath = raw.values.ledgerPath;
+    if (raw.values.tlsKey || raw.values.tlsCert) {
+        if (!raw.values.tlsKey || !raw.values.tlsCert) throw new CliUsageError('--tls-key and --tls-cert must be provided together');
+        options.tls = { key: raw.values.tlsKey, cert: raw.values.tlsCert };
+    }
+    if (raw.values.mtlsCa) options.mtls = { ca: raw.values.mtlsCa };
     return { command, json: raw.json, options };
 }
 
@@ -645,6 +676,7 @@ export function toDispatchOptions(parsed: ParsedDispatchOptions, log?: (line: st
     if (parsed.workerId) options.workerId = parsed.workerId;
     if (parsed.model) options.model = parsed.model;
     if (parsed.remoteUrl) options.remoteUrl = parsed.remoteUrl;
+    if (parsed.remoteTls) options.remoteTls = parsed.remoteTls;
     if (parsed.workspaceRepo) options.workspaceRepo = parsed.workspaceRepo;
     if (parsed.workspaceBranch) options.workspaceBranch = parsed.workspaceBranch;
     if (parsed.workspaceCommit) options.workspaceCommit = parsed.workspaceCommit;
@@ -726,6 +758,8 @@ async function serveCommand(parsed: ParsedServeOptions, json: boolean, io: CliIo
             hostToken: parsed.hostToken,
             allowedWorkspaces: parsed.allowedWorkspaces,
             ...(parsed.ledgerPath ? { ledgerPath: parsed.ledgerPath } : {}),
+            ...(parsed.tls ? { tls: parsed.tls } : {}),
+            ...(parsed.mtls ? { mtls: parsed.mtls } : {}),
             log: (line) => io.stderr(`${line}\n`),
         });
     } catch (error) {

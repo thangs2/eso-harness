@@ -40,6 +40,8 @@ export interface DispatchRemoteOptions {
     secret: string;
     timeoutMs?: number;
     fetchImpl?: FetchLike;
+    /** Client TLS material for mTLS (Bun fetch `tls` option). */
+    tls?: { ca?: string; cert?: string; key?: string; rejectUnauthorized?: boolean };
 }
 
 export interface DispatchRemoteOutcome {
@@ -106,7 +108,8 @@ export async function dispatchRemote(job: JobEnvelope, options: DispatchRemoteOp
             },
             body: JSON.stringify(signedJob),
             signal: controller.signal,
-        });
+            ...(options.tls ? { tls: options.tls } : {}),
+        } as any);
     } catch (error) {
         if (controller.signal.aborted) {
             throw new RemoteClientError('REMOTE_TIMEOUT', `remote runtime timed out after ${timeoutMs} ms`);

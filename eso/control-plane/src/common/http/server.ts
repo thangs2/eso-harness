@@ -24,6 +24,10 @@ import { JudgmentService } from '../../modules/judgment/judgment.service.js';
 import { JevService } from '../../modules/judgment/jev.service.js';
 import { GraphImpactService } from '../../modules/graph/application/services/graph-impact.service.js';
 import { KnowledgeMappingService } from '../../modules/knowledge/knowledge-mapping.service.js';
+import { LearningService } from '../../modules/learning/learning.service.js';
+import { EvidenceScoreService } from '../../modules/evidence-score/evidence-score.service.js';
+import { ParityService } from '../../modules/parity/parity.service.js';
+import { TeamObservatoryService } from '../../modules/observatory/team-observatory.service.js';
 import { ProfileService } from '../../modules/profiles/profile.service.js';
 import { BunScopedDb, IsolationService } from '../db/isolation.js';
 import { FsBrowseService } from '../fs/fs-browse.service.js';
@@ -106,6 +110,10 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
     const jev = new JevService(store);
     const graphImpact = new GraphImpactService(store, options.scoped ?? null);
     const knowledgeMapping = new KnowledgeMappingService(store);
+    const learning = new LearningService(store);
+    const evidenceScore = new EvidenceScoreService(store);
+    const parity = new ParityService(store);
+    const teamObservatory = new TeamObservatoryService(store);
     const profiles = new ProfileService(store);
     const events = new EventReader(store);
     const scoped = options.scoped ?? null;
@@ -417,6 +425,37 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
 
     app.post('/api/v1/consumers/:id/jev/decide', { preHandler: requireAuth }, async (request) => {
         return jev.decide((request.params as any).id, request.body ?? {}, (request as any).actor);
+    });
+
+    app.get('/api/v1/consumers/:id/observatory/team', { preHandler: requireAuth }, async (request) => {
+        return teamObservatory.summary((request.params as any).id, (request.query as any)?.limit);
+    });
+
+    app.post('/api/v1/consumers/:id/parity', { preHandler: requireAuth }, async (request) => {
+        return parity.compare((request.params as any).id, request.body ?? {});
+    });
+
+    app.post('/api/v1/consumers/:id/evidence-score', { preHandler: requireAuth }, async (request) => {
+        return evidenceScore.score((request.params as any).id, request.body ?? {});
+    });
+
+    app.get('/api/v1/consumers/:id/learning/proposals', { preHandler: requireAuth }, async (request) => {
+        return learning.list((request.params as any).id);
+    });
+    app.post('/api/v1/consumers/:id/learning/proposals', { preHandler: requireAuth }, async (request) => {
+        return learning.propose((request.params as any).id, request.body, (request as any).actor);
+    });
+    app.post('/api/v1/consumers/:id/learning/proposals/:proposalId/approve', { preHandler: requireAuth }, async (request) => {
+        return learning.approve((request.params as any).id, (request.params as any).proposalId, (request as any).actor);
+    });
+    app.post('/api/v1/consumers/:id/learning/proposals/:proposalId/reject', { preHandler: requireAuth }, async (request) => {
+        return learning.reject((request.params as any).id, (request.params as any).proposalId, (request as any).actor, (request.body as any)?.reason);
+    });
+    app.post('/api/v1/consumers/:id/learning/proposals/:proposalId/apply', { preHandler: requireAuth }, async (request) => {
+        return learning.apply((request.params as any).id, (request.params as any).proposalId, (request as any).actor, (request.body as any)?.window);
+    });
+    app.post('/api/v1/consumers/:id/learning/proposals/:proposalId/revert', { preHandler: requireAuth }, async (request) => {
+        return learning.revert((request.params as any).id, (request.params as any).proposalId, (request as any).actor, (request.body as any)?.reason);
     });
 
     app.get('/api/v1/consumers/:id/knowledge/mapping', { preHandler: requireAuth }, async (request) => {

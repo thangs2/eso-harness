@@ -597,6 +597,21 @@ export interface JevDecisionDto {
     reason: string;
 }
 
+export interface LearningProposalDto {
+    proposal_id: string;
+    version: number;
+    risk_kind: string;
+    evidence: string[];
+    expected_effect: string;
+    revert: Record<string, unknown>;
+    status: 'proposed' | 'approved' | 'rejected' | 'applied' | 'reverted';
+    createdBy?: string;
+    createdAt?: string;
+    approvedBy?: string;
+    applied_at?: string | null;
+    reverted_at?: string;
+}
+
 export interface GraphImpactResponseDto {
     status: 'ready' | 'unknown' | 'not-found';
     consumerId: string;

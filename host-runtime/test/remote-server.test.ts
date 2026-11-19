@@ -389,4 +389,63 @@ describe('remote server (host B)', () => {
             temp.cleanup();
         }
     });
+    it('rejects expired jobs and replayed nonces', async () => {
+        const temp = makeTempDir('hr-server-replay-');
+        const harness = await startHarness(temp.dir);
+        try {
+            const expired = await signedJob(temp.dir, {
+                jobId: 'job-expired',
+                nonce: 'nonce-expired',
+                createdAt: new Date(Date.now() - 10 * 60_000).toISOString(),
+            });
+            const expiredResponse = await postJobs(harness.url, expired, REMOTE_SECRET);
+            expect(expiredResponse.status).toBe(422);
+            expect((await expiredResponse.json()).code).toBe('JOB_EXPIRED');
+
+            const first = await signedJob(temp.dir, { jobId: 'job-nonce-a', nonce: 'nonce-shared' });
+            expect((await postJobs(harness.url, first, REMOTE_SECRET)).status).toBe(200);
+            const second = await signedJob(temp.dir, { jobId: 'job-nonce-b', nonce: 'nonce-shared' });
+            const replayResponse = await postJobs(harness.url, second, REMOTE_SECRET);
+            expect(replayResponse.status).toBe(409);
+            expect((await replayResponse.json()).code).toBe('JOB_REPLAY');
+        } finally {
+            await harness.stop();
+            temp.cleanup();
+        }
+    });
+
+    it('requires TLS beyond loopback or when requireTls is set', async () => {
+        const temp = makeTempDir('hr-server-tls-');
+        try {
+            const base: RemoteServerOptions = {
+                runtimeKey: AGY_RUNTIME_KEY,
+                port: 0,
+                host: '0.0.0.0',
+                secret: REMOTE_SECRET,
+                esoBaseUrl: 'http://eso.test',
+                consumer: TEST_CONSUMER,
+                hostToken: B_HOST_TOKEN,
+                allowedWorkspaces: [temp.dir],
+            };
+            expect(() => startRemoteServer(base)).toThrow(/TLS is required/);
+            expect(() => startRemoteServer({ ...base, host: '127.0.0.1', requireTls: true })).toThrow(/TLS is required/);
+        } finally {
+            temp.cleanup();
+        }
+    });
+
+    it('rejects mTLS config without server TLS material', () => {
+        expect(() => startRemoteServer({
+            runtimeKey: AGY_RUNTIME_KEY,
+            port: 0,
+            host: '127.0.0.1',
+            secret: REMOTE_SECRET,
+            esoBaseUrl: 'http://eso.test',
+            consumer: TEST_CONSUMER,
+            hostToken: B_HOST_TOKEN,
+            allowedWorkspaces: ['/tmp'],
+            mtls: { ca: 'ca.pem' },
+        })).toThrow(/mTLS requires/);
+    });
+
 });

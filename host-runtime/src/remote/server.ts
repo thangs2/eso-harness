@@ -16,6 +16,8 @@
  * ESO is not contacted for dispatch: it only receives observations from both hosts.
  */
 
+import { readFileSync } from 'node:fs';
+
 import { constantTimeEqual, createNonce, EnvelopeError, signResult, verifyJobSignature } from './envelope';
 import type { JobEnvelope, ResultEnvelope, SignedResultEnvelope } from './envelope';
 import { JobLedger, resolveLedgerPath } from './job-ledger';
@@ -43,6 +45,14 @@ export interface RemoteServerOptions {
     /** Required root allow-list (ESO_REMOTE_ALLOWED_WS); serve refuses to start when empty. */
     allowedWorkspaces?: string[];
     maxBodyBytes?: number;
+    /** Reject jobs older/newer than this window and reuse of a nonce. */
+    replayWindowMs?: number;
+    /** Optional TLS material for production transport. */
+    tls?: { key: string; cert: string };
+    /** Require and verify a client certificate against this CA (mTLS). */
+    mtls?: { ca: string };
+    /** Reject startup when TLS is not configured, even on loopback. */
+    requireTls?: boolean;
     /** ESO fetch seam for tests. */
     fetchImpl?: FetchLike;
     sleepImpl?: (ms: number) => Promise<void>;
@@ -67,6 +77,7 @@ export interface RemoteServerDeps {
     options: RemoteServerOptions;
     log: (line: string) => void;
     ledger: JobLedger;
+    nonces: Map<string, number>;
 }
 
 function json(status: number, body: unknown): Response {
@@ -197,6 +208,18 @@ async function handleJob(request: Request, deps: RemoteServerDeps): Promise<Resp
         return json(200, cached);
     }
 
+    const replayWindowMs = options.replayWindowMs ?? 5 * 60_000;
+    const createdAt = Date.parse(String((job as any).createdAt ?? ''));
+    if (!Number.isFinite(createdAt) || Math.abs(Date.now() - createdAt) > replayWindowMs) {
+        return json(422, { code: 'JOB_EXPIRED', message: 'job timestamp is outside the replay window' });
+    }
+    const now = Date.now();
+    for (const [nonce, seenAt] of deps.nonces) if (now - seenAt > replayWindowMs) deps.nonces.delete(nonce);
+    if (deps.nonces.has(job.nonce)) {
+        return json(409, { code: 'JOB_REPLAY', message: 'job nonce already used' });
+    }
+    deps.nonces.set(job.nonce, now);
+
     log(
         `[remote] job=${job.jobId} from=${job.fromRuntimeKey} worker=${job.workerId} ` +
             `workspace=${workspace.realpath} adapter=${job.policy.adapter}${job.policy.dryRun ? ' dry-run' : ''}`,
@@ -238,6 +261,12 @@ async function handleJob(request: Request, deps: RemoteServerDeps): Promise<Resp
     return json(200, signed);
 }
 
+function readTlsMaterial(fileOrPem: string): string {
+    const value = String(fileOrPem ?? '');
+    if (value.includes('-----BEGIN')) return value;
+    return readFileSync(value, 'utf8');
+}
+
 export function startRemoteServer(options: RemoteServerOptions): RemoteServerHandle {
     if (!RUNTIME_KEY_PATTERN.test(options.runtimeKey ?? '')) {
         throw new Error(`serve --runtime-key must be hostId:runtimeId, got: ${options.runtimeKey}`);
@@ -251,6 +280,18 @@ export function startRemoteServer(options: RemoteServerOptions): RemoteServerHan
     }
 
     const host = options.host ?? DEFAULT_REMOTE_HOST;
+    const loopback = ['127.0.0.1', 'localhost', '::1', '[::1]'].includes(host);
+    if ((options.requireTls || !loopback) && !options.tls) {
+        throw new Error('TLS is required for Mode B when listening beyond loopback (pass --tls-key and --tls-cert)');
+    }
+    const tls = options.tls
+        ? {
+            key: readTlsMaterial(options.tls.key),
+            cert: readTlsMaterial(options.tls.cert),
+            ...(options.mtls ? { ca: readTlsMaterial(options.mtls.ca), requestCert: true, rejectUnauthorized: true } : {}),
+        }
+        : undefined;
+    if (options.mtls && !options.tls) throw new Error('mTLS requires --tls-key and --tls-cert');
     const log = options.log ?? ((line: string) => process.stderr.write(`${line}\n`));
     const ledger = options.ledger
         ?? new JobLedger({
@@ -261,12 +302,14 @@ export function startRemoteServer(options: RemoteServerOptions): RemoteServerHan
         options: { ...options, host },
         log,
         ledger,
+        nonces: new Map(),
     };
 
     const maxBodyBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
     const server = Bun.serve({
         port: options.port,
         hostname: host,
+        ...(tls ? { tls } : {}),
         maxRequestBodySize: maxBodyBytes,
         fetch: async (request: Request): Promise<Response> => {
             try {
@@ -292,7 +335,7 @@ export function startRemoteServer(options: RemoteServerOptions): RemoteServerHan
     });
 
     const port = server.port;
-    const url = `http://${host}:${port}`;
+    const url = `${tls ? 'https' : 'http'}://${host}:${port}`;
     log(
         `[remote] serve runtimeKey=${options.runtimeKey} url=${url} ` +
             `allowedWorkspaces=${(options.allowedWorkspaces ?? []).join(',') || '(any)'} ledger=${ledger.filePath}`,

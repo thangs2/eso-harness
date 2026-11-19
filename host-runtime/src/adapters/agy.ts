@@ -2,7 +2,8 @@
  * AGY adapter — Mode A deterministic CLI.
  *
  * Spawns the Antigravity CLI on the host:
- *   <agy> -p --model <model> <prompt>
+ *   <agy> --model <model> [-p <prompt>]
+ * The prompt must be the value of `-p`; the CLI otherwise treats the next flag as the prompt.
  * Nothing here runs on ESO.
  */
 
@@ -36,9 +37,9 @@ export class AgyAdapter implements HostAdapter {
         return resolveExecutable({
             command: 'agy',
             env: this.options.env,
-            homeDir: this.options.homeDir,
+            homeDir: this.options.homeDir ?? process.env.HOME ?? '',
             envVar: AGY_ENV_VAR,
-            extraCandidates: agyCandidates(this.options.homeDir ?? ''),
+            extraCandidates: agyCandidates(this.options.homeDir ?? process.env.HOME ?? ''),
             platform: this.options.platform,
         });
     }
@@ -54,7 +55,7 @@ export class AgyAdapter implements HostAdapter {
         }
 
         const effortArgs = agyEffortArgs(request.effort);
-        const args = ['-p', '--model', request.model, ...effortArgs, request.prompt];
+        const args = ['--model', request.model, ...effortArgs, '-p', request.prompt];
         const result = await spawnProcess(executable, args, {
             cwd: request.cwd,
             env: sanitizeChildEnv(request.env ?? this.options.env ?? process.env),
@@ -63,7 +64,7 @@ export class AgyAdapter implements HostAdapter {
 
         return {
             adapter: this.name,
-            command: [executable, '-p', '--model', request.model, ...effortArgs, '<prompt>'],
+            command: [executable, '--model', request.model, ...effortArgs, '-p', '<prompt>'],
             ok: result.ok,
             exitCode: result.exitCode,
             stdout: result.stdout,

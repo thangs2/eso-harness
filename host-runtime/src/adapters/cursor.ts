@@ -2,7 +2,8 @@
  * Cursor adapter — Mode A deterministic CLI.
  *
  * Spawns the Cursor agent CLI on the host:
- *   <cursor-agent> -p --model <model> <prompt>
+ *   <cursor-agent> --trust -p --model <model> <prompt>
+ * `--trust` avoids the interactive workspace-trust prompt in non-interactive `-p` mode.
  * `cursor-agent` is frequently NOT on PATH (it lives in Cursor's agent-cli folder), so the binary
  * is resolved explicitly. Nothing here runs on ESO.
  *
@@ -52,9 +53,9 @@ export class CursorAdapter implements HostAdapter {
         return resolveExecutable({
             command: 'cursor-agent',
             env: this.options.env,
-            homeDir: this.options.homeDir,
+            homeDir: this.options.homeDir ?? process.env.HOME ?? '',
             envVar: CURSOR_AGENT_ENV_VAR,
-            extraCandidates: cursorAgentCandidates(this.options.homeDir ?? ''),
+            extraCandidates: cursorAgentCandidates(this.options.homeDir ?? process.env.HOME ?? ''),
             platform: this.options.platform,
         });
     }
@@ -70,7 +71,7 @@ export class CursorAdapter implements HostAdapter {
         }
 
         // Deliberately no --effort: cursor-agent does not support it (effort lives in the model id).
-        const args = ['-p', '--model', request.model, request.prompt];
+        const args = ['--trust', '-p', '--model', request.model, request.prompt];
         const result = await spawnProcess(executable, args, {
             cwd: request.cwd,
             env: sanitizeChildEnv(request.env ?? this.options.env ?? process.env),
@@ -80,7 +81,7 @@ export class CursorAdapter implements HostAdapter {
         return {
             adapter: this.name,
             // Prompt arg is masked: adapter results are logged and must not carry the prompt body.
-            command: [executable, '-p', '--model', request.model, '<prompt>'],
+            command: [executable, '--trust', '-p', '--model', request.model, '<prompt>'],
             ok: result.ok,
             exitCode: result.exitCode,
             stdout: result.stdout,
