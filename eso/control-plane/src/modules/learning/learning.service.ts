@@ -9,6 +9,8 @@ import { join } from 'node:path';
 
 import { createProposal, applyProposal } from '../../../../learn/src/propose.mjs';
 import { revertProposal } from '../../../../learn/src/revert.mjs';
+import { evaluateEffectiveness } from '../../../../learn/src/evaluate.mjs';
+import { parseWindowDuration } from '../../../../learn/src/apply.mjs';
 import { fail } from '../../platform/registry/errors.js';
 import { assertConsumerId, type PlatformStore } from '../../platform/registry/store.js';
 import type { Actor } from '../../platform/registry/types.js';
@@ -117,6 +119,25 @@ export class LearningService {
             try { return revertProposal({ proposal, actor: 'operator', reason: reason ?? 'Operator rollback' }); }
             catch (error) { fail('INVALID_STATE', error instanceof Error ? error.message : String(error)); }
         }, 'learning.reverted');
+    }
+
+    async measure(consumerId: string, proposalId: string, metrics: any, actor: Actor, now = new Date().toISOString()) {
+        requireOperator(actor);
+        return this.transition(consumerId, proposalId, actor, (proposal) => {
+            if (proposal.status !== 'applied') fail('INVALID_STATE', `proposal is ${proposal.status}, must be applied`);
+            const window = proposal.measure_window;
+            if (!window?.from) fail('INVALID_STATE', 'proposal has no measurement window start');
+            const withEnd = window.to ? window : {
+                ...window,
+                to: new Date(Date.parse(window.from) + parseWindowDuration(window.duration ?? '30d')).toISOString(),
+            };
+            try {
+                const evaluation = evaluateEffectiveness({ proposal: { ...proposal, measure_window: withEnd }, metrics, now });
+                return { ...proposal, measure_window: withEnd, evaluation, evaluatedAt: now };
+            } catch (error) {
+                fail('INVALID_STATE', error instanceof Error ? error.message : String(error));
+            }
+        }, 'learning.measured');
     }
 
     private async transition(consumerId: string, proposalId: string, actor: Actor, update: (proposal: StoredProposal) => StoredProposal, event: string) {

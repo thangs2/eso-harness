@@ -11,7 +11,7 @@ import { existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir as osHomedir, platform as osPlatform } from 'node:os';
 
-export type AdapterName = 'dry' | 'cursor' | 'agy';
+export type AdapterName = 'dry' | 'cursor' | 'agy' | 'main-chat';
 
 export interface AdapterRequest {
     workerId: string;

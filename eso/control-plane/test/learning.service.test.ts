@@ -51,4 +51,26 @@ describe('Phase 4 learning proposals', () => {
         const { service } = await fixture();
         await assert.rejects(service.propose('learning-consumer', { ...proposalInput, revert: {} }, operator), (error: any) => /NO_REVERT/.test(String(error.detail)));
     });
+    it('measures an applied proposal after the window closes', async () => {
+        const { service } = await fixture();
+        const proposed = await service.propose('learning-consumer', proposalInput, operator);
+        await service.approve('learning-consumer', proposed.proposal_id, operator);
+        await service.apply('learning-consumer', proposed.proposal_id, operator);
+        const later = new Date(Date.now() + 31 * 24 * 60 * 60 * 1000).toISOString();
+        const measured = await service.measure('learning-consumer', proposed.proposal_id, {
+            before: { unsat_rate: 0.5, defect_rate: 2 },
+            after: { unsat_rate: 0.2, defect_rate: 2 },
+        }, operator, later);
+        assert.equal(measured.evaluation.effective, true);
+        assert.equal(measured.evaluation.metrics.unsat.decreased, true);
+    });
+
+    it('refuses measurement before the window closes', async () => {
+        const { service } = await fixture();
+        const proposed = await service.propose('learning-consumer', proposalInput, operator);
+        await service.approve('learning-consumer', proposed.proposal_id, operator);
+        await service.apply('learning-consumer', proposed.proposal_id, operator);
+        await assert.rejects(service.measure('learning-consumer', proposed.proposal_id, { before: {}, after: {} }, operator), (error: any) => /NO_MEASUREMENT/.test(String(error.detail)));
+    });
+
 });

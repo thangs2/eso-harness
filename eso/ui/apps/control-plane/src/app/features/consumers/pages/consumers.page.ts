@@ -15,14 +15,14 @@ import type { ConsumerSummary } from '../../../../../../../libs/api-client/types
             <div>
                 <p class="eyebrow">Control Plane</p>
                 <h1>Consumers</h1>
-                <p class="subtitle">Registered profiles; select a consumer to process cases.</p>
+                <p class="subtitle">Registered consumers, provisioning status and control-plane version.</p>
             </div>
             <a mat-flat-button color="primary" routerLink="/setup">Create consumer</a>
         </header>
 
         <div class="stats-row">
             <div class="stat"><span class="stat-value">{{ items().length }}</span><span class="stat-label">consumers</span></div>
-            <div class="stat"><span class="stat-value">{{ profileCount() }}</span><span class="stat-label">profiles</span></div>
+            <div class="stat"><span class="stat-value">{{ readyCount() }}</span><span class="stat-label">ready</span></div>
             <div class="stat"><span class="stat-value">{{ latest() || '—' }}</span><span class="stat-label">last update</span></div>
         </div>
 
@@ -40,21 +40,16 @@ import type { ConsumerSummary } from '../../../../../../../libs/api-client/types
         } @else {
             <section class="panel table-panel">
                 <table class="turns-table" aria-label="Consumer list">
-                    <thead><tr><th>Consumer</th><th>Repo</th><th>Profile</th><th>Version</th><th>Updated</th><th></th></tr></thead>
+                    <thead><tr><th>Consumer</th><th>Repo</th><th>Status</th><th>Version</th><th>Updated</th><th></th></tr></thead>
                     <tbody>
                         @for (item of items(); track item.id) {
                             <tr>
-                                <td class="col-work" data-label="Consumer"><strong>{{ item.id }}</strong><br><small>{{ item.name }}</small></td>
-                                <td data-label="Repo">{{ item.root }}</td>
-                                <td data-label="Profile">
-                                    @if (item.profile?.canonical) {
-                                        <span class="pill">repo harness</span><br><small>{{ item.profile?.canonical?.agents || item.profile?.host || '' }}</small>
-                                    } @else if (item.profile?.source || item.profile?.recipe) {
-                                        <span class="pill">{{ item.profile?.source || item.profile?.recipe }}</span><br><small>{{ item.profile?.host || item.profile?.hostProfile || '' }}</small>
-                                    } @else {
-                                        <span class="muted">—</span>
-                                    }
+                                <td class="col-work" data-label="Consumer">
+                                    <strong>{{ item.name || item.id }}</strong>
+                                    @if (item.name && item.name !== item.id) { <br><small>{{ item.id }}</small> }
                                 </td>
+                                <td data-label="Repo"><span class="repo-path">{{ item.root }}</span></td>
+                                <td data-label="Status"><span class="pill" [class.pill-warn]="item.status !== 'ready'">{{ item.status }}</span></td>
                                 <td data-label="Version">v{{ item.version }}</td>
                                 <td data-label="Updated">{{ item.updatedAt | date: 'dd/MM/yyyy HH:mm' }}</td>
                                 <td class="col-actions" data-label="Actions">
@@ -72,7 +67,7 @@ import type { ConsumerSummary } from '../../../../../../../libs/api-client/types
 export class ConsumersPage implements OnInit {
     private readonly service = inject(ConsumerProfileService);
     readonly items = signal<ConsumerSummary[]>([]);
-    readonly profileCount = computed(() => new Set(this.items().map((item) => item.profile?.recipe).filter(Boolean)).size);
+    readonly readyCount = computed(() => this.items().filter((item) => item.status === 'ready').length);
     readonly latest = computed(() => {
         const dates = this.items().map((item) => item.updatedAt).filter(Boolean).sort();
         return dates.length ? dates[dates.length - 1].slice(0, 16).replace('T', ' ') : '';

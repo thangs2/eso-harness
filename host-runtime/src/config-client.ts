@@ -64,6 +64,7 @@ export interface SnapshotFlowEdge {
 
 export interface SnapshotFlow {
     id: string;
+    taskType?: string;
     name?: string;
     version?: number;
     status?: string;

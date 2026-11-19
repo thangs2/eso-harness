@@ -229,8 +229,8 @@ export class KnowledgeIndexService {
             types.set(type, { type, label: type, representation });
             const sourceDocId = pointer(doc.header.source_of_truth);
             const humanSotDocId = pointer(doc.header.human_sot);
-            if (sourceDocId) edges.set(`${doc.docId}|source_of_truth|${sourceDocId}`, { edgeId: `e-${doc.docId}-source`, fromDocId: doc.docId, toDocId: sourceDocId, kind: 'source_of_truth' });
-            if (humanSotDocId) edges.set(`${doc.docId}|human_sot|${humanSotDocId}`, { edgeId: `e-${doc.docId}-human`, fromDocId: doc.docId, toDocId: humanSotDocId, kind: 'human_sot' });
+            if (sourceDocId && sourceDocId !== doc.docId) edges.set(`${doc.docId}|source_of_truth|${sourceDocId}`, { edgeId: `e-${doc.docId}-source`, fromDocId: doc.docId, toDocId: sourceDocId, kind: 'source_of_truth' });
+            if (humanSotDocId && humanSotDocId !== doc.docId) edges.set(`${doc.docId}|human_sot|${humanSotDocId}`, { edgeId: `e-${doc.docId}-human`, fromDocId: doc.docId, toDocId: humanSotDocId, kind: 'human_sot' });
 
             const linkRegex = /\[[^\]]*\]\(([^)]+)\)/g;
             let match: RegExpExecArray | null;
@@ -250,7 +250,7 @@ export class KnowledgeIndexService {
                 const sectionId = rawAnchor ? sectionsByDoc.get(target.docId)?.get(slug(rawAnchor)) || null : null;
                 links.push({ docId: doc.docId, rawTarget, resolvedDocId: target.docId, resolvedAnchor: rawAnchor || null, resolvedSectionId: sectionId, status: rawAnchor && !sectionId ? 'anchor-missing' : 'resolved', provenance: 'derived' });
                 if (rawAnchor && !sectionId) findings.push({ docId: doc.docId, severity: 'warning', code: 'ANCHOR_MISSING', detail: { target: rawTarget } });
-                edges.set(`${doc.docId}|references|${target.docId}`, { edgeId: `e-${doc.docId}-${target.docId}`, fromDocId: doc.docId, toDocId: target.docId, kind: 'references' });
+                if (target.docId !== doc.docId) edges.set(`${doc.docId}|references|${target.docId}`, { edgeId: `e-${doc.docId}-${target.docId}`, fromDocId: doc.docId, toDocId: target.docId, kind: 'references' });
             }
             if (!doc.header.id && (doc.path.startsWith('sdlc/') || doc.path.startsWith('docs/'))) {
                 findings.push({ docId: doc.docId, severity: 'warning', code: 'HEADER_ID_MISSING', detail: { path: doc.path } });

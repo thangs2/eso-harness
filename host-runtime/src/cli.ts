@@ -37,10 +37,10 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 export const DEFAULT_BASE_URL = 'http://127.0.0.1:8787';
-export const ADAPTER_NAMES: AdapterName[] = ['dry', 'cursor', 'agy'];
+export const ADAPTER_NAMES: AdapterName[] = ['dry', 'cursor', 'agy', 'main-chat'];
 const DEFAULT_REMOTE_TIMEOUT_MS = DEFAULT_DISPATCH_TIMEOUT_MS;
 
-export type CliCommand = 'run' | 'dispatch' | 'serve' | 'flush-observations' | 'install-hooks' | 'check-write' | 'help';
+export type CliCommand = 'run' | 'dispatch' | 'serve' | 'flush-observations' | 'install-hooks' | 'check-write' | 'check-mapping' | 'help';
 
 export interface ParsedRunOptions {
     kind: 'run';
@@ -59,6 +59,7 @@ export interface ParsedRunOptions {
     timeoutMs: number;
     cwd?: string;
     traceId?: string;
+    taskType?: string;
     offline: boolean;
     cacheDir?: string;
     bufferDir?: string;
@@ -89,6 +90,8 @@ export interface ParsedDispatchOptions {
     workspaceBranch?: string;
     workspaceCommit?: string;
     traceId?: string;
+    jobId?: string;
+    taskType?: string;
     offline: boolean;
     cacheDir?: string;
     bufferDir?: string;
@@ -125,6 +128,14 @@ export interface ParsedInstallHooksOptions {
     host: string;
 }
 
+export interface ParsedCheckMappingOptions {
+    kind: 'check-mapping';
+    baseUrl: string;
+    consumer: string;
+    authToken?: string;
+    authKind: AuthKind;
+}
+
 export interface ParsedCheckWriteOptions {
     kind: 'check-write';
     root: string;
@@ -132,7 +143,7 @@ export interface ParsedCheckWriteOptions {
     access: 'read' | 'write';
 }
 
-export type ParsedOptions = ParsedRunOptions | ParsedDispatchOptions | ParsedServeOptions | ParsedFlushOptions | ParsedInstallHooksOptions | ParsedCheckWriteOptions;
+export type ParsedOptions = ParsedRunOptions | ParsedDispatchOptions | ParsedServeOptions | ParsedFlushOptions | ParsedInstallHooksOptions | ParsedCheckWriteOptions | ParsedCheckMappingOptions;
 
 export interface ParsedCli {
     command: CliCommand;
@@ -158,19 +169,22 @@ export function helpText(): string {
         '  bun run src/cli.ts flush-observations --consumer <id> [options]',
         '  bun run src/cli.ts install-hooks --hook-host <host> [--consumer-root <dir>]',
         '  bun run src/cli.ts check-write --target <path> --access read|write [--consumer-root <dir>]',
+        '  bun run src/cli.ts check-mapping --consumer <id> [--base-url <url>]',
         '  bun run src/cli.ts --help',
         '',
         'RUN (Mode A, local worker)',
         '  --runtime-key <key>    hostId:runtimeId, e.g. cursor:cursor-agent (env ESO_RUNTIME_KEY)',
         '  --flow <id>            flow to run; must match the snapshot published flow',
         '  --worker <id>          explicit worker (default: flow entry node, else worker-build)',
-        '  --adapter <name>       dry | cursor | agy (default: dry)',
+        '  --adapter <name>       dry | cursor | agy | main-chat (default: dry)',
         '  --model <id>           explicit model (default: host runtime defaultModel)',
         '  --max-steps <n>        host-side flow step cap, 1..' + MAX_HOST_STEPS + ' (default: ' + DEFAULT_MAX_STEPS + ')',
         '  --dry-run              force the deterministic dry adapter; still writes a REAL observation',
         '  --timeout-ms <n>       adapter process timeout (default: ' + DEFAULT_TIMEOUT_MS + ')',
         '  --cwd <dir>            adapter working directory (default: consumer.root, else current dir)',
-        '  --trace-id <id>        reuse a trace/job id (idempotency checks)',
+        '  --trace-id <id>        chain trace id shared across workers',
+        '  --job-id <id>          unique per worker step (dispatch; defaults to trace id)',
+        '  --task-type <type>     build | audit | verify (also flow.taskType)',
         '  --offline              config must come from the local snapshot cache (env ESO_OFFLINE=1)',
         '  --cache-dir <dir>      local cache root (env ESO_CONFIG_CACHE_DIR, default <consumer-root>/.harness/runtime)',
         '  --buffer-dir <dir>     buffered observation dir (env ESO_OBS_BUFFER_DIR)',
@@ -257,7 +271,7 @@ function parsePositiveInt(name: string, value: string, max?: number): number {
     return parsed;
 }
 
-const COMMANDS: CliCommand[] = ['run', 'dispatch', 'serve', 'flush-observations', 'install-hooks', 'check-write'];
+const COMMANDS: CliCommand[] = ['run', 'dispatch', 'serve', 'flush-observations', 'install-hooks', 'check-write', 'check-mapping'];
 
 interface RawFlags {
     values: Record<string, string>;
@@ -308,6 +322,8 @@ const VALUE_FLAGS = new Set([
     '--mtls-ca',
     '--mtls-cert',
     '--mtls-key',
+    '--job-id',
+    '--task-type',
     '--target',
     '--access',
 ]);
@@ -351,6 +367,8 @@ const FLAG_KEYS: Record<string, string> = {
     '--mtls-ca': 'mtlsCa',
     '--mtls-cert': 'mtlsCert',
     '--mtls-key': 'mtlsKey',
+    '--job-id': 'jobId',
+    '--task-type': 'taskType',
     '--target': 'target',
     '--access': 'access',
 };
@@ -449,6 +467,23 @@ export function parseArgs(argv: string[], env: Record<string, string | undefined
     const command = raw.command ?? 'run';
 
     const baseUrl = (raw.values.baseUrl ?? '').trim() || envText(env, 'ESO_BASE_URL') || DEFAULT_BASE_URL;
+
+    if (command === 'check-mapping') {
+        const consumer = requireConsumer(raw, env);
+        const credential = resolveCredential(raw, env);
+        if (!credential.token) throw new CliUsageError('no credential: set ESO_OPERATOR_TOKEN or ESO_HOST_TOKEN');
+        return {
+            command,
+            json: raw.json,
+            options: {
+                kind: 'check-mapping',
+                baseUrl: (raw.values.baseUrl ?? '').trim() || envText(env, 'ESO_BASE_URL') || DEFAULT_BASE_URL,
+                consumer,
+                authToken: credential.token,
+                authKind: credential.kind,
+            } as ParsedCheckMappingOptions,
+        };
+    }
 
     if (command === 'check-write') {
         const root = (raw.values.consumerRoot ?? '').trim() || envText(env, 'ESO_CONSUMER_ROOT') || process.cwd();
@@ -566,6 +601,7 @@ export function parseArgs(argv: string[], env: Record<string, string | undefined
         if (raw.values.workspaceBranch) options.workspaceBranch = raw.values.workspaceBranch;
         if (raw.values.workspaceCommit) options.workspaceCommit = raw.values.workspaceCommit;
         if (raw.values.traceId) options.traceId = raw.values.traceId;
+        if (raw.values.taskType) options.taskType = raw.values.taskType;
         if (raw.values.cacheDir) options.cacheDir = raw.values.cacheDir;
         if (raw.values.bufferDir) options.bufferDir = raw.values.bufferDir;
         if (raw.values.mtlsCa || raw.values.mtlsCert || raw.values.mtlsKey) {
@@ -649,6 +685,7 @@ export function toEntrypointOptions(parsed: ParsedRunOptions): EntrypointOptions
     if (parsed.model) options.model = parsed.model;
     if (parsed.cwd) options.cwd = parsed.cwd;
     if (parsed.traceId) options.traceId = parsed.traceId;
+    if (parsed.taskType) options.taskType = parsed.taskType;
     if (parsed.cacheDir) options.cacheDir = parsed.cacheDir;
     if (parsed.bufferDir) options.bufferDir = parsed.bufferDir;
     if (parsed.judgment) options.judgment = parsed.judgment;
@@ -681,6 +718,8 @@ export function toDispatchOptions(parsed: ParsedDispatchOptions, log?: (line: st
     if (parsed.workspaceBranch) options.workspaceBranch = parsed.workspaceBranch;
     if (parsed.workspaceCommit) options.workspaceCommit = parsed.workspaceCommit;
     if (parsed.traceId) options.traceId = parsed.traceId;
+    if (parsed.jobId) options.jobId = parsed.jobId;
+    if (parsed.taskType) options.taskType = parsed.taskType;
     if (parsed.cacheDir) options.cacheDir = parsed.cacheDir;
     if (parsed.bufferDir) options.bufferDir = parsed.bufferDir;
     if (log) options.log = log;
@@ -854,6 +893,21 @@ export async function main(
         }
         if (parsed.command === 'flush-observations') {
             return await flushCommand(parsed.options as ParsedFlushOptions, parsed.json, io);
+        }
+        if (parsed.command === 'check-mapping') {
+            const options = parsed.options as ParsedCheckMappingOptions;
+            const url = `${options.baseUrl.replace(/\/+$/, '')}/api/v1/consumers/${encodeURIComponent(options.consumer)}/knowledge/mapping/check`;
+            const response = await fetch(url, { headers: { authorization: `Bearer ${options.authToken ?? ''}` } });
+            const body = await response.json().catch(() => ({})) as any;
+            if (!response.ok) {
+                io.stderr(`check-mapping HTTP ${response.status}: ${body?.message ?? body?.code ?? 'request failed'}\n`);
+                return 2;
+            }
+            const errors = Number(body?.counts?.errors ?? 0);
+            const warnings = Number(body?.counts?.warnings ?? 0);
+            if (parsed.json) io.stdout(`${JSON.stringify(body, null, 2)}\n`);
+            else io.stdout(`mapping ${body?.status ?? 'unknown'} · ${errors} errors · ${warnings} warnings\n`);
+            return errors > 0 ? 2 : 0;
         }
         if (parsed.command === 'check-write') {
             const options = parsed.options as ParsedCheckWriteOptions;

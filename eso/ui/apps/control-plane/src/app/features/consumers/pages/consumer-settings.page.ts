@@ -1801,6 +1801,22 @@ function defaultPlugins(): PluginEntry[] {
                                     }
                                 </div>
 
+                                <header class="observatory-hero">
+                                    <div>
+                                        <p class="eyebrow">Evidence plane</p>
+                                        <h2>Observatory</h2>
+                                        <p class="section-hint">Host-reported evidence only. ESO stores, scores and displays; it never executes.</p>
+                                    </div>
+                                    <button mat-stroked-button type="button" [disabled]="observationsLoading()" (click)="refreshObservations()">{{ observationsLoading() ? 'Refreshing…' : 'Refresh evidence' }}</button>
+                                </header>
+                                <div class="observatory-kpis">
+                                    <div class="observatory-kpi"><span>Observations</span><strong>{{ observations().length }}</strong><small>{{ observationTraceCount() }} traces</small></div>
+                                    <div class="observatory-kpi"><span>Hosts</span><strong>{{ observationHostCount() }}</strong><small>{{ observationWorkerCount() }} workers</small></div>
+                                    <div class="observatory-kpi"><span>Last evidence</span><strong>{{ lastObservationAt() || '—' }}</strong><small>host-reported</small></div>
+                                    <div class="observatory-kpi"><span>Gate</span><strong>unknown ≠ absent</strong><small>cannot-judge blocks</small></div>
+                                </div>
+                                <div class="observatory-grid">
+                                    <div class="observatory-column">
                                 <section class="judgment-panel" aria-label="Judgment sufficiency">
                                     <header class="jev-head">
                                         <div>
@@ -1863,6 +1879,7 @@ function defaultPlugins(): PluginEntry[] {
                                     @if (jevDecisionError(); as message) { <p class="form-error" role="alert">{{ message }}</p> }
                                 </section>
 
+                                    </div>
                                 <section class="observation-timeline" aria-label="Observation timeline">
                                     <header class="observation-head">
                                         <div>
@@ -1905,19 +1922,23 @@ function defaultPlugins(): PluginEntry[] {
                                         </ol>
                                     }
                                 </section>
+                                </div>
                             </section>
                         }
                     }
                 </div>
 
                 <footer class="settings-actions">
-                    <button mat-stroked-button type="button" (click)="back()">Cancel</button>
+                    <button mat-stroked-button type="button" (click)="back()">Back</button>
                     <div class="settings-footer-right">
-                        <button mat-stroked-button type="button" [disabled]="saving() || (activeTab() === 'workers' && workerValidationErrors().length > 0)" (click)="save()">Save settings</button>
+                        <span class="dirty-state" role="status" aria-live="polite" [class.dirty-state-on]="dirty() || workerImportDirty()">
+                            {{ dirty() || workerImportDirty() ? 'Unsaved changes' : 'All changes saved' }}
+                        </span>
+                        <button mat-stroked-button type="button" [disabled]="saving() || (!dirty() && !workerImportDirty()) || (activeTab() === 'workers' && workerValidationErrors().length > 0)" (click)="save()">Save changes</button>
                         @if (activeTab() === lastTab) {
                             <button mat-flat-button color="primary" type="button" [disabled]="saving()" (click)="finish()">{{ saving() ? 'Saving…' : 'Finish' }}</button>
                         } @else {
-                            <button mat-flat-button color="primary" type="button" (click)="nextTab()">Next</button>
+                            <button mat-stroked-button type="button" (click)="nextTab()">Next →</button>
                         }
                     </div>
                 </footer>
@@ -2045,7 +2066,19 @@ function defaultPlugins(): PluginEntry[] {
         .event-grid-disabled { opacity: .55; }
         .event-copy { display: grid; gap: 2px; white-space: normal; }
         .event-copy small { color: var(--muted); }
-        .settings-actions { display: flex; justify-content: space-between; gap: var(--space-3); padding-top: var(--space-1); }
+        .observatory-hero { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
+        .observatory-hero h2 { margin: 0; font-size: var(--text-xl); }
+        .observatory-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3); }
+        .observatory-kpi { display: grid; gap: 2px; padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); }
+        .observatory-kpi span { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
+        .observatory-kpi strong { font-size: var(--text-lg); line-height: 1.2; }
+        .observatory-kpi small { color: var(--muted); font-size: var(--text-xs); }
+        .observatory-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, .85fr); gap: var(--space-4); align-items: start; }
+        .observatory-column { display: grid; gap: var(--space-4); }
+        @media (max-width: 1100px) { .observatory-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .observatory-grid { grid-template-columns: 1fr; } }
+        .settings-actions { position: sticky; bottom: 0; z-index: 5; display: flex; justify-content: space-between; gap: var(--space-3); align-items: center; padding: var(--space-3) var(--space-4); margin: 0 calc(var(--space-4) * -1) calc(var(--space-4) * -1); background: color-mix(in srgb, var(--surface) 94%, #000); border-top: 1px solid var(--line); backdrop-filter: blur(8px); }
+        .dirty-state { font-size: var(--text-xs); color: var(--muted); }
+        .dirty-state-on { color: var(--warn-ink); font-weight: 600; }
         .settings-footer-right { display: flex; gap: var(--space-3); align-items: center; }
         .saved-banner { border-left: 4px solid var(--brand); background: color-mix(in srgb, var(--surface) 88%, var(--brand)); padding: var(--space-3); border-radius: var(--radius-sm); margin: 0; }
         .loading-label { color: var(--muted); margin: 0; }
@@ -2062,6 +2095,10 @@ export class ConsumerSettingsPage implements OnInit {
     readonly loading = signal(true);
     readonly saving = signal(false);
     readonly saved = signal(false);
+    readonly currentDraft = signal('');
+    readonly lastSaved = signal<string | null>(null);
+    readonly baselineReady = signal(false);
+    readonly dirty = computed(() => this.baselineReady() && this.lastSaved() !== null && this.currentDraft() !== this.lastSaved());
     readonly error = signal<string | null>(null);
     private readonly current = signal<ConsumerProfile | null>(null);
     readonly activeTab = signal('profile');
@@ -2126,6 +2163,7 @@ export class ConsumerSettingsPage implements OnInit {
         } catch {
             // Storage may be unavailable; the in-memory draft still works.
         }
+        this.currentDraft.set(JSON.stringify(draft));
     });
 
     readonly name = signal('');
@@ -2309,6 +2347,10 @@ export class ConsumerSettingsPage implements OnInit {
     readonly consent = signal(true);
     readonly events = signal<string[]>(['prompt.submitted', 'turn.completed', 'tool.called']);
     readonly observations = signal<ObservationDto[]>([]);
+    readonly observationTraceCount = computed(() => new Set(this.observations().map((item) => item.traceId).filter(Boolean)).size);
+    readonly observationHostCount = computed(() => new Set(this.observations().map((item) => item.hostId).filter(Boolean)).size);
+    readonly observationWorkerCount = computed(() => new Set(this.observations().map((item) => item.workerId).filter(Boolean)).size);
+    readonly lastObservationAt = computed(() => this.observations().map((item) => item.at).filter(Boolean).sort().at(-1)?.slice(0, 19).replace('T', ' ') || '');
     readonly observationsLoading = signal(false);
     readonly observationsError = signal<string | null>(null);
     private observationsLoaded = false;
@@ -4397,6 +4439,7 @@ export class ConsumerSettingsPage implements OnInit {
                 this.current.set(updated);
                 this.hydrate(updated);
                 this.saved.set(true);
+                setTimeout(() => { this.lastSaved.set(this.currentDraft()); this.baselineReady.set(true); }, 0);
                 this.workerImportDirty.set(false);
                 if (navigateAfter) void this.completeFinish();
                 else { void this.loadMigrationPreview(); void this.refreshLegacyHarness(); }
@@ -4517,6 +4560,7 @@ export class ConsumerSettingsPage implements OnInit {
         this.restoreDraft();
         this.pruneWorkerBindings();
         this.hydrated.set(true);
+        setTimeout(() => { this.lastSaved.set(this.currentDraft()); this.baselineReady.set(true); }, 500);
         void this.loadWorkerFiles(profile.id);
         void this.loadWorkerSourceStatus(profile.id);
         void this.loadDefaultFlow(profile.id);

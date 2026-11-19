@@ -22,6 +22,7 @@ export interface FlowEdge {
 
 export interface FlowDefinition {
     id: string;
+    taskType?: string;
     name: string;
     version: number;
     status: 'draft' | 'published';
@@ -45,6 +46,7 @@ function safe(value: any): FlowDefinition {
         name: String(value.name || value.id || 'Flow'),
         version: Number(value.version) || 1,
         status: value.status === 'published' ? 'published' : 'draft',
+        taskType: typeof value.taskType === 'string' ? value.taskType : undefined,
         nodes: Array.isArray(value.nodes) ? value.nodes.map((node: any) => ({ workerId: String(node.workerId || ''), x: Number(node.x) || 0, y: Number(node.y) || 0 })) : [],
         edges: Array.isArray(value.edges) ? value.edges.map((edge: any) => ({
             id: String(edge.id || ''), from: String(edge.from || ''), to: String(edge.to || ''),

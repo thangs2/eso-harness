@@ -74,6 +74,9 @@ export interface DispatchOptions {
     workspaceBranch?: string;
     workspaceCommit?: string;
     traceId?: string;
+    taskType?: string;
+    /** Unique per worker step; defaults to traceId for compatibility. */
+    jobId?: string;
     /** ESO fetch seam (snapshot + observations). */
     fetchImpl?: FetchLike;
     /** Remote transport fetch seam (defaults to the real fetch). */
@@ -95,6 +98,8 @@ export interface DispatchReport {
     remoteUrl: string;
     remoteHttpStatus: number;
     outcome: RemoteOutcome;
+    failureKind?: 'INFRA' | 'VERDICT';
+    errorCode?: string;
     remoteObservationId: string | null;
     localObservationId: string | null;
     localObservationCreated: boolean;
@@ -178,6 +183,7 @@ interface LocalObservationInput {
     fromRuntimeKey: string;
     toRuntimeKey: string;
     jobId: string;
+    traceId: string;
     workerId: string;
     outcome: RemoteOutcome;
     event: string;
@@ -190,7 +196,7 @@ async function writeLocalObservation(
 ): Promise<{ observationId: string; created: boolean }> {
     const written = await client.append({
         observationId: remoteObservationIdFor(input.fromRuntimeKey, input.toRuntimeKey, input.jobId),
-        traceId: input.jobId,
+        traceId: input.traceId,
         hostId: hostIdOf(input.fromRuntimeKey),
         runtimeKey: input.fromRuntimeKey,
         workerId: input.workerId,
@@ -299,7 +305,8 @@ export async function runDispatch(options: DispatchOptions): Promise<DispatchRep
     if (options.workspaceBranch) workspaceRef.branch = options.workspaceBranch;
     if (options.workspaceCommit) workspaceRef.commit = options.workspaceCommit;
 
-    const jobId = (options.traceId ?? crypto.randomUUID()).trim();
+    const jobId = (options.jobId ?? options.traceId ?? crypto.randomUUID()).trim();
+    const traceId = (options.traceId ?? jobId).trim();
     if (!jobId) fail('INVALID_RUNTIME_KEY', 'traceId/jobId must not be empty');
 
     const job: JobEnvelope = {
@@ -321,6 +328,8 @@ export async function runDispatch(options: DispatchOptions): Promise<DispatchRep
         evidenceRequirements: {},
         createdAt: new Date().toISOString(),
         nonce: createNonce(),
+        ...(options.traceId ? { traceId } : {}),
+        ...(options.taskType ? { taskType: options.taskType } : {}),
     };
 
     log(
@@ -348,6 +357,7 @@ export async function runDispatch(options: DispatchOptions): Promise<DispatchRep
                 fromRuntimeKey: options.fromRuntimeKey,
                 toRuntimeKey: options.toRuntimeKey,
                 jobId,
+                traceId,
                 workerId,
                 outcome: 'BLOCKED',
                 event: 'worker.remote.failed',
@@ -355,9 +365,10 @@ export async function runDispatch(options: DispatchOptions): Promise<DispatchRep
                     outcome: 'BLOCKED',
                     remoteRuntimeKey: options.toRuntimeKey,
                     remoteJobId: jobId,
+                    failureKind: 'INFRA',
+                    errorCode: code,
                     workerId,
                     adapter: job.policy.adapter,
-                    errorCode: code,
                     errorMessage: message.slice(0, 500),
                 },
             });
@@ -389,6 +400,7 @@ export async function runDispatch(options: DispatchOptions): Promise<DispatchRep
             fromRuntimeKey: options.fromRuntimeKey,
             toRuntimeKey: options.toRuntimeKey,
             jobId,
+            traceId,
             workerId,
             outcome: result.outcome,
             event,
@@ -397,6 +409,8 @@ export async function runDispatch(options: DispatchOptions): Promise<DispatchRep
                 remoteRuntimeKey: result.remoteRuntimeKey,
                 remoteObservationId: result.observationId,
                 remoteJobId: result.jobId,
+                ...(result.evidence.failureKind ? { failureKind: result.evidence.failureKind } : {}),
+                ...(result.evidence.errorCode ? { errorCode: result.evidence.errorCode } : {}),
                 workerId: result.evidence.workerId,
                 adapter: result.evidence.adapter,
                 model: result.evidence.model,
@@ -440,6 +454,8 @@ export async function runDispatch(options: DispatchOptions): Promise<DispatchRep
         remoteUrl,
         remoteHttpStatus: httpStatus,
         outcome: result.outcome,
+        ...(result.evidence.failureKind ? { failureKind: result.evidence.failureKind } : {}),
+        ...(result.evidence.errorCode ? { errorCode: result.evidence.errorCode } : {}),
         remoteObservationId: result.observationId,
         localObservationId,
         localObservationCreated,

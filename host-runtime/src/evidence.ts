@@ -38,6 +38,8 @@ export interface AdapterRunFacts {
 
 export interface WorkerEvidence {
     outcome: Outcome;
+    failureKind?: 'INFRA' | 'VERDICT';
+    errorCode?: string;
     exitCode: number | null;
     durationMs: number;
     model: string | null;
@@ -128,6 +130,26 @@ export function deriveOutcome(input: {
     return input.exitCode === 0 ? 'PASS' : 'FAIL';
 }
 
+const INFRA_PATTERN = /usage limit|quota|rate limit|too many requests|authentication required|not logged in|pro required|adapter unavailable|not found|ENOENT|spawn|timed? ?out|network|ECONN|ENOTFOUND|certificate|connection refused|usage_limit/i;
+
+/** Distinguish a provider/infra failure from a model verdict. Never guess: explicit OUTCOME wins. */
+export function classifyFailure(input: {
+    blocked?: boolean;
+    exitCode: number | null;
+    stdout?: string;
+    stderr?: string;
+    timedOut?: boolean;
+    reason?: string;
+}): { failureKind: 'INFRA' | 'VERDICT'; errorCode: string } | null {
+    if (input.blocked) return { failureKind: 'INFRA', errorCode: input.reason || 'ADAPTER_BLOCKED' };
+    if (input.timedOut) return { failureKind: 'INFRA', errorCode: 'PROVIDER_TIMEOUT' };
+    const text = `${input.stdout ?? ''}\n${input.stderr ?? ''}\n${input.reason ?? ''}`;
+    if (INFRA_PATTERN.test(text)) return { failureKind: 'INFRA', errorCode: 'PROVIDER_QUOTA_OR_INFRA' };
+    if (explicitOutcome(input.stdout) === 'FAIL') return { failureKind: 'VERDICT', errorCode: 'VERDICT_FAIL' };
+    if (input.exitCode !== 0) return { failureKind: 'INFRA', errorCode: 'PROVIDER_PROCESS_FAILED' };
+    return null;
+}
+
 export function eventForOutcome(outcome: Outcome): 'worker.completed' | 'worker.failed' {
     return outcome === 'PASS' ? 'worker.completed' : 'worker.failed';
 }
@@ -142,8 +164,11 @@ export function buildEvidence(input: BuildEvidenceInput): WorkerEvidence {
     const stdout = redactText(input.stdout, input.redaction);
     const stderr = redactText(input.stderr, input.redaction);
 
+    const outcome = deriveOutcome(input);
+    const failure = outcome === 'PASS' ? null : classifyFailure(input);
     const evidence: WorkerEvidence = {
-        outcome: deriveOutcome(input),
+        outcome,
+        ...(failure ? { failureKind: failure.failureKind, errorCode: failure.errorCode } : {}),
         exitCode: input.exitCode,
         durationMs: Math.max(0, Math.round(input.durationMs)),
         model: input.model,

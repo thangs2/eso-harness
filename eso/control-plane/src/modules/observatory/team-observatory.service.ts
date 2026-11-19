@@ -64,7 +64,7 @@ export class TeamObservatoryService {
                     return map;
                 }, {}),
             },
-            traces: traces.sort((left, right) => String(right.lastAt ?? '').localeCompare(String(left.lastAt ?? ''))),
+            traces: traces.sort((left, right) => String(right.lastAt ?? '').localeCompare(String(left.lastAt ?? '')) || String(left.traceId).localeCompare(String(right.traceId))),
         };
     }
 }

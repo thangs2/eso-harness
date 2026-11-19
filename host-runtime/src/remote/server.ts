@@ -127,6 +127,8 @@ function resultFromReport(
         durationMs: step?.durationMs ?? 0,
         timedOut: step?.timedOut ?? false,
     };
+    if (step?.failureKind) evidence.failureKind = step.failureKind;
+    if (step?.errorCode) evidence.errorCode = step.errorCode;
     if (step?.effort) evidence.effort = step.effort;
     if (step?.warning) evidence.errorCode = step.warning;
     return {
@@ -242,7 +244,8 @@ async function handleJob(request: Request, deps: RemoteServerDeps): Promise<Resp
             maxSteps: job.policy.maxSteps ?? 1,
             timeoutMs: job.policy.timeoutMs,
             cwd: workspace.realpath,
-            traceId: job.jobId,
+            traceId: job.traceId ?? job.jobId,
+            taskType: job.taskType,
             fetchImpl: options.fetchImpl,
             sleepImpl: options.sleepImpl,
             adapterOverride: options.adapterOverride,

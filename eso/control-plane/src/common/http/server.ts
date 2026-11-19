@@ -24,6 +24,7 @@ import { JudgmentService } from '../../modules/judgment/judgment.service.js';
 import { JevService } from '../../modules/judgment/jev.service.js';
 import { GraphImpactService } from '../../modules/graph/application/services/graph-impact.service.js';
 import { KnowledgeMappingService } from '../../modules/knowledge/knowledge-mapping.service.js';
+import { KnowledgeMappingCheckService } from '../../modules/knowledge/knowledge-mapping-check.service.js';
 import { LearningService } from '../../modules/learning/learning.service.js';
 import { EvidenceScoreService } from '../../modules/evidence-score/evidence-score.service.js';
 import { ParityService } from '../../modules/parity/parity.service.js';
@@ -110,6 +111,7 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
     const jev = new JevService(store);
     const graphImpact = new GraphImpactService(store, options.scoped ?? null);
     const knowledgeMapping = new KnowledgeMappingService(store);
+    const knowledgeMappingCheck = new KnowledgeMappingCheckService(store);
     const learning = new LearningService(store);
     const evidenceScore = new EvidenceScoreService(store);
     const parity = new ParityService(store);
@@ -454,12 +456,19 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
     app.post('/api/v1/consumers/:id/learning/proposals/:proposalId/apply', { preHandler: requireAuth }, async (request) => {
         return learning.apply((request.params as any).id, (request.params as any).proposalId, (request as any).actor, (request.body as any)?.window);
     });
+    app.post('/api/v1/consumers/:id/learning/proposals/:proposalId/measure', { preHandler: requireAuth }, async (request) => {
+        return learning.measure((request.params as any).id, (request.params as any).proposalId, (request.body as any)?.metrics, (request as any).actor, (request.body as any)?.now);
+    });
+
     app.post('/api/v1/consumers/:id/learning/proposals/:proposalId/revert', { preHandler: requireAuth }, async (request) => {
         return learning.revert((request.params as any).id, (request.params as any).proposalId, (request as any).actor, (request.body as any)?.reason);
     });
 
     app.get('/api/v1/consumers/:id/knowledge/mapping', { preHandler: requireAuth }, async (request) => {
         return knowledgeMapping.mapping((request.params as any).id);
+    });
+    app.get('/api/v1/consumers/:id/knowledge/mapping/check', { preHandler: requireAuth }, async (request) => {
+        return knowledgeMappingCheck.check((request.params as any).id);
     });
 
     app.get('/api/v1/consumers/:id/graph/impact', { preHandler: requireAuth }, async (request) => {

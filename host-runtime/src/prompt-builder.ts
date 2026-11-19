@@ -18,6 +18,7 @@ export interface PromptInput {
     userPrompt: string;
     hostStep: number;
     maxSteps: number;
+    taskType?: string;
 }
 
 function list(value: string[] | undefined): string {
@@ -47,6 +48,20 @@ export function buildPrompt(input: PromptInput): string {
         ? `${flow.id}${flow.version !== undefined ? ` v${flow.version}` : ''}${flow.name ? ` — ${flow.name}` : ''}`
         : 'unpublished flow';
 
+    const task = (input.taskType || flow?.taskType || 'build').toLowerCase();
+    const taskRules = task === 'audit'
+        ? [
+            'Task type: audit (read-only).',
+            'Do NOT edit files or run mutating commands.',
+            'Inspect the repository and report findings with evidence.',
+            'If the task is not acceptable, end with OUTCOME: FAIL; a human decides next.',
+        ]
+        : task === 'verify'
+            ? ['Task type: verify. Run checks; do not implement features.']
+            : ['Task type: build. Edit only within the worker scope and report evidence.'];
+    const roleRule = ['gate'].includes(String(worker.layer))
+        ? 'This is a gate worker: evaluate, do not implement.'
+        : 'This is a peer worker: work only inside your declared scope.';
     return [
         `You are worker ${worker.id}${worker.name ? ` (${worker.name})` : ''}.`,
         `Role: ${worker.role ?? 'unspecified'} · layer: ${worker.layer ?? 'unspecified'} · status: ${worker.status ?? 'unspecified'}`,
@@ -55,6 +70,9 @@ export function buildPrompt(input: PromptInput): string {
         `Verbs: ${list(worker.verbs)}`,
         `Quality bar: ${barText(worker.bar)}`,
         `Escalation: ${worker.escalation ?? 'unspecified'}`,
+        '',
+        ...taskRules,
+        roleRule,
         '',
         '## Context',
         `Consumer: ${input.consumerId}`,

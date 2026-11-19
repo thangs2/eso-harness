@@ -52,6 +52,9 @@ export interface EvidenceRequirements {
 
 export interface JobEnvelope {
     jobId: string;
+    /** Chain id shared by all workers in one cross-host flow; jobId stays unique per step. */
+    traceId?: string;
+    taskType?: string;
     fromRuntimeKey: string;
     toRuntimeKey: string;
     workspaceRef: WorkspaceRef;
@@ -69,6 +72,7 @@ export type RemoteOutcome = 'PASS' | 'FAIL' | 'BLOCKED';
 
 export interface RemoteEvidence {
     outcome: RemoteOutcome;
+    failureKind?: 'INFRA' | 'VERDICT';
     workerId: string;
     adapter: string;
     model: string | null;
@@ -281,6 +285,10 @@ export function validateJobEnvelope(value: unknown): JobEnvelope {
         createdAt,
         nonce: requiredString(record, 'nonce', 'job', 200),
     };
+    const traceId = optionalString(record, 'traceId', 'job', 200);
+    if (traceId) job.traceId = traceId;
+    const taskType = optionalString(record, 'taskType', 'job', 50);
+    if (taskType) job.taskType = taskType;
     if (job.fromRuntimeKey === job.toRuntimeKey) {
         throw new EnvelopeError('ENVELOPE_INVALID', 'job.fromRuntimeKey and job.toRuntimeKey must differ');
     }
@@ -315,6 +323,8 @@ export function validateResultEnvelope(value: unknown): ResultEnvelope {
     }
     const modelSource = optionalString(evidenceRecord, 'modelSource', 'result.evidence', 50);
     if (modelSource) evidence.modelSource = modelSource;
+    const failureKind = optionalString(evidenceRecord, 'failureKind', 'result.evidence', 20);
+    if (failureKind === 'INFRA' || failureKind === 'VERDICT') evidence.failureKind = failureKind;
     const tier = evidenceRecord.tier;
     if (tier === null || typeof tier === 'string') evidence.tier = tier as string | null;
     const effort = optionalString(evidenceRecord, 'effort', 'result.evidence', 50);

@@ -25,6 +25,7 @@ import type { JudgmentGateOptions } from './judgment-client';
 import { DryAdapter } from './adapters/dry';
 import { CursorAdapter } from './adapters/cursor';
 import { AgyAdapter } from './adapters/agy';
+import { MainChatAdapter } from './adapters/main-chat';
 import { DEFAULT_TIMEOUT_MS } from './adapters/types';
 import type { AdapterName, AdapterRequest, HostAdapter } from './adapters/types';
 
@@ -50,6 +51,7 @@ export interface EntrypointOptions {
     timeoutMs?: number;
     cwd?: string;
     traceId?: string;
+    taskType?: string;
     fetchImpl?: FetchLike;
     sleepImpl?: (ms: number) => Promise<void>;
     /** Offline mode: config must come from the local snapshot cache. */
@@ -74,6 +76,8 @@ export interface StepReport {
     tier?: string | null;
     effort?: string | null;
     outcome: Outcome;
+    failureKind?: 'INFRA' | 'VERDICT';
+    errorCode?: string;
     event: 'worker.completed' | 'worker.failed';
     observationId: string;
     observationCreated: boolean;
@@ -135,8 +139,10 @@ function createAdapter(name: string, options: { env?: Record<string, string | un
             return new CursorAdapter({ env: options.env, homeDir: options.homeDir });
         case 'agy':
             return new AgyAdapter({ env: options.env, homeDir: options.homeDir });
+        case 'main-chat':
+            return new MainChatAdapter({ env: options.env, homeDir: options.homeDir });
         default:
-            throw new EntrypointError('ADAPTER_UNKNOWN', `Unknown adapter: ${name} (expected dry | cursor | agy)`);
+            throw new EntrypointError('ADAPTER_UNKNOWN', `Unknown adapter: ${name} (expected dry | cursor | agy | main-chat)`);
     }
 }
 
@@ -291,6 +297,8 @@ export async function runEntrypoint(options: EntrypointOptions): Promise<RunRepo
         }
         const step: StepReport = {
             hostStep: input.hostStep,
+            ...(input.evidence.failureKind ? { failureKind: input.evidence.failureKind } : {}),
+            ...(input.evidence.errorCode ? { errorCode: input.evidence.errorCode } : {}),
             workerId: input.workerId,
             adapter: input.evidence.adapter,
             model: input.evidence.model,
@@ -397,6 +405,7 @@ export async function runEntrypoint(options: EntrypointOptions): Promise<RunRepo
             userPrompt: options.prompt,
             hostStep,
             maxSteps,
+            taskType: options.taskType ?? flow.taskType,
         });
         log(`[step ${hostStep}/${maxSteps}] worker=${current.worker.id} model=${resolution.model} adapter=${adapterName}`);
 

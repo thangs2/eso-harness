@@ -1,0 +1,5 @@
+# Optional GitLab adapter. Copy to .gitlab-ci.yml only if this repo is hosted on GitLab.
+verify:
+  image: oven/bun:1
+  script:
+    - node scripts/verify.mjs --full

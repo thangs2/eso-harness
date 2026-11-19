@@ -1620,3 +1620,7 @@ button.mat-mdc-button-base { white-space: nowrap; }
 .tier-row mat-form-field { width: 100%; min-width: 0; }
 .runtime-tiers { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
 @media (max-width: 600px) { .tier-row { grid-template-columns: minmax(0, 1fr); } .tier-label { padding-top: 0; } }
+
+/* Consumer list polish */
+.repo-path { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--text-xs); color: var(--muted); overflow-wrap: anywhere; }
+.pill-warn { background: var(--warn-bg); color: var(--warn-ink); }

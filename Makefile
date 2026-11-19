@@ -60,6 +60,12 @@ backup: ## Back up the ENV database
 restore: ## Restore the ENV database from BACKUP=<file>
 	bash deploy/bin/db/restore.sh $(ENV) $(BACKUP)
 
+verify: ## Provider-neutral full verification (host gates + CP/host/UI tests)
+	node scripts/verify.mjs --full
+
+cross-host-smoke: ## Repeatable cross-host flow smoke (dry by default)
+	node scripts/ci/cross-host-smoke.mjs
+
 check: ## Static checks only: shell syntax, compose config, build dry-run
 	find deploy/bin -name "*.sh" -exec bash -n {} +
 	$(COMPOSE) --env-file $(CHECK_ENV_FILE) -f $(COMPOSE_FILE) config -q
