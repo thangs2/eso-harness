@@ -19,6 +19,7 @@ export interface SnapshotConsumer {
     sdlcRoot: string | null;
     status: string;
     version: number;
+    observation?: { consent?: boolean; events?: string[] } | null;
     jev?: { mode?: string; consent?: boolean; autoThreshold?: number; confirmThreshold?: number } | null;
     boundaries?: { policies?: unknown[]; grants?: unknown[] } | null;
 }

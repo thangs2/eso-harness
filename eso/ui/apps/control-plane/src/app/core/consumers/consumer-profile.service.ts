@@ -264,6 +264,11 @@ export class ConsumerProfileService {
         return this.client.publishConsumerFlow(id, flowId);
     }
 
+    deleteFlowDraft(id: string, flowId: string): Promise<any> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.deleteConsumerFlowDraft(id, flowId);
+    }
+
     getMaterialSummary(id: string): Promise<MaterialSummaryDto> {
         if (!this.client) throw new Error('API client is not configured');
         return this.client.getConsumerMaterialSummary(id);

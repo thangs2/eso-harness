@@ -1,15 +1,17 @@
 import { Component, ChangeDetectionStrategy, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { StateFrameComponent } from '../../../shared/state-frame/state-frame.component.js';
 import type { RiskItem } from '../models/risk.model.js';
 
 @Component({
     selector: 'eso-risk-page',
     standalone: true,
-    imports: [StateFrameComponent],
+    imports: [StateFrameComponent, RouterLink],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div class="s4-page-container">
             <header class="page-header">
+                <p class="not-implemented-banner">Not implemented yet — this page is a read-only placeholder. Use <a routerLink="/observatory">Observatory</a> for host events/evidence.</p>
                 <h1>Technical debt & architecture (S4 Debt)</h1>
             </header>
 

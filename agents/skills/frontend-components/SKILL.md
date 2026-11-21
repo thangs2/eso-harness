@@ -1,0 +1,69 @@
+---
+name: frontend-components
+description: ESO component contract — Angular Material controls, buttons, inputs/selects, cards/panels, tables, badges, dialogs, menus, and interaction states. Use when adding or changing a UI element in eso/ui.
+---
+
+# frontend-components
+
+## 1. Stack
+
+- Angular Material + CDK; không tự viết lại control cơ bản.
+- Component standalone, `ChangeDetectionStrategy.OnPush`.
+- Component-scoped CSS; global chỉ token/reset/utility.
+
+## 2. Inventory + required states
+
+| Component | Bắt buộc |
+|---|---|
+| Button | primary/secondary/ghost/danger · sm/md · loading/disabled |
+| Input/Select/Textarea | label · help · error · focus ring · disabled |
+| Card/Panel | header/body/footer · padding `--space-4` |
+| Table | header sticky · empty/loading/error · hover · scroll-wrap |
+| Badge/Pill | success/warn/danger/neutral |
+| Dialog/Toast | focus trap · Esc · aria-live |
+| Menu | keyboard · click outside · aria-expanded |
+
+Mỗi control có default/hover/focus-visible/disabled/loading/error.
+
+## 3. Material overrides
+
+- Ưu tiên Material token/M3 density; chỉ `::ng-deep` khi cần trigger/panel.
+- Select/input phải cùng height, radius, border, focus color với hệ.
+- Select panel phải dark surface + selected/hover state; không để panel trắng mặc định.
+- Không `outline: none` nếu không thay bằng `focus-visible`.
+
+## 4. Row alignment
+
+Mọi cell trong một row dùng **cùng centerline**:
+
+```css
+.row { display: grid; align-items: center; padding-block: 0; }
+.cell { display: flex; align-items: center; }
+```
+
+Không trộn `flex-start` với `center`; hint không được làm thay đổi row height.
+
+## 5. Table
+
+- Header `--text-xs`, weight 500, màu muted.
+- Cell padding `--space-2` `--space-3`; number right-aligned/tabular.
+- Sticky cột action nếu cần; row hover phủ **toàn bộ cell** bằng cùng một biến background.
+- Empty/loading/error là state riêng, không render bảng rỗng.
+
+## 6. Buttons/action
+
+- Primary chỉ một action chính mỗi vùng.
+- Icon-only phải có `aria-label`.
+- Nguy hiểm dùng `color="warn"` + confirm.
+- Action nhóm trong toolbar: gap `--space-2`, divider giữa nhóm.
+
+## 7. Verify
+
+```text
+keyboard tab qua mọi control
+focus-visible rõ
+loading/disabled không đổi layout
+screenshot 360/768/1440
+```
+
+Component consistency = 20 điểm; states = 10 điểm trong rubric tổng.

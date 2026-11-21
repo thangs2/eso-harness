@@ -1,0 +1,101 @@
+---
+name: frontend-layout-spacing
+description: ESO layout contract — rem spacing tokens, page frame, padding vs margin, page stack rhythm, grid/list alignment, table axis, responsive breakpoints, and DOM verification. Use for any change to page layout, spacing, grid, table, or responsive behaviour in eso/ui.
+---
+
+# frontend-layout-spacing
+
+## 1. Tokens — rem only
+
+```css
+--space-1: .25rem; --space-2: .5rem; --space-3: .75rem; --space-4: 1rem;
+--space-5: 1.5rem; --space-6: 2rem; --space-7: 3rem; --space-8: 4rem;
+--text-xs: .75rem; --text-sm: .875rem; --text-md: 1rem;
+--text-lg: 1.25rem; --text-xl: 1.5rem; --text-2xl: 2rem;
+--radius-sm: .375rem; --radius-md: .625rem; --radius-lg: 1rem;
+--container: 80rem; --content-max: 90rem; --page-pad: 1.5rem; --header-h: 4rem;
+```
+
+- Spacing/font/radius mới **phải** dùng token rem.
+- `px` chỉ cho `border: 1px`, breakpoint, hoặc giá trị vật lý có comment.
+
+## 2. Page frame
+
+```css
+.page {
+  display: grid;
+  gap: var(--space-5);
+  width: 100%;
+  max-width: calc(var(--content-max) + var(--page-pad) * 2);
+  margin: 0 auto;
+  padding: var(--page-pad);       /* top = right = bottom = left */
+  box-sizing: border-box;
+}
+```
+
+- Page padding đối xứng 4 phía; **không** `24px 16px`.
+- Route tự giữ gutter ⇒ shell content `padding: 0`; không double padding.
+- Mặc định app: `1.5rem` (24px). `2rem` chỉ khi có chủ đích thiết kế.
+
+## 3. Padding vs margin contract
+
+| Vùng | Padding | Margin | Owner |
+|---|---|---|---|
+| Shell content | `--space-5` | 0 | shell |
+| Page | `--page-pad` | `0 auto` | page |
+| Page stack | gap `--space-5` | 0 | page |
+| Page header | 0 | 0 | page |
+| Section/card | `--space-4` | **0** | component |
+| Section grid | gap `--space-3`…`--space-4` | 0 | component |
+| Table cell | `--space-2` `--space-3` | 0 | table |
+
+**Nguyên tắc:** page sở hữu rhythm; section không sở hữu outer margin.
+
+## 4. Forbidden
+
+```text
+section tự margin-top/bottom để tạo khoảng cách
+max-width + margin:0 auto trên section con khi page đã có width
+double gutter shell + page
+padding không đối xứng
+negative margin để kéo rộng
+hardcode px cho spacing/font/radius
+```
+
+## 5. Grid/list
+
+- Grid dùng `gap`, không margin từng item.
+- Grid-list section **full width** của page content; không tự `max-width: 1280px`.
+- Table header và cell cùng horizontal axis; numeric column `text-align:right; font-variant-numeric:tabular-nums`.
+- Table scroll ngang trong `.table-wrap`, không làm page scroll ngang.
+
+## 6. Responsive
+
+```text
+≥1200: giữ multi-column
+<1200: stack main + aside
+<960: sidebar collapse
+<760: page header stack, table scroll, control full width
+<360: không tràn ngang
+```
+
+## 7. Verify bằng DOM
+
+```js
+const page = document.querySelector('.observatory-page').getBoundingClientRect();
+const grid = document.querySelector('.request-grid').getBoundingClientRect();
+const cs = getComputedStyle(document.querySelector('.observatory-page'));
+
+cs.paddingTop === cs.paddingRight &&
+cs.paddingRight === cs.paddingBottom &&
+cs.paddingBottom === cs.paddingLeft;
+
+grid.x === page.x + parseFloat(cs.paddingLeft);
+grid.width === page.width - 2 * parseFloat(cs.paddingLeft);
+```
+
+Sai >1px ⇒ defect Layout/grid/responsive; không duyệt bằng mắt.
+
+## 8. Rubric
+
+Layout/grid/responsive = 25 điểm. Page frame sai, section margin sai, gutter lệch, tràn ngang ⇒ trừ tối thiểu 10 và ghi defect.

@@ -205,6 +205,16 @@ export class FlowFileService {
         return flow;
     }
 
+    async deleteDraft(consumerId: string, id: string): Promise<any> {
+        const root = await this.root(consumerId);
+        if (!FLOW_ID.test(id)) return { ok: false, reason: 'FLOW_INVALID' };
+        const draft = this.draftPath(root, id);
+        if (!existsSync(draft)) return { ok: false, reason: 'NO_DRAFT' };
+        rmSync(draft, { force: true });
+        await this.indexFlows(consumerId);
+        return { ok: true, flowId: id };
+    }
+
     async publish(consumerId: string, id: string): Promise<any> {
         const root = await this.root(consumerId);
         const draft = this.readIfExists(this.draftPath(root, id));

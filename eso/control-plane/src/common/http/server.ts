@@ -51,6 +51,7 @@ import { FlowProposalService } from '../../modules/flows/flow-proposal.service.j
 import { HostRuntimeService } from '../../modules/host-runtime/host-runtime.service.js';
 import { ConfigSnapshotService, RUNTIME_KEY_PATTERN, etagMatches } from '../../modules/config-snapshot/config-snapshot.service.js';
 import { ObservationService } from '../../modules/observations/observation.service.js';
+import { RequestService } from '../../modules/requests/request.service.js';
 import { PluginService } from '../../modules/plugins/plugin.service.js';
 
 /**
@@ -141,6 +142,7 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
     const hostTokens = new HostTokenService(store);
     const configSnapshot = new ConfigSnapshotService(store, flowFiles, workerFiles, hostRuntime);
     const observations = new ObservationService(store);
+    const requests = new RequestService(store, configSnapshot);
     const plugins = new PluginService(store);
 
     const provisionConsumer = async (id: string, body: any) => {
@@ -718,6 +720,58 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
         return observations.list((request.params as any).id, limit);
     });
 
+    // Read-only request projection: one trace = one request. No execution state.
+    app.get('/api/v1/consumers/:id/requests', { preHandler: requireAuth }, async (request) => {
+        const limit = Number((request.query as any)?.limit) || 200;
+        return requests.list((request.params as any).id, limit);
+    });
+
+    app.get('/api/v1/consumers/:id/requests/:requestId', { preHandler: requireAuth }, async (request) => {
+        return requests.get((request.params as any).id, (request.params as any).requestId);
+    });
+
+    app.get('/api/v1/consumers/:id/prompts', { preHandler: requireAuth }, async (request) => {
+        const limit = Number((request.query as any)?.limit) || 500;
+        return requests.listPrompts((request.params as any).id, limit);
+    });
+
+    // Read-only SSE stream over the observation log. ESO only reads observations.
+    app.get('/api/v1/consumers/:id/observations/stream', { preHandler: requireAuth }, async (request, reply) => {
+        const id = String((request.params as any).id || '');
+        reply.hijack();
+        reply.raw.writeHead(200, {
+            ...corsHeaders(request.headers.origin),
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache, no-transform',
+            Connection: 'keep-alive',
+            'X-Accel-Buffering': 'no',
+        });
+        let closed = false;
+        let timer: ReturnType<typeof setInterval> | null = null;
+        const write = (event: string, data: unknown) => {
+            if (closed) return;
+            reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+        };
+        const send = async () => {
+            try {
+                const result = await observations.list(id, 200);
+                write('snapshot', { items: result.items || [] });
+            } catch (error) {
+                write('error', { message: error instanceof Error ? error.message : String(error) });
+            }
+        };
+        const cleanup = () => {
+            closed = true;
+            if (timer) clearInterval(timer);
+            try { reply.raw.end(); } catch { /* already closed */ }
+        };
+        request.raw.on('close', cleanup);
+        request.raw.on('error', cleanup);
+        write('hello', { consumerId: id, at: new Date().toISOString() });
+        await send();
+        timer = setInterval(() => { void send(); }, 1500);
+    });
+
     app.get('/api/v1/consumers/:id/flows', { preHandler: requireAuth }, async (request) => {
         return flowFiles.list((request.params as any).id);
     });
@@ -750,6 +804,10 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
 
     app.post('/api/v1/consumers/:id/flows/:flowId/validate', { preHandler: requireAuth }, async (request) => {
         return flowFiles.validate((request.params as any).id, request.body || {});
+    });
+
+    app.delete('/api/v1/consumers/:id/flows/:flowId/draft', { preHandler: requireAuth }, async (request) => {
+        return flowFiles.deleteDraft((request.params as any).id, (request.params as any).flowId);
     });
 
     app.post('/api/v1/consumers/:id/flows/:flowId/publish', { preHandler: requireAuth }, async (request) => {

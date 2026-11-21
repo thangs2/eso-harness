@@ -9,7 +9,11 @@ Procedures live here; **law** lives in `AGENTS.md` + `agents/rules/`.
 |-------|------|-----|
 | `harness-engineering-team` | Task chạm **>1 tầng** — SLP: scout → plan → build×N → verify → audit → qc | `agents/rules/core.slp.mdc` · `agents/subagents/*-runtime.md` |
 | `paseo-recon` | Session do Paseo spawn (`PASEO_AGENT_ID`): profile mount gì, codegraph/docgraph CLI per-cwd, thêm MCP vào profile | `agents/rules/core.paseo-provider.mdc` |
-| `frontend-angular-golden-standard` | Sửa/review `eso/ui/**`: tokens, shell, component inventory, a11y, rubric 100 | `AGENTS.md` · `AC-15-*` · plane C |
+| `frontend-angular-golden-standard` | Entry point cho `eso/ui/**`: route sang skill con + rubric 100 | `AGENTS.md` · `AC-15-*` · plane C |
+| `frontend-layout-spacing` | Page frame, padding/margin, rem tokens, grid/list, table axis, responsive | `eso/ui/src/styles.css` |
+| `frontend-components` | Material controls, cards, tables, badges, dialogs, states | `agents/skills/frontend-components/SKILL.md` |
+| `frontend-visual-a11y` | Typography, color/contrast, focus, motion, axe/Lighthouse | `agents/skills/frontend-visual-a11y/SKILL.md` |
+| `frontend-angular-engineering` | Angular 22, signals, forms, routing, CSS architecture, gates | `agents/skills/frontend-angular-engineering/SKILL.md` |
 
 **Đã bỏ 2026-11-08** (`D-108` điều 8): `harness-eso-implement` · `harness-verify` · `nestjs-standard` · `angular-standard` — chúng
 thao tác trên `packages/`, `eso/control-plane`, `eso/ui`, những folder **không còn** trong repo này. Không copy chúng từ repo khác

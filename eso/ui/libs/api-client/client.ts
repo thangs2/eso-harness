@@ -43,6 +43,9 @@ import type {
     HostDto,
     WorkerPlacementDto,
     ObservationDto,
+    RequestSummaryDto,
+    RequestDetailDto,
+    PromptSummaryDto,
     LegacyHarnessReportDto,
     LegacyHarnessArchiveDto,
     HarnessMigrationPreviewDto,
@@ -443,6 +446,40 @@ export class ControlPlaneApiClient {
         return this.readObject<HostRuntimeDto>(await this.optionalJson(res));
     }
 
+    /** Read-only SSE endpoint + auth headers for the event stream viewer. */
+    observationStream(id: string): { url: string; headers: Record<string, string> } {
+        return {
+            url: `${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/observations/stream`,
+            headers: { ...this.getHeaders(), Accept: 'text/event-stream' },
+        };
+    }
+
+    async listRequests(id: string, limit = 200): Promise<RequestSummaryDto[]> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/requests?limit=${encodeURIComponent(String(limit))}`, {
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        const data = await res.json() as { items?: RequestSummaryDto[] };
+        return data.items || [];
+    }
+
+    async listPrompts(id: string, limit = 500): Promise<PromptSummaryDto[]> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/prompts?limit=${encodeURIComponent(String(limit))}`, {
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        const data = await res.json() as { items?: PromptSummaryDto[] };
+        return data.items || [];
+    }
+
+    async getRequestDetail(id: string, requestId: string): Promise<RequestDetailDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/requests/${encodeURIComponent(requestId)}`, {
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return await res.json() as RequestDetailDto;
+    }
+
     async getConsumerObservations(id: string, limit = 100): Promise<ObservationDto[]> {
         const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/observations?limit=${encodeURIComponent(String(limit))}`, {
             headers: this.getHeaders(),
@@ -606,6 +643,14 @@ export class ControlPlaneApiClient {
     async publishConsumerFlow(id: string, flowId: string): Promise<any> {
         const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/flows/${encodeURIComponent(flowId)}/publish`, {
             method: 'POST', headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return res.json();
+    }
+
+    async deleteConsumerFlowDraft(id: string, flowId: string): Promise<any> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/flows/${encodeURIComponent(flowId)}/draft`, {
+            method: 'DELETE', headers: this.getHeaders(),
         });
         if (!res.ok) throw await this.problem(res);
         return res.json();

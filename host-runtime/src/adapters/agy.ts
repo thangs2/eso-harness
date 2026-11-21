@@ -58,7 +58,9 @@ export class AgyAdapter implements HostAdapter {
         const args = ['--model', request.model, ...effortArgs, '-p', request.prompt];
         const result = await spawnProcess(executable, args, {
             cwd: request.cwd,
-            env: sanitizeChildEnv(request.env ?? this.options.env ?? process.env),
+            // The host-runtime already emits the Mode A prompt/worker observations.
+            // Prevent the child AGY hook from double-posting the worker prompt.
+            env: sanitizeChildEnv({ ...(request.env ?? this.options.env ?? process.env), ESO_OBSERVE_DISABLED: '1' }),
             timeoutMs: request.timeoutMs || DEFAULT_TIMEOUT_MS,
         });
 

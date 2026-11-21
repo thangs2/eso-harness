@@ -61,4 +61,4 @@ host → law gate (agents/rules/core.law-gate.mdc) → Read AGENTS.md → rules 
 
 ## Skills
 
-`harness-engineering-team` · `paseo-recon` · `frontend-angular-golden-standard` — chi tiết ở `agents/skills/SOT-MAP.md`.
+`harness-engineering-team` · `paseo-recon` · `frontend-angular-golden-standard` (+ `frontend-layout-spacing` · `frontend-components` · `frontend-visual-a11y` · `frontend-angular-engineering`) — chi tiết ở `agents/skills/SOT-MAP.md`.

@@ -41,7 +41,7 @@ import type { GraphImpactResponseDto } from '../../../../../../../libs/api-clien
                     </header>
 
                     @if (result.status !== 'ready') {
-                        <p class="impact-warning">Không kết luận “không gãy gì”. Graph chưa build hoặc coverage thấp ⇒ unknown.</p>
+                        <p class="impact-warning">Do not conclude “nothing breaks”. Graph not built or low coverage ⇒ unknown.</p>
                     }
 
                     @if (result.nodes.length === 0) {

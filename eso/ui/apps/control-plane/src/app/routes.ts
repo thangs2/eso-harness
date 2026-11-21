@@ -24,8 +24,46 @@ export const APP_ROUTES: Routes = [
         loadChildren: () => import('./features/consumers/consumers.routes.js').then((m) => m.CONSUMERS_ROUTES),
     },
     {
+        path: 'observatory',
+        loadChildren: () => import('./features/observatory/observatory.routes.js').then((m) => m.OBSERVATORY_ROUTES),
+    },
+    {
+        path: 'office',
+        loadChildren: () => import('./features/observatory/office.routes.js').then((m) => m.OFFICE_ROUTES),
+    },
+    {
+        path: 'event-graph',
+        loadChildren: () => import('./features/observatory/event-graph.routes.js').then((m) => m.EVENT_GRAPH_ROUTES),
+    },
+    {
+        path: 'events',
+        canActivate: [authGuard],
+        loadComponent: () => import('./features/observatory/pages/event-stream.page.js').then((m) => m.EventStreamPage),
+    },
+    {
+        path: 'requests',
+        redirectTo: 'observatory',
+        pathMatch: 'full',
+    },
+    {
+        path: 'requests/:requestId',
+        canActivate: [authGuard],
+        loadComponent: () => import('./features/observatory/pages/request-detail.page.js').then((m) => m.RequestDetailPage),
+    },
+    {
+        path: 'observatory/events',
+        redirectTo: 'events',
+        pathMatch: 'full',
+    },
+    {
+        path: 'observatory/requests',
+        redirectTo: 'observatory',
+        pathMatch: 'full',
+    },
+    {
         path: 'work-overview',
-        loadChildren: () => import('./features/work-overview/work-overview.routes.js').then((m) => m.WORK_OVERVIEW_ROUTES),
+        redirectTo: 'observatory',
+        pathMatch: 'full',
     },
     {
         path: 'diagnosis',

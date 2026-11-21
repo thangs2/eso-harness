@@ -16,8 +16,8 @@ import { WorkerPolicyError, selectWorker, selectWorkerById } from './worker-poli
 import type { WorkerSelection } from './worker-policy';
 import { ModelUnavailableError, resolveModel } from './model-resolver';
 import type { ModelResolution } from './model-resolver';
-import { buildPrompt } from './prompt-builder';
-import { buildBlockedEvidence, buildEvidence, eventForOutcome } from './evidence';
+import { buildPrompt, promptFingerprint } from './prompt-builder';
+import { buildBlockedEvidence, buildEvidence, eventForOutcome, parseEvidenceReport } from './evidence';
 import type { EvidenceRedaction, Outcome, WorkerEvidence } from './evidence';
 import { ObservationClient, ObservationClientError, buildObservationBody } from './observation-client';
 import { evaluateJudgment } from './judgment-client';
@@ -60,6 +60,8 @@ export interface EntrypointOptions {
     bufferDir?: string;
     /** Optional Phase 2 pre-execution judgment gate. Shadow by default; enforce blocks. */
     judgment?: JudgmentGateOptions;
+    /** Optional second host call to ask the worker to report tools/files/recon. */
+    repromptEvidence?: boolean;
     /** Test seam: use this adapter instead of constructing one by name. */
     adapterOverride?: HostAdapter;
     env?: Record<string, string | undefined>;
@@ -409,6 +411,56 @@ export async function runEntrypoint(options: EntrypointOptions): Promise<RunRepo
         });
         log(`[step ${hostStep}/${maxSteps}] worker=${current.worker.id} model=${resolution.model} adapter=${adapterName}`);
 
+        // Prompt request metadata only: never the prompt body. Gated by consumer observation consent/events.
+        if (snapshot.consumer?.observation?.consent === true && (snapshot.consumer.observation.events ?? []).includes('prompt.submitted')) {
+            try {
+                await observationClient.append({
+                    observationId: `obs-prompt-${traceId}-${current.worker.id}-${hostStep}`.slice(0, 128),
+                    traceId,
+                    hostId: runtimeKey.split(':')[0],
+                    runtimeKey,
+                    workerId: current.worker.id,
+                    event: 'prompt.submitted',
+                    outcome: 'SUBMITTED',
+                    evidence: {
+                        requestHash: await promptFingerprint(options.prompt),
+                        conversationId: options.env?.ESO_CONVERSATION_ID || null,
+                        generationId: options.env?.ESO_GENERATION_ID || null,
+                        boundaryIndex: Number(options.env?.ESO_BOUNDARY_INDEX) || null,
+                        requestLength: options.prompt.length,
+                        userQuery: options.prompt.slice(0, 8000),
+                        promptText: prompt.slice(0, 4000),
+                        promptRedacted: true,
+                        workerId: current.worker.id,
+                        flowId: flow.id,
+                        hostStep,
+                        taskType: options.taskType ?? flow.taskType ?? 'build',
+                        model: resolution.model,
+                        adapter: adapterName,
+                        modelSource: resolution.source,
+                        tier: resolution.tier,
+                        effort: resolution.effort ?? null,
+                        context: {
+                            workerId: current.worker.id,
+                            role: current.worker.role ?? null,
+                            layer: current.worker.layer ?? null,
+                            scope: current.worker.scope ?? null,
+                            capabilities: current.worker.capabilities ?? [],
+                            verbs: current.worker.verbs ?? [],
+                            qualityBar: current.worker.bar ?? [],
+                            escalation: current.worker.escalation ?? null,
+                            instructions: (current.worker.instructions ?? '').slice(0, 1200),
+                        },
+                    },
+                    at: new Date().toISOString(),
+                    idempotencyKey: `${traceId}:${current.worker.id}:prompt:${hostStep}`,
+                });
+            } catch (error) {
+                warnings.push('PROMPT_OBSERVATION_FAILED');
+                log(`[warn] prompt observation failed: ${error instanceof Error ? error.message : String(error)}`);
+            }
+        }
+
         if (options.judgment) {
             const enforcement = options.judgment.enforcement ?? 'shadow';
             try {
@@ -466,8 +518,22 @@ export async function runEntrypoint(options: EntrypointOptions): Promise<RunRepo
             cwd: options.cwd ?? snapshot.consumer.root ?? process.cwd(),
             env: options.env ?? process.env,
         };
-        const result = await adapter.run(adapterRequest);
-
+        let result = await adapter.run(adapterRequest);
+        let report = parseEvidenceReport(result.stdout);
+        let reprompt: Record<string, unknown> | null = null;
+        if (!report && options.repromptEvidence) {
+            try {
+                const retry = await adapter.run({
+                    ...adapterRequest,
+                    prompt: 'Report only the evidence from the step you just completed. Do not perform new work.\nEVIDENCE_JSON: {"tools":[],"files":[],"recon":[]}',
+                });
+                const retryReport = parseEvidenceReport(retry.stdout);
+                if (retryReport) report = retryReport;
+                reprompt = { used: true, exitCode: retry.exitCode, durationMs: retry.durationMs, reported: Boolean(retryReport) };
+            } catch (error) {
+                reprompt = { used: true, error: (error as Error)?.message || 'reprompt failed' };
+            }
+        }
         const evidence = buildEvidence({
             adapter: result.adapter,
             model: resolution.model,
@@ -486,6 +552,30 @@ export async function runEntrypoint(options: EntrypointOptions): Promise<RunRepo
             reason: result.reason,
             detail: result.detail,
             timedOut: result.timedOut,
+            promptChars: prompt.length,
+            context: {
+                workerId: current.worker.id,
+                role: current.worker.role ?? null,
+                layer: current.worker.layer ?? null,
+                scope: current.worker.scope ?? null,
+                capabilities: current.worker.capabilities ?? [],
+                verbs: current.worker.verbs ?? [],
+                qualityBar: current.worker.bar ?? [],
+                escalation: current.worker.escalation ?? null,
+                instructions: (current.worker.instructions ?? '').slice(0, 1200),
+            },
+            routing: {
+                adapter: adapterName,
+                model: resolution.model,
+                modelSource: resolution.source,
+                tier: resolution.tier,
+                effort: resolution.effort ?? null,
+                taskType: options.taskType ?? flow.taskType ?? 'build',
+            },
+            tools: report?.tools ?? [],
+            files: report?.files ?? [],
+            recon: report?.recon ?? [],
+            reprompt: reprompt ?? undefined,
             redaction,
         });
 

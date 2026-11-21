@@ -479,6 +479,137 @@ export interface ObservationDto {
     receivedAt: string;
 }
 
+export interface PromptSummaryDto {
+    id: string;
+    observationId: string;
+    traceId: string;
+    conversationId: string;
+    boundaryIndex: number | null;
+    source: 'agent' | 'subagent' | 'swarm';
+    sourceLabel: string;
+    workerId: string;
+    hostId: string;
+    runtimeKey: string;
+    model: string;
+    tier: string;
+    userQuery: string;
+    promptText: string;
+    inputTokens: number | null;
+    outputTokens: number | null;
+    tokensEstimated: boolean;
+    at: string;
+    status: string;
+}
+
+export interface RequestSummaryDto {
+    id: string;
+    traceId: string;
+    consumerId: string;
+    userQuery: string;
+    status: string;
+    startedAt: string;
+    endedAt: string;
+    workers: number;
+    events: number;
+    inputTokens: number | null;
+    outputTokens: number | null;
+    model: string;
+    workerId: string | null;
+    hostId: string;
+    hasFailures: boolean;
+    conversationId: string;
+    generationId: string;
+    boundaryIndex: number | null;
+    ide: string;
+    decisionVerdict: string;
+    checksPass: number;
+    checksFail: number;
+    callCount: number;
+    toolCount: number;
+    stopStatus: string;
+    tokensEstimated: boolean;
+}
+
+export interface RequestEventDto {
+    observationId: string;
+    traceId: string;
+    hostId: string;
+    runtimeKey: string;
+    workerId: string | null;
+    event: string;
+    outcome: string | null;
+    at: string;
+    evidence: Record<string, unknown>;
+}
+
+export interface RequestPipelineStageDto {
+    workerId: string;
+    label: string;
+    role: string;
+    layer: string;
+    scope: string;
+    capabilities: string[];
+    qualityBar: string[];
+    status: string;
+    event: string;
+    at: string;
+    durationMs: number;
+    errorCode: string;
+}
+
+export interface RequestLlmCallDto {
+    id: string;
+    workerId: string;
+    model: string;
+    adapter: string;
+    durationMs: number;
+    inputTokens: number | null;
+    outputTokens: number | null;
+    estimated: boolean;
+    outcome: string;
+}
+
+export interface RequestDetailDto {
+    request: {
+        id: string;
+        traceId: string;
+        consumerId: string;
+        userQuery: string;
+        startedAt: string;
+        endedAt: string;
+        status: string;
+        taskType: string;
+        flowId: string;
+        workerId: string | null;
+        hostId: string;
+        runtimeKey: string;
+        model: string;
+        adapter: string;
+        promptHash: string;
+        promptLength: number;
+    };
+    context: Record<string, unknown>;
+    routing: Record<string, unknown>;
+    checks: Array<{ checkId: string; status: string; detail: string }>;
+    recon: Array<{ id: string; label: string; source: string; required: boolean; status: string; calls: number }>;
+    systemStages: Array<{ id: string; stepNumber: number; title: string; sub: string; status: string; tab: string; details: Array<{ label: string; value: string; detail: string }> }>;
+    requestMetrics: {
+        callCount: number;
+        toolCount: number;
+        hasFailures: boolean;
+        inputTokens: number | null;
+        outputTokens: number | null;
+        tokensEstimated: boolean;
+    };
+    pipeline: RequestPipelineStageDto[];
+    events: RequestEventDto[];
+    telemetry: {
+        llmCalls: RequestLlmCallDto[];
+        tools: unknown[];
+        files: unknown[];
+    };
+}
+
 export interface ConsumerListResponse {
     items: ConsumerSummary[];
 }

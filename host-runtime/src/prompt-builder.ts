@@ -38,6 +38,7 @@ function barText(bar: unknown[] | undefined): string {
 
 /** The final line contract the adapter output is read for (see evidence.deriveOutcome). */
 export const OUTCOME_CONTRACT = 'OUTCOME: PASS|FAIL|BLOCKED';
+export const EVIDENCE_REPORT_CONTRACT = 'EVIDENCE_JSON: {"tools":[],"files":[],"recon":[]}';
 
 /** Deterministic prompt text: same snapshot + same user prompt => same bytes. */
 export function buildPrompt(input: PromptInput): string {
@@ -89,6 +90,12 @@ export function buildPrompt(input: PromptInput): string {
         '',
         '## Reply contract',
         'Work on the user request as this worker. Do not start other workers; the host runtime advances the flow.',
+        '',
+        '## Evidence report',
+        'Before the OUTCOME line, add exactly one line with real operations you performed:',
+        EVIDENCE_REPORT_CONTRACT,
+        'Fill arrays with actual tool/file/recon names and counts. Do not invent. Empty arrays if unknown.',
+        '',
         `End your reply with exactly one line: ${OUTCOME_CONTRACT}`,
     ].join('\n');
 }

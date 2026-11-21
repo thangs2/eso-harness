@@ -164,6 +164,14 @@ function defaultPlugins(): PluginEntry[] {
                     <h1>{{ name() || route.snapshot.paramMap.get('id') }}</h1>
                     <p class="subtitle">Define the canonical stack; bind host runtimes to developers and published stack versions.</p>
                 </div>
+                <mat-form-field appearance="outline" subscriptSizing="dynamic" density="-4" class="settings-consumer-picker">
+                    <mat-label>Switch consumer</mat-label>
+                    <mat-select [value]="consumerId" (selectionChange)="switchConsumer($event.value)" aria-label="Switch consumer">
+                        @for (consumer of consumers(); track consumer.id) {
+                            <mat-option [value]="consumer.id">{{ consumer.name || consumer.id }}</mat-option>
+                        }
+                    </mat-select>
+                </mat-form-field>
             </header>
 
 
@@ -779,8 +787,8 @@ function defaultPlugins(): PluginEntry[] {
                                         </div>
                                     }
                                     <button type="button" class="formation-flow" (click)="openDiagram.set('workers')">
-                                        <span class="formation-flow-preview"><img src="assets/diagrams/that-tinh-tran-diagram.svg" alt="Thất Tinh Trận worker flow"></span>
-                                        <span class="formation-flow-copy"><strong>View the worker flow</strong><small>Original Thất Tinh Trận diagram · click to open</small></span>
+                                        <span class="formation-flow-preview"><img src="assets/diagrams/that-tinh-tran-diagram.svg" alt="Seven-Star Formation worker flow"></span>
+                                        <span class="formation-flow-copy"><strong>View the worker flow</strong><small>Original Seven-Star Formation diagram · click to open</small></span>
                                     </button>
 
                                 </section>
@@ -1030,6 +1038,7 @@ function defaultPlugins(): PluginEntry[] {
                                                                 @for (binding of hostProfiles(); track binding.id) { <mat-option [value]="binding.id">{{ bindingLabel(binding) }}</mat-option> }
                                                             </mat-select>
                                                         </mat-form-field>
+                                                        <p class="field-help">Optional deployment association. The host placement below controls which runtime may execute this worker.</p>
                                                     }
                                                 </section>
                                                 <section class="inspector-block placement-block">
@@ -1946,16 +1955,19 @@ function defaultPlugins(): PluginEntry[] {
         </div>
     `,
     styles: [`
-        .settings-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); max-width: var(--container); min-width: 0; margin: 0 auto; }
-        .page-header { display: flex; justify-content: space-between; gap: var(--space-4); align-items: flex-start; min-width: 0; }
-        .page-header h1 { margin: 0 0 var(--space-1); }
+        .settings-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); width: 100%; max-width: var(--content-max); min-width: 0; margin: 0 auto; }
+        .page-header { display: flex; justify-content: space-between; gap: var(--space-4); align-items: flex-start; min-width: 0; margin: 0; }
+        .page-header h1 { margin: 0; font-size: var(--text-2xl); line-height: 1.15; letter-spacing: -.02em; }
+        .settings-consumer-picker { width: 210px; }
+        .settings-consumer-picker ::ng-deep .mat-mdc-text-field-wrapper { background: var(--surface); border-radius: 6px; }
+        .settings-consumer-picker ::ng-deep .mdc-notched-outline__leading, .settings-consumer-picker ::ng-deep .mdc-notched-outline__notch, .settings-consumer-picker ::ng-deep .mdc-notched-outline__trailing { border-color: var(--line); }
         .eyebrow { color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-size: var(--text-xs); margin: 0 0 var(--space-1); }
-        .subtitle { color: var(--muted); margin: 0; }
-        .settings-tabs { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); min-width: 0; gap: 2px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); overflow: hidden; }
-        .settings-tab { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border: 0; border-right: 1px solid var(--line); background: transparent; color: var(--muted); font: inherit; text-align: left; cursor: pointer; }
+        .subtitle { max-width: 760px; margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-sm); line-height: 1.6; }
+        .settings-tabs { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); min-width: 0; gap: 2px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); overflow-x: auto; scrollbar-width: thin; }
+        .settings-tab { display: flex; align-items: center; gap: var(--space-2); min-width: 0; padding: var(--space-2) var(--space-3); border: 0; border-right: 1px solid var(--line); background: transparent; color: var(--muted); font: inherit; text-align: left; cursor: pointer; }
         .settings-tab-copy { display: grid; gap: 2px; min-width: 0; }
-        .settings-tab-copy strong { color: var(--ink); font-size: var(--text-sm); font-weight: 650; line-height: 1.2; }
-        .settings-tab-copy small { color: var(--muted); font-size: 10px; line-height: 1.2; white-space: normal; }
+        .settings-tab-copy strong { overflow: hidden; color: var(--ink); font-size: var(--text-sm); font-weight: 650; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
+        .settings-tab-copy small { overflow: hidden; color: var(--muted); font-size: 10px; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
         .settings-tab.active .settings-tab-copy strong, .settings-tab.active .settings-tab-copy small { color: var(--brand-ink); }
         .settings-tab:last-child { border-right: 0; }
         .settings-tab.active { background: var(--brand); color: var(--brand-ink); }
@@ -2076,15 +2088,15 @@ function defaultPlugins(): PluginEntry[] {
         .observatory-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, .85fr); gap: var(--space-4); align-items: start; }
         .observatory-column { display: grid; gap: var(--space-4); }
         @media (max-width: 1100px) { .observatory-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .observatory-grid { grid-template-columns: 1fr; } }
-        .settings-actions { position: sticky; bottom: 0; z-index: 5; display: flex; justify-content: space-between; gap: var(--space-3); align-items: center; padding: var(--space-3) var(--space-4); margin: 0 calc(var(--space-4) * -1) calc(var(--space-4) * -1); background: color-mix(in srgb, var(--surface) 94%, #000); border-top: 1px solid var(--line); backdrop-filter: blur(8px); }
+        .settings-actions { position: sticky; bottom: 0; z-index: 5; display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); min-width: 0; padding: var(--space-3) var(--space-4); margin: 0; border: 1px solid var(--line); border-radius: var(--radius-md); background: color-mix(in srgb, var(--surface) 94%, #000); backdrop-filter: blur(8px); }
         .dirty-state { font-size: var(--text-xs); color: var(--muted); }
         .dirty-state-on { color: var(--warn-ink); font-weight: 600; }
         .settings-footer-right { display: flex; gap: var(--space-3); align-items: center; }
         .saved-banner { border-left: 4px solid var(--brand); background: color-mix(in srgb, var(--surface) 88%, var(--brand)); padding: var(--space-3); border-radius: var(--radius-sm); margin: 0; }
         .loading-label { color: var(--muted); margin: 0; }
         .settings-loading { border: 1px solid var(--line); border-radius: var(--radius-md); padding: var(--space-5); background: var(--surface); }
-        @media (max-width: 1100px) { .settings-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); } .host-grid { grid-template-columns: 1fr; } .layer-row { grid-template-columns: minmax(200px, 1fr) minmax(120px, .6fr) minmax(180px, 1fr) auto; gap: var(--space-3); height: auto; min-height: 100px; } .layer-columns { display: none; } }
-        @media (max-width: 700px) { .boundary-row { grid-template-columns: 1fr; } .migration-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .settings-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; } .settings-tabs .settings-tab { min-width: 0; overflow: hidden; } .form-grid, .event-grid, .stack-summary { grid-template-columns: 1fr; } .page-header { flex-direction: column; } .tab-panel { padding: var(--space-4); } .layer-row { grid-template-columns: 1fr; align-items: start; } .layer-state { justify-content: flex-start; } .group-head { flex-direction: column; } }
+        @media (max-width: 1100px) { .settings-tabs { grid-auto-columns: minmax(180px, 1fr); } .host-grid { grid-template-columns: 1fr; } .layer-row { grid-template-columns: minmax(200px, 1fr) minmax(120px, .6fr) minmax(180px, 1fr) auto; gap: var(--space-3); height: auto; min-height: 100px; } .layer-columns { display: none; } }
+        @media (max-width: 700px) { .boundary-row { grid-template-columns: 1fr; } .migration-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .settings-tabs { grid-auto-columns: minmax(170px, 1fr); width: 100%; } .settings-tabs .settings-tab { min-width: 0; overflow: hidden; } .form-grid, .event-grid, .stack-summary { grid-template-columns: 1fr; } .page-header { flex-direction: column; align-items: stretch; } .tab-panel { padding: var(--space-4); } .layer-row { grid-template-columns: 1fr; align-items: start; } .layer-state { justify-content: flex-start; } .group-head { flex-direction: column; } .settings-actions { position: static; flex-wrap: wrap; } }
     `],
 })
 export class ConsumerSettingsPage implements OnInit {
@@ -2114,6 +2126,7 @@ export class ConsumerSettingsPage implements OnInit {
     ];
 
     readonly consumerId = this.route.snapshot.paramMap.get('id') || 'unknown';
+    readonly consumers = signal<{ id: string; name?: string }[]>([]);
     private readonly hydrated = signal(false);
     private readonly draftEffect = effect(() => {
         if (!this.hydrated()) return;
@@ -2408,6 +2421,7 @@ export class ConsumerSettingsPage implements OnInit {
         if (tab === 'knowledge' && ['overview', 'sources', 'contract', 'index', 'manifest'].includes(requestedSection || '')) {
             this.knowledgeSection.set(requestedSection as 'overview' | 'sources' | 'contract' | 'index' | 'manifest');
         }
+        this.service.list().then((result) => this.consumers.set((result.items ?? []).map((item) => ({ id: item.id, name: item.name })))).catch(() => this.consumers.set([]));
         Promise.all([
             this.service.get(id),
             this.service.getMcp(id).catch(() => ({ consumerId: id, root: '', sources: [], providers: [], warnings: [] })),
@@ -3439,6 +3453,12 @@ export class ConsumerSettingsPage implements OnInit {
         void this.router.navigate(['/consumers', this.consumerId, 'flows']);
     }
 
+    switchConsumer(id: string): void {
+        if (!id || id === this.consumerId) return;
+        const tab = this.activeTab();
+        void this.router.navigate(['/consumers', id, 'settings'], { queryParams: tab === 'profile' ? {} : { tab } });
+    }
+
     back(): void { const id = this.route.snapshot.paramMap.get('id'); this.router.navigate(['/consumers', id]); }
     pipelineGroups(): Array<{ id: string; title: string; stages: Array<{ id: string; label: string; gate: string }> }> {
         return [
@@ -3991,6 +4011,12 @@ export class ConsumerSettingsPage implements OnInit {
             .then(([config, placements]) => {
                 if (config && Array.isArray(config.workers) && config.workers.length > 0) {
                     this.workers.set(config.workers.map((worker) => this.normalizeWorker(worker)));
+                    // Defensive default: if the server has no deployment association yet, show the
+                    // configured formation so the Deployment selector is never silently empty.
+                    const formationIds = this.validFormationHostIds();
+                    if (formationIds.length > 0 && this.workers().every((worker) => worker.hostBindingIds.length === 0)) {
+                        this.applyFormationHosts();
+                    }
                 }
                 this.applyWorkerPlacements(placements);
                 this.pruneWorkerBindings();
@@ -4601,13 +4627,9 @@ export class ConsumerSettingsPage implements OnInit {
                 this.newStackVersion.set(1);
             }
             if (typeof draft.newStackVersion === 'number') this.newStackVersion.set(draft.newStackVersion);
-            if (Array.isArray(draft.hostProfiles)) {
-                const profiles = draft.hostProfiles.filter((profile: HostProfile) => !profile.detected);
-                this.hostProfiles.set(profiles);
-                const developerIds = new Set<string>(this.developers());
-                for (const profile of profiles) developerIds.add(profile.userId);
-                this.developers.set([...developerIds]);
-            }
+            // Host profiles and formation IDs are server-owned deployment data, not form drafts.
+            // Restoring them from localStorage kept stale hp-* IDs alive after provisioning and
+            // made every worker lose its binding via pruneWorkerBindings().
             if (Array.isArray(draft.developers)) {
                 const developerIds = new Set<string>([...this.developers(), ...draft.developers]);
                 for (const profile of this.hostProfiles()) developerIds.add(profile.userId);
@@ -4638,8 +4660,6 @@ export class ConsumerSettingsPage implements OnInit {
             if (Array.isArray(draft.manifestFacets)) this.manifestFacets.set(draft.manifestFacets);
             if (Array.isArray(draft.manifestRelations)) this.manifestRelations.set(draft.manifestRelations);
             if (Array.isArray(draft.manifestChecks)) this.manifestChecks.set(draft.manifestChecks);
-            if (Array.isArray(draft.workers) && draft.workers.length > 0) this.workers.set(draft.workers.map((worker: any) => this.normalizeWorker(worker)));
-            if (Array.isArray(draft.formationHostIds)) this.formationHostIds.set(draft.formationHostIds);
             if (typeof draft.consent === 'boolean') this.consent.set(draft.consent);
             if (Array.isArray(draft.events)) this.events.set(draft.events);
         } catch {

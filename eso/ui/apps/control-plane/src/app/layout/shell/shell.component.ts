@@ -40,15 +40,7 @@ const PAGE_LABELS: Record<string, string> = {
 
                     <div class="header-context" aria-label="Current context">
                         @if (consumerId(); as id) {
-                            <label class="consumer-switcher">
-                                <span class="context-label">Consumer</span>
-                                <select [value]="id" (change)="switchConsumer($event)" aria-label="Switch consumer">
-                                    @for (item of consumers(); track item.id) {
-                                        <option [value]="item.id" [selected]="item.id === id">{{ item.name || item.id }}</option>
-                                    }
-                                    @if (!consumers().some((item) => item.id === id)) { <option [value]="id" selected>{{ id }}</option> }
-                                </select>
-                            </label>
+                            <span class="consumer-switcher"><span class="context-label">Consumer</span><strong>{{ activeConsumer()?.name || id }}</strong></span>
                             <span class="context-sep" aria-hidden="true">/</span>
                             <span class="context-page">{{ pageLabel() }}</span>
                             <span class="status-chip" [class.status-chip-warn]="activeConsumer()?.status !== 'ready'">
@@ -84,7 +76,9 @@ const PAGE_LABELS: Record<string, string> = {
                         <nav class="side-nav" (click)="menuOpen.set(false)">
                             <p class="side-group">Operate</p>
                             <a routerLink="/consumers" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" class="side-link">Consumers</a>
-                            <a routerLink="/work-overview" class="side-link" [class.active]="onWork()">Work overview</a>
+                            <a routerLink="/observatory" class="side-link" [class.active]="onObservatory()">Observatory</a>
+                            <a routerLink="/events" class="side-link" [class.active]="onEvents()">Event stream</a>
+                            <a routerLink="/office" class="side-link" [class.active]="onOffice()">Office 3D</a>
                             <a routerLink="/diagnosis" routerLinkActive="active" class="side-link">Diagnosis</a>
 
                             @if (consumerId(); as id) {
@@ -95,7 +89,8 @@ const PAGE_LABELS: Record<string, string> = {
                                 <a [routerLink]="['/consumers', id, 'plugins']" routerLinkActive="active" class="side-link">Providers</a>
                                 <a [routerLink]="['/consumers', id, 'architecture']" routerLinkActive="active" class="side-link">Architecture</a>
                                 <a [routerLink]="['/consumers', id, 'learning']" routerLinkActive="active" class="side-link">Learning</a>
-                                <a [routerLink]="['/work-overview']" [queryParams]="{ project: id }" class="side-link" [class.active]="onWork()">Work</a>
+                                <a [routerLink]="['/events']" [queryParams]="{ consumer: id }" class="side-link" [class.active]="onEvents()">Events</a>
+                                <a [routerLink]="['/office']" [queryParams]="{ consumer: id }" class="side-link" [class.active]="onOffice()">Office 3D</a>
                             }
 
                             <p class="side-group">Governance</p>
@@ -112,7 +107,7 @@ const PAGE_LABELS: Record<string, string> = {
                             <span class="side-foot-text">Config · evidence · audit</span>
                         </div>
                     </aside>
-                    <main id="eso-main" class="eso-content" role="main" tabindex="-1">
+                    <main id="eso-main" class="eso-content" [class.eso-content-observatory]="onObservatory()" role="main" tabindex="-1">
                         <router-outlet></router-outlet>
                     </main>
                 </div>
@@ -148,10 +143,9 @@ const PAGE_LABELS: Record<string, string> = {
         .brand-text { font-weight: 700; letter-spacing: .02em; font-size: var(--text-sm); }
         .header-context { display: flex; align-items: center; gap: var(--space-2); min-width: 0; flex: 1; }
         .consumer-switcher { display: inline-flex; align-items: center; gap: var(--space-2); min-width: 0; }
+        .consumer-switcher strong { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #e6edf3; font-size: var(--text-xs); font-weight: 600; }
         .context-label { color: #7f93a8; font-size: 10px; text-transform: uppercase; letter-spacing: .1em; }
-        .consumer-switcher select { appearance: none; background: #0f1b2b; color: #e6edf3; border: 1px solid #2a4058; border-radius: var(--radius-sm); padding: 5px 26px 5px 8px; font: inherit; font-size: var(--text-xs); max-width: 180px; cursor: pointer; background-image: linear-gradient(45deg, transparent 50%, #8fa3b8 50%), linear-gradient(135deg, #8fa3b8 50%, transparent 50%); background-position: calc(100% - 12px) 50%, calc(100% - 8px) 50%; background-size: 4px 4px, 4px 4px; background-repeat: no-repeat; }
-        .consumer-switcher select:focus-visible { outline: 2px solid #22d3ee; outline-offset: 1px; }
-        .context-sep { color: #3b5168; }
+                .context-sep { color: #3b5168; }
         .context-page { color: #c8d6e5; font-size: var(--text-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .status-chip { display: inline-flex; align-items: center; gap: 5px; border: 1px solid #2a4058; background: #0f1b2b; color: #8fa3b8; border-radius: 999px; padding: 3px 8px; font-size: 10px; text-transform: lowercase; white-space: nowrap; }
         .status-chip-warn { border-color: #7a5a1e; color: #f5c76b; }
@@ -180,6 +174,7 @@ const PAGE_LABELS: Record<string, string> = {
         .side-foot-title { color: #c8d6e5; font-size: 11px; font-weight: 700; }
         .side-foot-text { color: #7f93a8; font-size: 10px; }
         .eso-content { width: 100%; max-width: none; margin: 0; padding: var(--space-5); }
+        .eso-content-observatory { padding: 0; }
         .menu-toggle { display: none; border: 1px solid #2a4058; background: #0f1b2b; color: #dbeafe; border-radius: var(--radius-sm); width: 36px; height: 36px; font-size: 18px; cursor: pointer; }
         .sidebar-overlay { display: none; }
         .command-trigger { display: inline-flex; align-items: center; gap: var(--space-2); border: 1px solid #2a4058; background: #0f1b2b; color: #8fa3b8; border-radius: var(--radius-sm); padding: 5px 8px; font: inherit; font-size: var(--text-xs); cursor: pointer; }
@@ -209,7 +204,6 @@ const PAGE_LABELS: Record<string, string> = {
             .sidebar-overlay { display: block; position: fixed; inset: var(--header-h) 0 0; z-index: 25; border: 0; background: rgba(0,0,0,.45); }
             .eso-content { padding: var(--space-4) var(--space-3); }
             .context-label, .context-sep, .status-chip { display: none; }
-            .consumer-switcher select { max-width: 140px; }
             .account-name { display: none; }
         }
         @media (max-width: 560px) {
@@ -231,9 +225,13 @@ export class ShellComponent {
         const match = /^\/consumers\/([^/?]+)/.exec(this.url());
         if (match?.[1] && match[1] !== '') return match[1];
         const query = this.url().split('?')[1] || '';
-        return this.onWork() ? new URLSearchParams(query).get('project') : null;
+        return this.onObservatory() ? (new URLSearchParams(query).get('consumer') || new URLSearchParams(query).get('project')) : null;
     });
-    readonly onWork = computed(() => this.url().startsWith('/work-overview'));
+    readonly onObservatory = computed(() => this.url().startsWith('/observatory') || this.url().startsWith('/work-overview'));
+    readonly onEvents = computed(() => this.url().startsWith('/events'));
+    readonly onGraph = computed(() => this.url().startsWith('/event-graph'));
+    readonly onOffice = computed(() => this.url().startsWith('/office'));
+    readonly onRequests = computed(() => this.url().startsWith('/requests'));
     readonly activeConsumer = computed(() => this.consumers().find((item) => item.id === this.consumerId()) ?? null);
     readonly paletteOpen = signal(false);
     readonly paletteQuery = signal('');
@@ -241,7 +239,9 @@ export class ShellComponent {
         const query = this.paletteQuery().trim().toLowerCase();
         const pages = [
             { label: 'Consumers', path: '/consumers', group: 'Operate' },
-            { label: 'Work overview', path: '/work-overview', group: 'Operate' },
+            { label: 'Observatory', path: '/observatory', group: 'Operate' },
+            { label: 'Event stream', path: '/events', group: 'Operate' },
+            { label: 'Office 3D', path: '/office', group: 'Operate' },
             { label: 'Diagnosis', path: '/diagnosis', group: 'Operate' },
             { label: 'Declaration', path: '/declaration', group: 'Governance' },
             { label: 'Risk', path: '/risk', group: 'Governance' },
@@ -258,6 +258,8 @@ export class ShellComponent {
                 { label: 'Providers', path: `/consumers/${id}/plugins`, group: 'Consumer' },
                 { label: 'Architecture', path: `/consumers/${id}/architecture`, group: 'Consumer' },
                 { label: 'Learning', path: `/consumers/${id}/learning`, group: 'Consumer' },
+                { label: 'Events', path: `/events?consumer=${id}`, group: 'Consumer' },
+                { label: 'Office 3D', path: `/office?consumer=${id}`, group: 'Consumer' },
             ]
             : [];
         const consumers = this.consumers().map((item) => ({ label: `Consumer · ${item.name || item.id}`, path: `/consumers/${item.id}`, group: 'Consumers' }));
@@ -277,11 +279,6 @@ export class ShellComponent {
             this.url.set((event as NavigationEnd).urlAfterRedirects);
             this.menuOpen.set(false);
         });
-    }
-
-    switchConsumer(event: Event): void {
-        const id = (event.target as HTMLSelectElement).value;
-        if (id) void this.router.navigate(['/consumers', id]);
     }
 
     private loadConsumers(): void {

@@ -61,6 +61,7 @@ export interface ParsedRunOptions {
     traceId?: string;
     taskType?: string;
     offline: boolean;
+    repromptEvidence?: boolean;
     cacheDir?: string;
     bufferDir?: string;
     judgment?: JudgmentGateOptions;
@@ -93,6 +94,7 @@ export interface ParsedDispatchOptions {
     jobId?: string;
     taskType?: string;
     offline: boolean;
+    repromptEvidence?: boolean;
     cacheDir?: string;
     bufferDir?: string;
 }
@@ -277,6 +279,7 @@ interface RawFlags {
     values: Record<string, string>;
     lists: Record<string, string[]>;
     dryRun: boolean;
+    repromptEvidence: boolean;
     offline: boolean;
     json: boolean;
     help: boolean;
@@ -374,7 +377,7 @@ const FLAG_KEYS: Record<string, string> = {
 };
 
 function parseRaw(argv: string[]): RawFlags {
-    const raw: RawFlags = { values: {}, lists: {}, dryRun: false, offline: false, json: false, help: false, command: null };
+    const raw: RawFlags = { values: {}, lists: {}, dryRun: false, repromptEvidence: false, offline: false, json: false, help: false, command: null };
     const positionals: string[] = [];
 
     for (let index = 0; index < argv.length; index += 1) {
@@ -391,6 +394,9 @@ function parseRaw(argv: string[]): RawFlags {
                 break;
             case '--json':
                 raw.json = true;
+                break;
+            case '--reprompt-evidence':
+                raw.repromptEvidence = true;
                 break;
             case '--dry-run':
                 raw.dryRun = true;
@@ -526,6 +532,7 @@ export function parseArgs(argv: string[], env: Record<string, string | undefined
             dryRun: raw.dryRun,
             timeoutMs: raw.values.timeoutMs ? parsePositiveInt('--timeout-ms', raw.values.timeoutMs) : DEFAULT_TIMEOUT_MS,
             offline: raw.offline || envText(env, 'ESO_OFFLINE') === '1',
+            repromptEvidence: raw.repromptEvidence || envText(env, 'ESO_REPROMPT_EVIDENCE') === '1',
         };
         if (raw.values.flowId) options.flowId = raw.values.flowId;
         if (raw.values.workerId) options.workerId = raw.values.workerId;
@@ -678,6 +685,7 @@ export function toEntrypointOptions(parsed: ParsedRunOptions): EntrypointOptions
         dryRun: parsed.dryRun,
         timeoutMs: parsed.timeoutMs,
         offline: parsed.offline,
+        repromptEvidence: parsed.repromptEvidence,
         env: process.env,
     };
     if (parsed.flowId) options.flowId = parsed.flowId;

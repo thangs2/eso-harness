@@ -56,6 +56,20 @@ export interface WorkerEvidence {
     timedOut: boolean;
     /** Config-only in this slice; host wiring for decisions is separate. */
     jevMode?: string;
+    tokenSummary?: {
+        input: number;
+        output: number;
+        estimated: true;
+        source: 'chars/4';
+    };
+    context?: Record<string, unknown>;
+    routing?: Record<string, unknown>;
+    telemetry?: Record<string, unknown>;
+    tools?: unknown[];
+    files?: unknown[];
+    recon?: unknown[];
+    reprompt?: Record<string, unknown>;
+    reportSource?: 'agent-reported';
     reason?: string;
     detail?: string;
 }
@@ -157,6 +171,15 @@ export function eventForOutcome(outcome: Outcome): 'worker.completed' | 'worker.
 export interface BuildEvidenceInput extends AdapterRunFacts {
     redaction?: EvidenceRedaction;
     jevMode?: string;
+    /** User request length, used only for a labelled chars/4 estimate. */
+    promptChars?: number;
+    context?: Record<string, unknown>;
+    routing?: Record<string, unknown>;
+    tools?: unknown[];
+    files?: unknown[];
+    recon?: unknown[];
+    reprompt?: Record<string, unknown>;
+    reportSource?: 'agent-reported';
 }
 
 /** Evidence payload posted to ESO — bounded, redacted, no prompt body. */
@@ -184,7 +207,23 @@ export function buildEvidence(input: BuildEvidenceInput): WorkerEvidence {
         timedOut: Boolean(input.timedOut),
     };
     if (input.jevMode && input.jevMode !== 'off') evidence.jevMode = input.jevMode;
+    if (typeof input.promptChars === 'number' && Number.isFinite(input.promptChars)) {
+        evidence.tokenSummary = {
+            input: Math.ceil(Math.max(0, input.promptChars) / 4),
+            output: Math.ceil(stdout.text.length / 4),
+            estimated: true,
+            source: 'chars/4',
+        };
+    }
     if (input.effort) evidence.effort = input.effort;
+    if (input.context) evidence.context = input.context;
+    if (input.routing) evidence.routing = input.routing;
+    evidence.telemetry = { stdoutChars: stdout.text.length, stderrChars: stderr.text.length, promptChars: input.promptChars ?? 0 };
+    evidence.tools = input.tools ?? [];
+    evidence.files = input.files ?? [];
+    evidence.recon = input.recon ?? [];
+    if (input.reprompt) evidence.reprompt = input.reprompt;
+    if (input.tools?.length || input.files?.length || input.recon?.length) evidence.reportSource = 'agent-reported';
     if (input.reason) evidence.reason = input.reason;
     if (input.detail) {
         const detail = redactText(input.detail, input.redaction);
@@ -223,4 +262,38 @@ export function buildBlockedEvidence(input: {
         detail: input.detail,
         redaction: input.redaction,
     });
+}
+
+
+export interface EvidenceReport {
+    tools: Array<{ name: string; count: number }>;
+    files: Array<{ path: string; action: string }>;
+    recon: Array<{ adapter: string; calls: number }>;
+}
+
+/** Parse the optional agent-reported evidence line from stdout. Never throws. */
+export function parseEvidenceReport(text: string | null | undefined): EvidenceReport | null {
+    const value = typeof text === 'string' ? text : '';
+    const line = value.split('\n').reverse().find((item) => item.trim().startsWith('EVIDENCE_JSON:'));
+    if (!line) return null;
+    try {
+        const raw = JSON.parse(line.trim().slice('EVIDENCE_JSON:'.length).trim()) as Record<string, unknown>;
+        const list = (input: unknown, max: number): unknown[] => Array.isArray(input) ? input.slice(0, max) : [];
+        return {
+            tools: list(raw['tools'], 50).map((item) => {
+                const row = item as Record<string, unknown>;
+                return { name: String(row?.name || row?.tool || ''), count: Number(row?.count) || 1 };
+            }).filter((item) => item.name),
+            files: list(raw['files'], 100).map((item) => {
+                const row = item as Record<string, unknown>;
+                return { path: String(row?.path || ''), action: String(row?.action || 'unknown') };
+            }).filter((item) => item.path),
+            recon: list(raw['recon'], 50).map((item) => {
+                const row = item as Record<string, unknown>;
+                return { adapter: String(row?.adapter || row?.id || ''), calls: Number(row?.calls) || 1 };
+            }).filter((item) => item.adapter),
+        };
+    } catch {
+        return null;
+    }
 }

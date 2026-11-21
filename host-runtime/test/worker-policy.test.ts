@@ -61,13 +61,12 @@ describe('worker-policy', () => {
         expectCode(() => selectWorker(snapshot, TEST_RUNTIME_KEY, 'worker-build'), 'WORKER_NOT_PLACED');
     });
 
-    it('treats an empty allowedHosts list as unrestricted', async () => {
+    it('rejects an empty allowedHosts list instead of treating it as unrestricted', async () => {
         const snapshot = await makeSnapshot({
             workerPlacement: [{ workerId: 'worker-build', allowedHosts: [] }],
         });
-        const selection = selectWorker(snapshot, TEST_RUNTIME_KEY, 'worker-build');
-        expect(selection.worker.id).toBe('worker-build');
-        expect(placementAllows(selection.placement, TEST_RUNTIME_KEY)).toBe(true);
+        expectCode(() => selectWorker(snapshot, TEST_RUNTIME_KEY, 'worker-build'), 'WORKER_NOT_PLACED');
+        expect(placementAllows({ workerId: 'worker-build', allowedHosts: [] } as any, TEST_RUNTIME_KEY)).toBe(false);
     });
 
     it('selects a specific worker by id for the next flow step', async () => {

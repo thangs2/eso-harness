@@ -1,4 +1,5 @@
 import { Component, ChangeDetectionStrategy, input } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { StateFrameComponent } from '../../../shared/state-frame/state-frame.component.js';
 import type { DiagnosisEvidence } from '../models/diagnosis.model.js';
 
@@ -9,11 +10,12 @@ import type { DiagnosisEvidence } from '../models/diagnosis.model.js';
 @Component({
     selector: 'eso-diagnosis-page',
     standalone: true,
-    imports: [StateFrameComponent],
+    imports: [StateFrameComponent, RouterLink],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div class="s2-page-container">
             <header class="page-header">
+                <p class="not-implemented-banner">Not implemented yet — this page is a read-only placeholder. Use <a routerLink="/observatory">Observatory</a> for host events/evidence.</p>
                 <h1>Decision rationale (S2 Why)</h1>
             </header>
 

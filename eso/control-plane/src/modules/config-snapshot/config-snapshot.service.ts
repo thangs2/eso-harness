@@ -56,6 +56,11 @@ function readSettings(config: any): any {
     return settings && typeof settings === 'object' ? settings : {};
 }
 
+function readObservation(config: any): any {
+    const observation = config?.profile?.observation ?? config?.observation;
+    return observation && typeof observation === 'object' ? observation : { consent: false, events: [] };
+}
+
 function readJev(config: any): any {
     const jev = config?.profile?.integration?.jev ?? config?.integration?.jev;
     return jev && typeof jev === 'object' ? jev : { mode: 'off' };
@@ -123,6 +128,7 @@ export class ConfigSnapshotService {
         ]);
         const config = consumer.root ? readConfigFile(consumer.root) : {};
         const settings = readSettings(config);
+        const observation = readObservation(config);
         const jev = readJev(config);
         const boundaries = readBoundaries(config, consumer.root);
         const activeStack = (stackVersions as any[]).find((version) => version?.status === 'published') ?? null;
@@ -134,6 +140,7 @@ export class ConfigSnapshotService {
                 sdlcRoot: consumer.sdlcRoot ?? null,
                 status: consumer.status,
                 version: consumer.version,
+                observation,
                 jev,
                 boundaries,
             },
@@ -143,6 +150,7 @@ export class ConfigSnapshotService {
                     name: flow.name,
                     version: flow.version,
                     status: 'published',
+                    taskType: flow.taskType ?? 'build',
                     nodes: Array.isArray(flow.nodes) ? flow.nodes : [],
                     edges: Array.isArray(flow.edges) ? flow.edges : [],
                 }

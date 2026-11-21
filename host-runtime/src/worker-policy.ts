@@ -41,12 +41,12 @@ export function findPlacement(snapshot: ConfigSnapshot, workerId: string): Snaps
 }
 
 /**
- * Placement allows this runtime when `allowedHosts` is empty (not restricted) or contains the
- * runtime key. Non-empty lists are authoritative — the host does not invent a fallback.
+ * Placement allows this runtime only when `allowedHosts` contains the runtime key.
+ * An empty list means no runtime is allowed; it is not a wildcard. The host does not invent a fallback.
  */
 export function placementAllows(placement: SnapshotPlacement, runtimeKey: string): boolean {
     const allowed = placement.allowedHosts ?? [];
-    return allowed.length === 0 || allowed.includes(runtimeKey);
+    return allowed.includes(runtimeKey);
 }
 
 function selectionFor(

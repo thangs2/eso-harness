@@ -1,4 +1,5 @@
 import { Component, ChangeDetectionStrategy, signal } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { StateFrameComponent } from '../../../shared/state-frame/state-frame.component.js';
 import type { AuditItem } from '../models/audit.model.js';
 
@@ -9,11 +10,12 @@ import type { AuditItem } from '../models/audit.model.js';
 @Component({
     selector: 'eso-audit-page',
     standalone: true,
-    imports: [StateFrameComponent],
+    imports: [StateFrameComponent, RouterLink],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div class="s5-page-container">
             <header class="page-header">
+                <p class="not-implemented-banner">Not implemented yet — this page is a read-only placeholder. Use <a routerLink="/observatory">Observatory</a> for host events/evidence.</p>
                 <h1>Artefact archive (S5 Artefact)</h1>
             </header>
 
