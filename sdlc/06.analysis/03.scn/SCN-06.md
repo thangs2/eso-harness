@@ -18,6 +18,10 @@ type: scenario-matrix
 | `SCN-06-3` | `AC-06-3` | failure | body có `id` khác | PUT | 400 `INVALID_CONSUMER_ID` | yes | `planned` |
 | `SCN-06-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — baseline chỉ một operator |
 | `SCN-06-TENANT-OUT` | — | tenant | — | — | — | — | `OUT` — consumer không phải tenant (`BR-14`) |
+| `SCN-06-4` | `AC-06-4` | happy | version 3, tab profile | sửa + Save | `expected_version=3` → v4, banner saved | yes |
+| `SCN-06-5` | `AC-06-5` | failure | DB v4, form v3 | Save | `409 STALE_VERSION`, không ghi đè | yes |
+| `SCN-06-6` | `AC-06-6` | rbac | 401/403 | load/save | `PROFILE_DENIED` | yes |
+| `SCN-06-7` | `AC-06-6` | failure | 5xx | save | `PROFILE_UPSTREAM_FAILED`; form giữ nguyên | yes |
 
 ## Luật
 

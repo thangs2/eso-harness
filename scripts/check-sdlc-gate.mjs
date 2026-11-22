@@ -41,9 +41,18 @@ const frontMatter = (text) => {
 };
 
 /** X11 — every `path/file.ext` cited in sdlc/ must resolve from repo root. Templates (`<nn>`) are skipped. */
+// Tombstone = path đã bị xoá/đổi tên và tài liệu đã ghi rõ sự kiện đó (không phải claim "đang tồn tại").
+// Vẫn đếm riêng để không giấu nợ; chỉ không tính vào "dead".
+const TOMBSTONES = [
+    { prefix: 'qc/acceptance/', why: 'xoá 2026-11-09 (records/01 §X11)' },
+    { prefix: 'qc/links.test.mjs', why: 'thay bằng gate X11/X15' },
+    { prefix: 'qc/provision-storage.test.mjs', why: 'xoá cùng qc/acceptance' },
+    { prefix: 'eso/harness/', why: 'planned per D-119, chưa tạo' },
+];
 const x11 = () => {
     const cited = [];
     const dead = [];
+    const tombstoned = [];
     const token = /`((?:eso|sdlc|agents|scripts|tools|qc|host-runtime|deploy)\/[^`\s]+\.[a-z0-9]+)`/g;
     for (const file of walk(SDLC)) {
         const text = readFileSync(file, 'utf8');
@@ -51,7 +60,10 @@ const x11 = () => {
             const path = m[1];
             if (path.includes('<') || path.includes('>') || path.includes('*') || path.includes('..')) continue;
             cited.push(path);
-            if (!existsSync(join(ROOT, path))) dead.push({ file: relative(ROOT, file), path });
+            if (existsSync(join(ROOT, path))) continue;
+            const tomb = TOMBSTONES.find((t) => path === t.prefix.replace(/\/$/, '') || path.startsWith(t.prefix));
+            if (tomb) { tombstoned.push({ path, why: tomb.why }); continue; }
+            dead.push({ file: relative(ROOT, file), path });
         }
     }
     const byPrefix = new Map();
@@ -60,7 +72,7 @@ const x11 = () => {
         byPrefix.set(prefix, (byPrefix.get(prefix) ?? 0) + 1);
     }
     return {
-        id: 'X11', cited: cited.length, dead: dead.length,
+        id: 'X11', cited: cited.length, dead: dead.length, tombstoned: tombstoned.length,
         share: cited.length ? Math.round((dead.length / cited.length) * 100) : 0,
         top: [...byPrefix.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4),
         sample: dead.slice(0, 3),
@@ -134,8 +146,13 @@ const x13 = () => {
         rows.push({ url: m[2].replace(/`/g, '').trim(), file, exists: file ? existsSync(join(dir, file)) : false });
     }
     const docs = rows.filter((r) => r.exists).map((r) => readFileSync(join(dir, r.file), 'utf8')).join('\n');
-    const settings = join(ROOT, 'eso/ui/apps/control-plane/src/app/features/consumers/pages/consumer-settings.page.ts');
-    const code = existsSync(settings) ? readFileSync(settings, 'utf8') : '';
+    // Settings đã/đang được tách thành nhiều file (tabs/ + *.base.ts) — quét cả subtree,
+    // không bám một file duy nhất, để phép đo không mất nguồn khi refactor.
+    const features = join(ROOT, 'eso/ui/apps/control-plane/src/app/features/consumers');
+    const sourceFiles = existsSync(features)
+        ? readdirSync(features, { recursive: true }).map(String).filter((f) => f.endsWith('.ts'))
+        : [];
+    const code = sourceFiles.map((f) => readFileSync(join(features, f), 'utf8')).join('\n');
     const tabBlock = /readonly tabs = \[([\s\S]*?)\];/.exec(code);
     const tabs = tabBlock ? [...tabBlock[1].matchAll(/id:\s*'([a-z-]+)'/g)].map((m) => m[1]) : [];
     const sectionBlock = /\['overview'[^\]]*\]/.exec(code);

@@ -16,7 +16,7 @@
             </header>
 
 
-            @if (error(); as message) { <p class="form-error" role="alert">{{ message }}</p> }
+            @if (error(); as message) { <p class="form-error" role="alert">@if (errorCode()) { <strong>{{ errorCode() }}</strong> — }{{ message }}</p> }
             @if (saved()) { <p class="saved-banner" role="status">Settings saved.</p> }
 
             @if (legacyNotice(); as notice) { <p class="saved-banner" role="status">{{ notice }}</p> }

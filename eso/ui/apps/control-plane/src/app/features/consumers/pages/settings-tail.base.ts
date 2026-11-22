@@ -182,12 +182,12 @@ applyProfile(fields: ConsumerProfileFields): void {
 save(navigateAfter = false): void {
         const profile = this.current();
         if (!profile) return;
-        this.saving.set(true); this.saved.set(false); this.error.set(null);
-        if (this.jevMode() !== 'off' && !this.consent()) { this.saving.set(false); this.error.set('JEV shadow/active requires observation consent.'); return; }
+        this.saving.set(true); this.saved.set(false); this.error.set(null); this.errorCode.set('');
+        if (this.jevMode() !== 'off' && !this.consent()) { this.saving.set(false); this.errorCode.set('PROFILE_JEV_NEEDS_CONSENT'); this.error.set('JEV shadow/active requires observation consent.'); return; }
         const auto = this.jevAutoThreshold().trim() === '' ? undefined : Number(this.jevAutoThreshold());
         const confirm = this.jevConfirmThreshold().trim() === '' ? undefined : Number(this.jevConfirmThreshold());
-        if ((auto !== undefined && (!Number.isFinite(auto) || auto < 0 || auto > 1)) || (confirm !== undefined && (!Number.isFinite(confirm) || confirm < 0 || confirm > 1))) { this.saving.set(false); this.error.set('JEV thresholds must be between 0 and 1.'); return; }
-        if (auto !== undefined && confirm !== undefined && auto < confirm) { this.saving.set(false); this.error.set('JEV auto threshold must be >= confirm threshold.'); return; }
+        if ((auto !== undefined && (!Number.isFinite(auto) || auto < 0 || auto > 1)) || (confirm !== undefined && (!Number.isFinite(confirm) || confirm < 0 || confirm > 1))) { this.saving.set(false); this.errorCode.set('PROFILE_JEV_THRESHOLD'); this.error.set('JEV thresholds must be between 0 and 1.'); return; }
+        if (auto !== undefined && confirm !== undefined && auto < confirm) { this.saving.set(false); this.errorCode.set('PROFILE_JEV_THRESHOLD'); this.error.set('JEV auto threshold must be >= confirm threshold.'); return; }
         const previous = (profile.profile || {}) as Record<string, unknown>;
         const previousSettings = (previous.settings as Record<string, unknown> | undefined) || {};
         const nextProfile: Record<string, unknown> = {
@@ -276,7 +276,13 @@ save(navigateAfter = false): void {
                 if (navigateAfter) void this.completeFinish();
                 else { void this.loadMigrationPreview(); void this.refreshLegacyHarness(); }
             })
-            .catch((err) => this.error.set(err?.detail || err?.message || 'Unable to save settings'))
+            .catch((err) => {
+                const status = (err as { status?: number })?.status;
+                this.errorCode.set(status === 409 ? 'PROFILE_STALE_VERSION'
+                    : status === 401 || status === 403 ? 'PROFILE_DENIED'
+                        : 'PROFILE_UPSTREAM_FAILED');
+                this.error.set((err as { detail?: string; message?: string })?.detail || (err as Error)?.message || 'Unable to save settings');
+            })
             .finally(() => this.saving.set(false));
     }
 

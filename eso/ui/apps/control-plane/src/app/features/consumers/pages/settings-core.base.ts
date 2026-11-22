@@ -75,6 +75,7 @@ readonly baselineReady = signal(false);
 readonly dirty = computed(() => this.baselineReady() && this.lastSaved() !== null && this.currentDraft() !== this.lastSaved());
 
 readonly error = signal<string | null>(null);
+readonly errorCode = signal('');
 
 protected readonly current = signal<ConsumerProfile | null>(null);
 
@@ -417,7 +418,11 @@ ngOnInit(): void {
                 void this.refreshLegacyHarness();
                 void this.loadMigrationPreview();
             })
-            .catch((err) => this.error.set(err?.detail || err?.message || 'Unable to load consumer'))
+            .catch((err) => {
+                const status = (err as { status?: number })?.status;
+                this.errorCode.set(status === 401 || status === 403 ? 'PROFILE_DENIED' : 'PROFILE_UPSTREAM_FAILED');
+                this.error.set((err as { detail?: string; message?: string })?.detail || (err as Error)?.message || 'Unable to load consumer');
+            })
             .finally(() => this.loading.set(false));
     }
 }
