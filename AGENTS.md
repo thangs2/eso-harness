@@ -95,7 +95,7 @@ AGENTS.local.md    generated — mirror always-on cho DSH
 ```
 
 ## Quy ước
-
+- **Refactor `sdlc/**/*.md`** ⇒ **MUST** đọc `sdlc/02.governance/01.standard/13.doc-refactor-alignment.md` trước khi sửa: định nghĩa *"rời rạc = cùng một nội dung bị chẻ ra nhiều nơi"* (không phải "nhiều file"), alignment A–D, anti-pattern, checklist R1–R6.
 - ESM `.mjs`; repo này **không có** `package.json` hay test runner — verify bằng hai gate script.
 - **Không** dùng `comments/` (đã bỏ 2026-11-09). Scratch → `/tmp/`; tài liệu bền → `sdlc/<NN.topic>/`.
 - **Không** commit `.harness/`, `.cursor/session/`, `.agents/session/`.
