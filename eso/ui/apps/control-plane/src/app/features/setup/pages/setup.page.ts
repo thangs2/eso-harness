@@ -32,7 +32,7 @@ import { ConsumerProfileService } from '../../../core/consumers/consumer-profile
                 }
             </nav>
 
-            @if (error(); as message) { <p class="form-error" role="alert">{{ message }}</p> }
+            @if (error(); as message) { <p class="form-error" role="alert">@if (errorCode()) { <strong>{{ errorCode() }}</strong> — }{{ message }}</p> }
 
             <section class="panel setup-panel">
                 @switch (step()) {
@@ -47,7 +47,7 @@ import { ConsumerProfileService } from '../../../core/consumers/consumer-profile
                             </mat-form-field>
                             <button mat-flat-button color="primary" type="button" class="browse-button" [disabled]="rootResolving()" (click)="rootFolderInput.click()">{{ rootResolving() ? 'Resolving…' : 'Choose folder' }}</button>
                         </div>
-                        @if (rootError()) { <p class="form-error" role="alert">{{ rootError() }}</p> }
+                        @if (rootError()) { <p class="form-error" role="alert">@if (rootErrorCode()) { <strong>{{ rootErrorCode() }}</strong> — }{{ rootError() }}</p> }
                         <div class="canonical-box">
                             <strong>Layout to create</strong>
                             <pre>repo-A/
@@ -125,7 +125,7 @@ import { ConsumerProfileService } from '../../../core/consumers/consumer-profile
                                 </mat-select>
                             </mat-form-field>
                             @if (jevMode() !== 'off' && !consent()) {
-                                <p class="form-error" role="alert">JEV shadow/active requires observation consent.</p>
+                                <p class="form-error" role="alert"><strong>SETUP_JEV_NEEDS_CONSENT</strong> — JEV shadow/active requires observation consent.</p>
                             }
                         </div>
                     }
@@ -221,8 +221,10 @@ export class SetupPage {
     readonly jevMode = signal<'off' | 'shadow' | 'active'>('off');
     readonly saving = signal(false);
     readonly error = signal<string | null>(null);
+    readonly errorCode = signal('');
     readonly rootResolving = signal(false);
     readonly rootError = signal<string | null>(null);
+    readonly rootErrorCode = signal('');
 
     toggleEvent(id: string): void {
         this.events.set(this.events().includes(id) ? this.events().filter((event) => event !== id) : [...this.events(), id]);
@@ -238,25 +240,27 @@ export class SetupPage {
 
     back(): void {
         this.error.set(null);
+        this.errorCode.set('');
         this.step.set(Math.max(1, this.step() - 1));
     }
 
     next(): void {
         const error = this.validate();
-        if (error) { this.error.set(error); return; }
+        if (error) { this.errorCode.set(error.code); this.error.set(error.message); return; }
         this.error.set(null);
+        this.errorCode.set('');
         const next = Math.min(4, this.step() + 1);
         this.step.set(next);
         this.furthest.set(Math.max(this.furthest(), next));
     }
 
-    validate(): string | null {
-        if (this.step() === 1 && !this.root().trim()) return 'Root repo is required.';
-        if (this.step() === 3 && this.jevMode() !== 'off' && !this.consent()) return 'JEV shadow/active requires observation consent.';
+    validate(): { code: string; message: string } | null {
+        if (this.step() === 1 && !this.root().trim()) return { code: 'SETUP_ROOT_REQUIRED', message: 'Root repo is required.' };
+        if (this.step() === 3 && this.jevMode() !== 'off' && !this.consent()) return { code: 'SETUP_JEV_NEEDS_CONSENT', message: 'JEV shadow/active requires observation consent.' };
         if (this.step() === 2) {
-            if (!/^[a-z][a-z0-9-]{1,31}$/.test(this.consumerId())) return 'Consumer id must be a lowercase slug (2–32 characters).';
-            if (!this.name().trim()) return 'Consumer name is required.';
-            if (!this.sdlcRoot().trim()) return 'SDLC root is required.';
+            if (!/^[a-z][a-z0-9-]{1,31}$/.test(this.consumerId())) return { code: 'SETUP_ID_INVALID', message: 'Consumer id must be a lowercase slug (2–32 characters).' };
+            if (!this.name().trim()) return { code: 'SETUP_NAME_REQUIRED', message: 'Consumer name is required.' };
+            if (!this.sdlcRoot().trim()) return { code: 'SETUP_SDLC_ROOT_REQUIRED', message: 'SDLC root is required.' };
         }
         return null;
     }
@@ -278,19 +282,26 @@ export class SetupPage {
                     return;
                 }
                 if (result.matches.length === 0) {
+                    this.rootErrorCode.set('SETUP_ROOT_UNRESOLVED');
                     this.rootError.set(`Folder "${name}" is not inside the control-plane filesystem root.`);
                     return;
                 }
+                this.rootErrorCode.set('SETUP_ROOT_AMBIGUOUS');
                 this.rootError.set(`Multiple folders named "${name}". Choose a more specific repository folder.`);
             })
-            .catch((err) => this.rootError.set(err?.detail || err?.message || 'Could not resolve selected folder'))
+            .catch((err) => {
+                this.rootErrorCode.set('SETUP_UPSTREAM_FAILED');
+                this.rootError.set(err?.detail || err?.message || 'Could not resolve selected folder');
+            })
             .finally(() => this.rootResolving.set(false));
     }
 
     apply(): void {
-        if (this.validate()) return;
+        const invalid = this.validate();
+        if (invalid) { this.errorCode.set(invalid.code); this.error.set(invalid.message); return; }
         this.saving.set(true);
         this.error.set(null);
+        this.errorCode.set('');
         this.service
             .createSetup({
                 id: this.consumerId().trim(),
@@ -304,7 +315,11 @@ export class SetupPage {
                 },
             })
             .then((result) => this.router.navigate(['/consumers', result.id], { queryParams: { created: '1' } }))
-            .catch((error) => this.error.set(error?.detail || error?.message || 'Unable to create consumer'))
+            .catch((error) => {
+                const status = (error as { status?: number })?.status;
+                this.errorCode.set(status === 401 || status === 403 ? 'SETUP_DENIED' : 'SETUP_UPSTREAM_FAILED');
+                this.error.set((error as { detail?: string; message?: string })?.detail || (error as Error)?.message || 'Unable to create consumer');
+            })
             .finally(() => this.saving.set(false));
     }
 }
