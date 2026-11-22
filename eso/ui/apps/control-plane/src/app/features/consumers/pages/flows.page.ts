@@ -195,7 +195,7 @@ import type { FlowDefinitionDto, FlowProposalDto, FlowSummaryDto, FlowValidation
                 <section class="flow-empty"><h2>No flow selected</h2><p>Create a flow to start from the consumer's workers.</p></section>
             }
 
-            @if (error()) { <p class="flow-error" role="alert">{{ error() }}</p> }
+            @if (error()) { <p class="flow-error" role="alert">@if (errorCode()) { <strong>{{ errorCode() }}</strong> — }{{ error() }}</p> }
         </main>
     `,
     styles: [`
@@ -358,6 +358,7 @@ export class FlowsPage implements OnInit {
     readonly selectedEdge = signal<string | null>(null);
     readonly validation = signal<FlowValidationDto | null>(null);
     readonly error = signal('');
+    readonly errorCode = signal('');
     readonly loading = signal(false);
     readonly creating = signal(false);
     readonly validating = signal(false);
@@ -381,6 +382,18 @@ export class FlowsPage implements OnInit {
         void this.load();
     }
 
+    /** Mã lỗi tầng UI cho page flows: 401/403 ⇒ FLOW_DENIED · 404 ⇒ FLOW_NOT_FOUND. */
+    private fail(err: unknown, fallbackCode: string, fallbackMessage: string): void {
+        const e = err as { status?: number; code?: string; detail?: string; message?: string };
+        const code = e?.status === 401 || e?.status === 403
+            ? 'FLOW_DENIED'
+            : e?.status === 404
+                ? 'FLOW_NOT_FOUND'
+                : fallbackCode;
+        this.errorCode.set(code);
+        this.error.set(e?.detail || e?.message || fallbackMessage);
+    }
+
     activeId(): string {
         return this.active()?.id || '';
     }
@@ -395,7 +408,7 @@ export class FlowsPage implements OnInit {
                 if (flows.length > 0) return this.selectFlow(flows[0].id);
                 return undefined;
             })
-            .catch((err) => this.error.set(err?.detail || err?.message || 'Could not load flows'))
+            .catch((err) => this.fail(err, 'FLOW_UPSTREAM_FAILED', 'Could not load flows'))
             .finally(() => this.loading.set(false));
     }
 
@@ -410,13 +423,14 @@ export class FlowsPage implements OnInit {
                 this.selectedEdge.set(flow.edges[0]?.id || null);
                 this.validation.set(null);
             })
-            .catch((err) => this.error.set(err?.detail || err?.message || 'Could not load flow'));
+            .catch((err) => this.fail(err, 'FLOW_UPSTREAM_FAILED', 'Could not load flow'));
     }
 
     createFlow(): void {
         const workers = this.workers()?.workers || [];
         if (workers.length === 0) {
-            this.error.set('Save workers first. A flow cannot reference an empty worker set.');
+            this.errorCode.set('FLOW_WORKERS_REQUIRED');
+        this.error.set('Save workers first. A flow cannot reference an empty worker set.');
             return;
         }
         this.creating.set(true);
@@ -438,7 +452,7 @@ export class FlowsPage implements OnInit {
                 this.summaries.set(flows);
                 return this.selectFlow(id);
             })
-            .catch((err) => this.error.set(err?.detail || err?.message || 'Could not create flow'))
+            .catch((err) => this.fail(err, 'FLOW_UPSTREAM_FAILED', 'Could not create flow'))
             .finally(() => this.creating.set(false));
     }
 
@@ -527,7 +541,7 @@ export class FlowsPage implements OnInit {
                 if (flows.length > 0) return this.selectFlow(flows[0].id);
                 return undefined;
             })
-            .catch((err) => this.error.set(err?.detail || err?.message || 'Could not delete draft'))
+            .catch((err) => this.fail(err, 'FLOW_UPSTREAM_FAILED', 'Could not delete draft'))
             .finally(() => this.deletingDraft.set(false));
     }
 
@@ -621,7 +635,7 @@ export class FlowsPage implements OnInit {
                 this.summaries.set(flows);
                 this.active.set(saved);
             })
-            .catch((err) => this.error.set(err?.detail || err?.message || 'Could not save flow'));
+            .catch((err) => this.fail(err, 'FLOW_UPSTREAM_FAILED', 'Could not save flow'));
     }
 
     validate(): void {
@@ -631,7 +645,7 @@ export class FlowsPage implements OnInit {
         this.error.set('');
         this.service.validateFlow(this.consumerId, flow.id, flow)
             .then((result) => this.validation.set(result))
-            .catch((err) => this.error.set(err?.detail || err?.message || 'Could not validate flow'))
+            .catch((err) => this.fail(err, 'FLOW_UPSTREAM_FAILED', 'Could not validate flow'))
             .finally(() => this.validating.set(false));
     }
 
@@ -650,7 +664,7 @@ export class FlowsPage implements OnInit {
                 if (!result) return;
                 return this.load();
             })
-            .catch((err) => this.error.set(err?.detail || err?.message || 'Could not publish flow'))
+            .catch((err) => this.fail(err, 'FLOW_UPSTREAM_FAILED', 'Could not publish flow'))
             .finally(() => this.publishing.set(false));
     }
 
@@ -661,7 +675,7 @@ export class FlowsPage implements OnInit {
         this.service.applyFlowProposal(this.consumerId)
             .then(() => this.load())
             .then(() => this.proposal.set(null))
-            .catch((err) => this.error.set(err?.detail || err?.message || 'Could not apply SLP proposal'))
+            .catch((err) => this.fail(err, 'FLOW_UPSTREAM_FAILED', 'Could not apply SLP proposal'))
             .finally(() => this.proposalApplying.set(false));
     }
 
@@ -674,7 +688,7 @@ export class FlowsPage implements OnInit {
         if (!flow || flow.status !== 'published') return;
         this.service.setDefaultFlow(this.consumerId, flow.id, flow.version)
             .then(() => this.load())
-            .catch((err) => this.error.set(err?.detail || err?.message || 'Could not set default flow'));
+            .catch((err) => this.fail(err, 'FLOW_UPSTREAM_FAILED', 'Could not set default flow'));
     }
 
     fitCanvas(): void {
