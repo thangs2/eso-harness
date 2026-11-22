@@ -96,7 +96,7 @@ interface TraceSummary {
                 </div>
             </section>
 
-            @if (error(); as message) { <p class="form-error" role="alert">{{ message }}</p> }
+            @if (error(); as message) { <p class="form-error" role="alert">@if (errorCode()) { <strong>{{ errorCode() }}</strong> — }{{ message }}</p> }
 
             <section class="kpis" aria-label="Observatory summary">
                 <div><span>Events</span><strong>{{ observations().length }}</strong><small>latest 500</small></div>
@@ -147,7 +147,7 @@ interface TraceSummary {
                         <input [value]="pulseQuery()" (input)="pulseQuery.set($any($event.target).value)" placeholder="Trace ID / request text / turn…" aria-label="Request or trace to play">
                         <button type="submit" class="play-btn" [disabled]="pulsePlaying()" aria-label="Play trace">{{ pulsePlaying() ? '…' : '▶' }}</button>
                     </form>
-                    @if (pulseError(); as message) { <p class="pulse-error" role="alert">{{ message }}</p> }
+                    @if (pulseError(); as message) { <p class="pulse-error" role="alert">@if (pulseErrorCode()) { <strong>{{ pulseErrorCode() }}</strong> — }{{ message }}</p> }
                     @if (pulseEvents().length > 0) {
                         <div class="pulse-meta">
                             <span>{{ displayEvents().length }} / {{ pulseEvents().length }} events</span>
@@ -313,6 +313,7 @@ export class ObservatoryPage implements OnInit, OnDestroy {
     readonly flow = signal<FlowDefinitionDto | null>(null);
     readonly loading = signal(false);
     readonly error = signal('');
+    readonly errorCode = signal('');
     readonly observationConsent = signal(false);
     readonly selectedWorker = signal('');
 
@@ -383,6 +384,7 @@ export class ObservatoryPage implements OnInit, OnDestroy {
     readonly pulseIndex = signal(0);
     readonly pulsePlaying = signal(false);
     readonly pulseError = signal('');
+    readonly pulseErrorCode = signal('');
     private pulseTimer: ReturnType<typeof setInterval> | null = null;
     readonly displayEvents = computed(() => this.pulseEvents().length
         ? this.pulseEvents().slice(0, this.pulseIndex())
@@ -428,13 +430,18 @@ export class ObservatoryPage implements OnInit, OnDestroy {
             const list = await this.api.listConsumers();
             this.consumers.set(list.items || []);
         } catch (error) {
-            this.error.set((error as { detail?: string; message?: string })?.detail || (error as Error)?.message || 'Unable to load consumers');
+            this.fail(error, 'OBS_UPSTREAM_FAILED', 'Unable to load consumers');
+            return;
         }
         const query = this.route.snapshot.queryParamMap;
         const requested = query.get('consumer') || query.get('project') || '';
         const requestedTrace = query.get('trace') || query.get('pulse') || query.get('request') || '';
         const fallback = this.consumers()[0]?.id || '';
-        this.consumerId.set(requested && this.consumers().some((item) => item.id === requested) ? requested : fallback);
+        if (requested && !this.consumers().some((item) => item.id === requested)) {
+            this.failWith('OBS_CONSUMER_UNKNOWN', `Consumer "${requested}" not found`);
+            return;
+        }
+        this.consumerId.set(requested || fallback);
         if (this.consumerId()) await this.load();
         if (requestedTrace) {
             this.pulseQuery.set(requestedTrace);
@@ -451,6 +458,8 @@ export class ObservatoryPage implements OnInit, OnDestroy {
         this.pulseEvents.set([]);
         this.pulseIndex.set(0);
         this.pulseError.set('');
+        this.pulseErrorCode.set('');
+        this.errorCode.set('');
         void this.router.navigate([], { relativeTo: this.route, queryParams: { consumer: id, trace: null }, queryParamsHandling: 'merge', replaceUrl: true });
         void this.load();
     }
@@ -460,9 +469,17 @@ export class ObservatoryPage implements OnInit, OnDestroy {
         if (!id || !this.api) return;
         this.loading.set(true);
         this.error.set('');
+        this.errorCode.set('');
+        let rows: ObservationDto[] = [];
         try {
-            const [rows, flows, detail] = await Promise.all([
-                this.api.getConsumerObservations(id, 500),
+            rows = await this.api.getConsumerObservations(id, 500);
+        } catch (error) {
+            this.loading.set(false);
+            this.fail(error, 'OBS_UPSTREAM_FAILED', 'Unable to load observations');
+            return;
+        }
+        try {
+            const [flows, detail] = await Promise.all([
                 this.api.getConsumerFlows(id).catch(() => []),
                 this.api.getConsumer(id).catch(() => null),
             ]);
@@ -472,10 +489,27 @@ export class ObservatoryPage implements OnInit, OnDestroy {
             const anyDetail = detail as any;
             this.observationConsent.set(anyDetail?.profile?.observation?.consent === true || anyDetail?.profile?.profile?.observation?.consent === true);
         } catch (error) {
-            this.error.set((error as { detail?: string; message?: string })?.detail || (error as Error)?.message || 'Unable to load observatory');
+            this.fail(error, 'OBS_UPSTREAM_FAILED', 'Unable to load observatory');
         } finally {
             this.loading.set(false);
         }
+    }
+
+    /** Mã lỗi theo SRS `04` §6: 401/403 ⇒ OBS_DENIED · 404 consumer ⇒ OBS_CONSUMER_UNKNOWN. */
+    private fail(error: unknown, fallbackCode: string, fallbackMessage: string): void {
+        const e = error as { status?: number; code?: string; detail?: string; message?: string };
+        const code = e?.status === 401 || e?.status === 403
+            ? 'OBS_DENIED'
+            : e?.code === 'CONSUMER_NOT_FOUND'
+                ? 'OBS_CONSUMER_UNKNOWN'
+                : fallbackCode;
+        this.errorCode.set(code);
+        this.error.set(e?.detail || e?.message || fallbackMessage);
+    }
+
+    private failWith(code: string, message: string): void {
+        this.errorCode.set(code);
+        this.error.set(message);
     }
 
     private transitionCounts(): Map<string, number> {
@@ -515,19 +549,20 @@ export class ObservatoryPage implements OnInit, OnDestroy {
         event?.preventDefault();
         this.stopPulse();
         const query = (this.pulseQuery() || this.pulseTrace()).trim().toLowerCase();
-        if (!query) { this.pulseError.set('Enter a trace ID or request text.'); return; }
+        if (!query) { this.pulseErrorCode.set('OBS_QUERY_EMPTY'); this.pulseError.set('Enter a trace ID or request text.'); return; }
         const traceIds = [...new Set(this.observations().map((item) => item.traceId))];
         const exact = traceIds.find((id) => id.toLowerCase() === query);
         const matched = exact || traceIds.find((id) => this.observations().some((item) => item.traceId === id && [
             item.workerId, item.event, item.outcome,
             (item.evidence as Record<string, unknown> | undefined)?.['userQuery'], (item.evidence as Record<string, unknown> | undefined)?.['requestHash'], (item.evidence as Record<string, unknown> | undefined)?.['requestLength'],
         ].join(' ').toLowerCase().includes(query)));
-        if (!matched) { this.pulseError.set('No trace or request matched.'); return; }
+        if (!matched) { this.pulseErrorCode.set('OBS_TRACE_NOT_MATCHED'); this.pulseError.set('No trace or request matched.'); return; }
         const events = this.observations()
             .filter((item) => item.traceId === matched)
             .sort((left, right) => String(left.at).localeCompare(String(right.at)));
-        if (!events.length) { this.pulseError.set('Trace has no events.'); return; }
+        if (!events.length) { this.pulseErrorCode.set('OBS_TRACE_EMPTY'); this.pulseError.set('Trace has no events.'); return; }
         this.pulseError.set('');
+        this.pulseErrorCode.set('');
         this.pulseQuery.set(matched);
         this.pulseTrace.set(matched);
         void this.router.navigate([], { relativeTo: this.route, queryParams: { trace: matched }, queryParamsHandling: 'merge', replaceUrl: true });

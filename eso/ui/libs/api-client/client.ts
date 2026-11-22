@@ -204,7 +204,14 @@ export class ControlPlaneApiClient {
 
     private async problem(res: Response): Promise<ProblemDetailsDto> {
         try {
-            return (await res.json()) as ProblemDetailsDto;
+            const body = (await res.json()) as Partial<ProblemDetailsDto> & { code?: string; message?: string };
+            // Envelope của control-plane là { code, message, detail? } — `status` không nằm trong body.
+            return {
+                ...body,
+                title: body.title ?? body.code ?? 'HTTP Error',
+                status: res.status,
+                detail: body.detail ?? body.message,
+            } as ProblemDetailsDto;
         } catch {
             return { title: 'HTTP Error', status: res.status, detail: res.statusText };
         }
