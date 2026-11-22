@@ -246,6 +246,7 @@ async function handleJob(request: Request, deps: RemoteServerDeps): Promise<Resp
             cwd: workspace.realpath,
             traceId: job.traceId ?? job.jobId,
             taskType: job.taskType,
+            executionMode: 'B',
             fetchImpl: options.fetchImpl,
             sleepImpl: options.sleepImpl,
             adapterOverride: options.adapterOverride,

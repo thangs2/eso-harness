@@ -288,7 +288,7 @@ async function ensureHostProfile(profile, consumerId, host, stackVersion) {
     const hostProfiles = Array.isArray(profile?.settings?.harness?.hostProfiles) ? profile.settings.harness.hostProfiles : [];
     const existing = hostProfiles.find((item) => item.hostId === host || item.hostPluginId === host);
     const binding = {
-        id: existing?.id || `hp-${consumerId}-${host}`,
+        id: `hp-${consumerId}-${host}`,
         userId: 'operator',
         hostId: host,
         stackVersion: existing?.stackVersion || stackVersion,
@@ -307,15 +307,20 @@ async function provisionWorkers(consumerId, bindingIds, hosts) {
     const runtimeKeys = hosts.map((host) => HOSTS[host].runtimeKey);
     const config = await api('GET', `/api/v1/consumers/${consumerId}/workers`);
     const workers = Array.isArray(config?.workers) ? config.workers : [];
-    const needsBinding = workers.filter((worker) => !Array.isArray(worker.hostBindingIds) || worker.hostBindingIds.length === 0);
+    const bindingSet = new Set(bindingIds);
+    const needsBinding = workers.filter((worker) => {
+        const ids = Array.isArray(worker.hostBindingIds) ? worker.hostBindingIds : [];
+        return ids.length === 0 || ids.some((id) => !bindingSet.has(id));
+    });
     if (needsBinding.length > 0) {
         await api('PUT', `/api/v1/consumers/${consumerId}/workers`, {
-            workers: workers.map((worker) => ({
-                ...worker,
-                hostBindingIds: Array.isArray(worker.hostBindingIds) && worker.hostBindingIds.length > 0
-                    ? worker.hostBindingIds
-                    : [...bindingIds],
-            })),
+            workers: workers.map((worker) => {
+                const ids = Array.isArray(worker.hostBindingIds) ? worker.hostBindingIds : [];
+                return {
+                    ...worker,
+                    hostBindingIds: ids.length > 0 && ids.every((id) => bindingSet.has(id)) ? ids : [...bindingIds],
+                };
+            }),
         });
     }
     const existing = await api('GET', `/api/v1/consumers/${consumerId}/worker-placement`).catch(() => ({ items: [] }));
@@ -368,7 +373,7 @@ async function setupConsumer(consumerId, hosts) {
     }
     harness.hostProfiles = nextProfiles;
     harness.developers = ['operator'];
-    harness.formationHostIds = [...new Set([...(harness.formationHostIds || []), ...bindingIds])];
+    harness.formationHostIds = [...bindingIds];
     const plugins = Array.isArray(harness.plugins) ? harness.plugins : [];
     for (const host of hosts) {
         const label = host === 'agy' ? 'Antigravity' : host === 'cursor' ? 'Cursor' : 'DSH';

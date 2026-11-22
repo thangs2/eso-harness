@@ -8,16 +8,17 @@
  *
  * Resolution order:
  *   1. explicit `--model` (wins)
- *   2. host runtime `modelTiers[placement.modelTier]` (model + optional effort recorded)
- *   3. host runtime `defaultModel` (warning MODEL_TIER_NOT_MAPPED when a tier was requested)
- *   4. block with MODEL_UNAVAILABLE
+ *   2. `workerPlacement.model` exact per-worker override
+ *   3. host runtime `modelTiers[placement.modelTier]` (model + optional effort recorded)
+ *   4. host runtime `defaultModel` (warning MODEL_TIER_NOT_MAPPED when a tier was requested)
+ *   5. block with MODEL_UNAVAILABLE
  */
 
 import type { SnapshotHostRuntime, SnapshotPlacement } from './config-client';
 
 export interface ModelResolution {
     model: string;
-    source: 'explicit' | 'tier' | 'runtime-default';
+    source: 'explicit' | 'worker' | 'tier' | 'runtime-default';
     /** Placement tier the worker asked for, if any. */
     tier: string | null;
     /** True when a tier entry mapped the tier to a concrete model. */
@@ -86,6 +87,18 @@ export function resolveModel(input: ResolveModelInput): ModelResolution {
             tierMapped: false,
             modelKnownOnRuntime: runtimeModels.length === 0 || runtimeModels.includes(explicit),
             warning: runtimeModels.length && !runtimeModels.includes(explicit) ? 'MODEL_NOT_IN_RUNTIME_MODELS' : undefined,
+        };
+    }
+
+    const workerModel = String(input.placement?.models?.[input.runtimeKey] ?? input.placement?.model ?? '').trim();
+    if (workerModel) {
+        return {
+            model: workerModel,
+            source: 'worker',
+            tier,
+            tierMapped: false,
+            modelKnownOnRuntime: runtimeModels.length === 0 || runtimeModels.includes(workerModel),
+            warning: runtimeModels.length && !runtimeModels.includes(workerModel) ? 'MODEL_NOT_IN_RUNTIME_MODELS' : undefined,
         };
     }
 

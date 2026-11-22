@@ -50,7 +50,7 @@ function run(command, args) {
 const flow = await get(`/api/v1/consumers/${consumer}/flows/${flowId}`);
 if (flow.status !== 'published') throw new Error(`flow ${flowId} is ${flow.status}, not published`);
 const placement = await get(`/api/v1/consumers/${consumer}/worker-placement`);
-const byWorker = new Map((placement.items || []).map((item) => [item.workerId, item.allowedHosts || []]));
+const byWorker = new Map((placement.items || []).map((item) => [item.workerId, { allowed: item.allowedHosts || [], modes: Array.isArray(item.modes) && item.modes.length ? item.modes : ['A', 'B'] }]));
 const edges = flow.edges || [];
 const taskType = String(env.ESO_TASK_TYPE || flow.taskType || 'build').toLowerCase();
 const first = flow.nodes?.[0]?.workerId;
@@ -60,21 +60,35 @@ const trail = [];
 const seen = new Map();
 const dry = env.ESO_DRY !== '0';
 
+function adapterFor(key) {
+    if (env.ESO_ADAPTER) return env.ESO_ADAPTER;
+    if (key === 'main-chat' || key.startsWith('dsh:')) return 'main-chat';
+    if (key.startsWith('agy:')) return 'agy';
+    if (key.startsWith('cursor:')) return 'cursor';
+    return 'dry';
+}
+
 function candidatesFor(workerId) {
-    const allowed = byWorker.get(workerId) || [];
+    const placement = byWorker.get(workerId) || { allowed: [], modes: ['A', 'B'] };
+    const allowed = placement.allowed;
+    const modes = placement.modes;
+    const modeAllows = (key) => {
+        const local = key === runtimeKey || key === 'main-chat';
+        return local ? modes.includes('A') : modes.includes('B');
+    };
     const ordered = [];
     for (const key of allowed) {
-        if (key === runtimeKey || remoteHosts[key]) ordered.push(key);
+        if ((key === runtimeKey || remoteHosts[key]) && modeAllows(key)) ordered.push(key);
     }
     for (const key of fallbackHosts) {
-        if (!ordered.includes(key) && (key === runtimeKey || key === 'main-chat' || remoteHosts[key])) ordered.push(key);
+        if (!ordered.includes(key) && (key === runtimeKey || key === 'main-chat' || remoteHosts[key]) && modeAllows(key)) ordered.push(key);
     }
     return ordered;
 }
 
 function executeOnce(workerId, target, step) {
     const local = target === runtimeKey || target === 'main-chat';
-    const adapter = target === 'main-chat' ? 'main-chat' : (env.ESO_ADAPTER || (target.startsWith('agy:') ? 'agy' : 'cursor'));
+    const adapter = adapterFor(target);
     if (local) {
         const report = run('bun', ['src/cli.ts', 'run', '--consumer', consumer, '--runtime-key', runtimeKey, '--flow', flowId, '--worker', workerId, '--adapter', adapter, ...(dry ? ['--dry-run'] : []), '--max-steps', '1', '--prompt', prompt, '--trace-id', traceId, '--job-id', `${traceId}-${step}`, '--task-type', taskType, '--json']);
         if (report.error) return { local: true, target, outcome: 'BLOCKED', failureKind: 'INFRA', errorCode: report.error.code || 'LOCAL_RUN_FAILED', detail: { local: true, error: report.error.message } };
@@ -85,7 +99,7 @@ function executeOnce(workerId, target, step) {
             outcome: last?.outcome ?? (report.ok ? 'PASS' : 'BLOCKED'),
             failureKind: last?.failureKind,
             errorCode: last?.errorCode,
-            detail: { local: true, observationId: last?.observationId, stoppedReason: report.stoppedReason },
+            detail: { local: true, observationId: last?.observationId, stoppedReason: report.stoppedReason, model: last?.model, modelSource: last?.modelSource },
         };
     }
     try {
@@ -97,7 +111,7 @@ function executeOnce(workerId, target, step) {
             outcome: report.outcome ?? (report.ok ? 'PASS' : 'BLOCKED'),
             failureKind: report.failureKind,
             errorCode: report.errorCode,
-            detail: { local: false, remoteObservationId: report.remoteObservationId, localObservationId: report.localObservationId },
+            detail: { local: false, remoteObservationId: report.remoteObservationId, localObservationId: report.localObservationId, model: report.model, modelSource: report.modelSource, workerId: report.workerId },
         };
     } catch (error) {
         return {
@@ -119,7 +133,8 @@ for (let step = 1; step <= maxSteps; step += 1) {
         const target = candidates[index];
         process.stderr.write(`[flow ${step}] ${workerId} -> ${target}${target === runtimeKey || target === 'main-chat' ? ' (local)' : ' (remote)'}\n`);
         attempt = executeOnce(workerId, target, step);
-        process.stderr.write(`[flow ${step}] ${workerId} outcome=${attempt.outcome}${attempt.failureKind ? ` failure=${attempt.failureKind}` : ''}\n`);
+        process.stderr.write(`[flow ${step}] ${workerId} outcome=${attempt.outcome}${attempt.detail?.model ? ` model=${attempt.detail.model} (${attempt.detail.modelSource ?? 'unknown'})` : ''}${attempt.failureKind ? ` failure=${attempt.failureKind}` : ''}${attempt.errorCode ? ` error=${attempt.errorCode}` : ''}\n`);
+        if (attempt.detail?.error) process.stderr.write(`[flow ${step}] detail: ${attempt.detail.error}\n`);
         if ((attempt.outcome !== 'FAIL' && attempt.outcome !== 'BLOCKED') || attempt.failureKind !== 'INFRA') break;
         const next = candidates[index + 1];
         if (next) process.stderr.write(`[flow ${step}] infra failure on ${target}; fallback -> ${next}\n`);

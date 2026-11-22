@@ -54,6 +54,8 @@ export interface EntrypointOptions {
     taskType?: string;
     fetchImpl?: FetchLike;
     sleepImpl?: (ms: number) => Promise<void>;
+    /** Execution mode enforced against worker placement. A = local host, B = remote dispatch target. */
+    executionMode?: 'A' | 'B';
     /** Offline mode: config must come from the local snapshot cache. */
     offline?: boolean;
     cacheDir?: string;
@@ -364,6 +366,21 @@ export async function runEntrypoint(options: EntrypointOptions): Promise<RunRepo
             return finalReport(false, error.code);
         }
         throw error;
+    }
+
+    const executionMode = options.executionMode ?? 'A';
+    const allowedModes = Array.isArray(current.placement?.modes) && current.placement.modes.length > 0 ? current.placement.modes : ['A', 'B'];
+    if (!allowedModes.includes(executionMode)) {
+        steps.push(
+            await blockStep({
+                code: 'MODE_NOT_ALLOWED',
+                message: `Worker ${current.worker.id} is not allowed in Mode ${executionMode} (allowed: ${allowedModes.join(', ')})`,
+                workerId: current.worker.id,
+                hostStep: 1,
+                tier: current.placement?.modelTier ?? null,
+            }),
+        );
+        return finalReport(false, 'MODE_NOT_ALLOWED');
     }
 
     for (let hostStep = 1; hostStep <= maxSteps; hostStep += 1) {

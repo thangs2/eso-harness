@@ -1,0 +1,106 @@
+<div class="deployment-body" [formGroup]="form">
+    <section class="mode-section" formGroupName="modes" aria-labelledby="execution-modes-title">
+        <div class="mode-head">
+            <div class="mode-head-copy">
+                <span class="field-label" id="execution-modes-title">Execution modes</span>
+                <p class="mode-help">Execution mode decides <strong>who executes</strong> this worker. Runtime placement below decides <strong>where</strong> it is allowed to run.</p>
+            </div>
+            <span class="mode-count" [class.complete]="selectedModeCount() === 2">{{ selectedModeCount() }} / 2 enabled</span>
+        </div>
+        <div class="mode-cards">
+            <mat-checkbox formControlName="A" class="mode-card" [class.selected]="form.controls.modes.controls.A.value">
+                <span class="mode-code">A</span>
+                <span class="mode-copy">
+                    <strong>Mode A · Local host</strong>
+                    <small>This host runs the worker in its own runtime.</small>
+                    <small class="mode-detail">Uses the local workspace, credentials, and model binding. No network dispatch.</small>
+                </span>
+                <span class="mode-state">{{ form.controls.modes.controls.A.value ? 'Enabled' : 'Off' }}</span>
+            </mat-checkbox>
+            <mat-checkbox formControlName="B" class="mode-card" [class.selected]="form.controls.modes.controls.B.value">
+                <span class="mode-code">B</span>
+                <span class="mode-copy">
+                    <strong>Mode B · Remote dispatch</strong>
+                    <small>Another allowed host runs the worker for this flow.</small>
+                    <small class="mode-detail">Sends a signed job to the target host, which applies its own model binding. Needs remote token and workspace.</small>
+                </span>
+                <span class="mode-state">{{ form.controls.modes.controls.B.value ? 'Enabled' : 'Off' }}</span>
+            </mat-checkbox>
+        </div>
+        <details class="mode-guide">
+            <summary>When should I choose A, B, or both?</summary>
+            <div class="mode-guide-grid">
+                <div>
+                    <strong>Mode A · Local host</strong>
+                    <p>Choose when this machine has the runtime, model, and workspace. Lowest latency; no remote host involved.</p>
+                </div>
+                <div>
+                    <strong>Mode B · Remote dispatch</strong>
+                    <p>Choose when the worker should run on another host, or this host lacks the runtime/model. The target host executes it.</p>
+                </div>
+                <div>
+                    <strong>Both</strong>
+                    <p>Both paths stay open. Routing picks the first available allowed host; fallback behavior is controlled below.</p>
+                </div>
+            </div>
+        </details>
+    </section>
+    @if (modeError(); as message) { <p class="field-error" role="alert">{{ message }}</p> }
+
+    <section class="matrix-section" aria-labelledby="runtime-placement-title">
+        <div class="matrix-head">
+            <div>
+                <span class="field-label" id="runtime-placement-title">Runtime placement</span>
+                <p class="mode-help">Allow the runtimes this worker may use, then pin a model when it differs from the host tier.</p>
+            </div>
+            <span class="matrix-count" [class.empty]="allowedRuntimeCount() === 0">{{ allowedRuntimeCount() }} / {{ runtimes().length }} allowed</span>
+        </div>
+        <div class="runtime-matrix" role="table" aria-label="Runtime and model placement">
+            <div class="runtime-row runtime-head" role="row">
+                <span role="columnheader">Runtime</span><span role="columnheader">Allowed</span><span role="columnheader">Model</span><span role="columnheader">Native agent</span>
+            </div>
+        @for (runtime of runtimes(); track runtime.runtimeKey) {
+            <div class="runtime-row" role="row">
+                <span class="runtime-name" role="cell"><code>{{ runtime.runtimeKey }}</code><small>{{ runtime.hostType }} · {{ runtime.runtimeKind }}</small></span>
+                <span role="cell"><mat-checkbox [formControl]="allowedControl(runtime.runtimeKey)"><span class="sr-only">Allow {{ runtime.runtimeKey }}</span></mat-checkbox></span>
+                <span role="cell">
+                    <mat-select class="matrix-select" [formControl]="modelControl(runtime.runtimeKey)" [attr.aria-label]="'Model for ' + runtime.runtimeKey" [placeholder]="'Use tier · ' + form.controls.tier.value">
+                        <mat-option value="">Use tier · {{ form.controls.tier.value }}</mat-option>
+                        @for (model of modelsFor(runtime.runtimeKey); track model) { <mat-option [value]="model">{{ model }}</mat-option> }
+                    </mat-select>
+                </span>
+                <span role="cell"><input class="matrix-input" [formControl]="agentControl(runtime.runtimeKey)" placeholder="Default agent" [attr.aria-label]="'Native agent for ' + runtime.runtimeKey"></span>
+            </div>
+        }
+        </div>
+    </section>
+
+    @if (legacyKeys().length > 0) { <p class="field-error">Legacy host id without runtime: {{ legacyKeys().join(', ') }} — pick a runtime key to replace it.</p> }
+
+    <div class="placement-grid">
+        <label class="inline-field">
+            <span>Fallback tier</span>
+            <mat-select formControlName="tier">
+                <mat-option value="fast">Fast — cheapest capable model</mat-option>
+                <mat-option value="balanced">Balanced — default</mat-option>
+                <mat-option value="reasoning">Reasoning — deepest model</mat-option>
+            </mat-select>
+        </label>
+        <label class="inline-field">
+            <span>When unavailable</span>
+            <mat-select formControlName="fallback">
+                <mat-option value="block">Block — do not fall back</mat-option>
+                <mat-option value="next-host">Next host — try another allowed host</mat-option>
+                <mat-option value="next-tier">Next tier — drop to a cheaper tier</mat-option>
+            </mat-select>
+        </label>
+    </div>
+
+    @if (notice()) { <p class="placement-feedback" role="status">{{ notice() }}</p> }
+    @if (error()) { <p class="field-error" role="alert">{{ error() }}</p> }
+
+    <div class="placement-actions">
+        <button mat-stroked-button type="button" [disabled]="!dirty()" (click)="reset.emit()">Reset</button>
+        <button mat-flat-button color="primary" type="button" [disabled]="saving() || !dirty()" (click)="save.emit()">{{ saving() ? 'Saving…' : 'Save placement' }}</button>
+    </div>
+</div>

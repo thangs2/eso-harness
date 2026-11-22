@@ -1,0 +1,41 @@
+<section class="workers-summary" aria-labelledby="workers-summary-title">
+    <div class="summary-main">
+        <div class="summary-copy">
+            <p class="eyebrow">Multi-agent / Workers</p>
+            <div class="summary-title-row">
+                <h2 id="workers-summary-title">Workers</h2>
+                <span class="summary-count">{{ workerCount() }}</span>
+            </div>
+            <p class="summary-lede">Host-neutral identities. Runtime placement and model are bound per worker and per host.</p>
+        </div>
+        <div class="summary-actions">
+            <button mat-stroked-button type="button" (click)="openFlows.emit()">Open flow editor</button>
+            <button mat-button type="button" (click)="openDiagram.emit()">View diagram</button>
+        </div>
+    </div>
+
+    <div class="summary-metrics" aria-label="Worker counts">
+        <div class="summary-metric"><strong>{{ workerCount() }}</strong><span>Workers</span></div>
+        <div class="summary-metric"><strong>{{ gateCount() }}</strong><span>Gates</span></div>
+        <div class="summary-metric"><strong>{{ peerCount() }}</strong><span>Peers</span></div>
+        <div class="summary-metric"><strong>{{ placementCount() }}</strong><span>Placements</span></div>
+    </div>
+
+    <div class="summary-context">
+        <article class="context-card">
+            <span class="context-label">Formation</span>
+            <strong>Operator → Lead → {{ workerCount() }} workers</strong>
+            <p>{{ gateCount() }} gates · {{ peerCount() }} peers · {{ hostCoverage() }} hosts bound</p>
+        </article>
+        <article class="context-card">
+            <span class="context-label">Default flow</span>
+            @if (flow(); as current) {
+                <strong>{{ current.name }}</strong>
+                <p><code>{{ current.id }}</code><span class="context-dot">·</span>v{{ current.version }}<span class="flow-status">{{ current.status }}</span></p>
+            } @else {
+                <strong>No default flow</strong>
+                <p>Publish a flow and set it as default to route workers.</p>
+            }
+        </article>
+    </div>
+</section>

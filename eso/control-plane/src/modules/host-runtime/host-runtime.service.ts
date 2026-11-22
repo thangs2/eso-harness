@@ -213,6 +213,9 @@ function workerPlacementDto(row: any, runtimeKeys?: Map<string, string>): any {
         workerId: row.worker_id ?? row.workerId,
         allowedHosts: textArray(row.allowed_hosts ?? row.allowedHosts),
         modelTier: row.model_tier ?? row.modelTier ?? 'balanced',
+        model: row.model ?? '',
+        models: jsonObject(row.models),
+        modes: Array.isArray(row.modes) && row.modes.length > 0 ? row.modes : ['A', 'B'],
         nativeAgent,
         fallback: row.fallback ?? 'block',
     };
@@ -368,9 +371,22 @@ export class HostRuntimeService {
                 throw new PlatformError('WORKER_PLACEMENT_INVALID', `allowedHosts entries must be runtimeKey hostId:runtimeId (got ${key})`);
             }
         }
+        const model = body?.model === undefined ? '' : String(body.model ?? '').trim();
+        if (model.length > 200) throw new PlatformError('WORKER_PLACEMENT_INVALID', 'model must be at most 200 characters');
+        const models = body?.models === undefined ? {} : jsonObject(body.models);
+        for (const [key, value] of Object.entries(models)) {
+            if (!isRuntimeKey(key)) throw new PlatformError('WORKER_PLACEMENT_INVALID', `models keys must be runtimeKey (got ${key})`);
+            if (typeof value !== 'string') throw new PlatformError('WORKER_PLACEMENT_INVALID', `models[${key}] must be a string`);
+        }
+        const modesRaw = body?.modes === undefined ? ['A', 'B'] : textArray(body.modes).map((mode) => String(mode).toUpperCase());
+        const modes = [...new Set(modesRaw)].filter((mode) => mode === 'A' || mode === 'B');
+        if (modes.length === 0) throw new PlatformError('WORKER_PLACEMENT_INVALID', 'modes must contain A and/or B');
         const config = {
             allowedHosts,
             modelTier: body?.modelTier === undefined ? 'balanced' : oneOf(body.modelTier, MODEL_TIERS, 'modelTier', 'WORKER_PLACEMENT_INVALID'),
+            model,
+            models,
+            modes,
             nativeAgent: jsonObject(nativeAgent),
             fallback: body?.fallback === undefined ? 'block' : oneOf(body.fallback, FALLBACKS, 'fallback', 'WORKER_PLACEMENT_INVALID'),
         };

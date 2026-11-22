@@ -1,0 +1,51 @@
+<section class="section-card">
+    <header class="section-head">
+        <div><h3>Identity</h3><p>Name, role, layer, and status. These are host-neutral.</p></div>
+        <span class="status" [class.active]="worker().status === 'active'">{{ worker().status }}</span>
+    </header>
+
+    <form [formGroup]="form" class="identity-form" autocomplete="off">
+        <div class="identity-grid">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Name</mat-label>
+                <input matInput formControlName="name" autocomplete="off">
+                @if (form.controls.name.invalid && form.controls.name.touched) { <mat-error>Name is required.</mat-error> }
+            </mat-form-field>
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Role</mat-label>
+                <mat-select formControlName="role">
+                    @for (role of roles; track role) { <mat-option [value]="role">{{ role }}</mat-option> }
+                </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Layer</mat-label>
+                <mat-select formControlName="layer">
+                    <mat-option value="peer">Peer</mat-option>
+                    <mat-option value="gate">Gate</mat-option>
+                </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Status</mat-label>
+                <mat-select formControlName="status">
+                    @for (status of statuses; track status) { <mat-option [value]="status">{{ status }}</mat-option> }
+                </mat-select>
+            </mat-form-field>
+        </div>
+
+        <details class="instructions" [open]="!!worker().instructions">
+            <summary>Instructions — prompt body @if (worker().instructions) { <span class="set">set</span> }</summary>
+            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full">
+                <mat-label>Prompt body</mat-label>
+                <textarea matInput rows="5" formControlName="instructions"></textarea>
+                <mat-hint>Imported subagent prompt. Kept in the worker file; shown to the host only when this worker executes.</mat-hint>
+            </mat-form-field>
+        </details>
+
+        @if (worker().status !== 'active') {
+            <div class="status-hint">
+                <span>Declared workers cannot be checked or executed.</span>
+                <button mat-stroked-button type="button" (click)="activate()">Activate worker</button>
+            </div>
+        }
+    </form>
+</section>

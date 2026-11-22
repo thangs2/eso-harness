@@ -452,6 +452,7 @@ export interface HostDto {
 }
 
 export type WorkerModelTier = 'fast' | 'balanced' | 'reasoning';
+export type WorkerExecutionMode = 'A' | 'B';
 
 export type WorkerPlacementFallback = 'block' | 'next-host' | 'next-tier';
 
@@ -460,6 +461,12 @@ export interface WorkerPlacementDto {
     workerId: string;
     allowedHosts: string[];
     modelTier: WorkerModelTier;
+    /** Optional exact model id; overrides the runtime tier mapping for Mode A and Mode B. */
+    model?: string;
+    /** Optional exact model per runtimeKey; wins over `model` and tier for that runtime. */
+    models?: Record<string, string>;
+    /** Allowed execution modes. A = local host runtime; B = remote dispatch to another runtime. */
+    modes?: WorkerExecutionMode[];
     /** runtimeKey → host-native agent name, e.g. `{ 'host-a:cursor': 'cursor' }`. */
     nativeAgent: Record<string, string>;
     fallback: WorkerPlacementFallback;

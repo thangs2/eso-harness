@@ -224,10 +224,16 @@ CREATE TABLE IF NOT EXISTS knowledge_worker_host_policy (
   worker_id     text PRIMARY KEY REFERENCES knowledge_worker(worker_id) ON DELETE CASCADE,
   allowed_hosts text[] NOT NULL DEFAULT '{}',
   model_tier    text NOT NULL DEFAULT 'balanced' CHECK (model_tier IN ('fast','balanced','reasoning')),
+  model         text,
+  models        jsonb NOT NULL DEFAULT '{}'::jsonb,
+  modes         text[] NOT NULL DEFAULT '{A,B}',
   native_agent  jsonb NOT NULL DEFAULT '{}'::jsonb,
   fallback      text NOT NULL DEFAULT 'block' CHECK (fallback IN ('block','next-host','next-tier')),
   updated_at    timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE knowledge_worker_host_policy ADD COLUMN IF NOT EXISTS model text;
+ALTER TABLE knowledge_worker_host_policy ADD COLUMN IF NOT EXISTS models jsonb NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE knowledge_worker_host_policy ADD COLUMN IF NOT EXISTS modes text[] NOT NULL DEFAULT '{A,B}';
 
 -- Observation/evidence append log from hosts (observability only; no run/execution state).
 CREATE TABLE IF NOT EXISTS knowledge_observation (

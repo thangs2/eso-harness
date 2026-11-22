@@ -608,6 +608,7 @@ export function parseArgs(argv: string[], env: Record<string, string | undefined
         if (raw.values.workspaceBranch) options.workspaceBranch = raw.values.workspaceBranch;
         if (raw.values.workspaceCommit) options.workspaceCommit = raw.values.workspaceCommit;
         if (raw.values.traceId) options.traceId = raw.values.traceId;
+        if (raw.values.jobId) options.jobId = raw.values.jobId;
         if (raw.values.taskType) options.taskType = raw.values.taskType;
         if (raw.values.cacheDir) options.cacheDir = raw.values.cacheDir;
         if (raw.values.bufferDir) options.bufferDir = raw.values.bufferDir;
@@ -685,6 +686,7 @@ export function toEntrypointOptions(parsed: ParsedRunOptions): EntrypointOptions
         dryRun: parsed.dryRun,
         timeoutMs: parsed.timeoutMs,
         offline: parsed.offline,
+        executionMode: 'A',
         repromptEvidence: parsed.repromptEvidence,
         env: process.env,
     };

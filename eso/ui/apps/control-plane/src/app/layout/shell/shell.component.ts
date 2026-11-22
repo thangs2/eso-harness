@@ -33,7 +33,7 @@ const PAGE_LABELS: Record<string, string> = {
             <div class="eso-layout">
                 <header class="eso-header" role="banner">
                     <button type="button" class="menu-toggle" aria-label="Open navigation" [attr.aria-expanded]="menuOpen()" (click)="menuOpen.set(!menuOpen())">☰</button>
-                    <a class="brand" routerLink="/consumers" aria-label="ESO Control Plane home">
+                    <a class="brand" routerLink="/consumers">
                         <span class="brand-mark">ESO</span>
                         <span class="brand-text">Control Plane</span>
                     </a>
@@ -53,12 +53,12 @@ const PAGE_LABELS: Record<string, string> = {
                     </div>
 
                     <div class="header-actions">
-                        <button type="button" class="command-trigger" (click)="paletteOpen.set(true)" aria-label="Open command palette">
+                        <button type="button" class="command-trigger" (click)="paletteOpen.set(true)">
                             <span>Search</span><kbd>⌘K</kbd>
                         </button>
                         <a routerLink="/consumers" class="header-action">All consumers</a>
                         <div class="account">
-                            <button type="button" class="account-trigger" [matMenuTriggerFor]="accountMenu" aria-label="Account menu">
+                            <button type="button" class="account-trigger" [matMenuTriggerFor]="accountMenu">
                                 <span class="avatar" aria-hidden="true">{{ initials() }}</span>
                                 <span class="account-name">{{ auth.user() }}</span>
                                 <span class="account-caret" aria-hidden="true">▾</span>

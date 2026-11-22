@@ -91,6 +91,12 @@ export interface SnapshotPlacement {
     workerId: string;
     allowedHosts?: string[];
     modelTier?: string;
+    /** Exact worker model override; wins over runtime tier mapping. */
+    model?: string;
+    /** Exact model per runtimeKey; wins over `model` and tier for that runtime. */
+    models?: Record<string, string>;
+    /** Allowed execution modes. A = local runtime; B = remote dispatch target. */
+    modes?: Array<'A' | 'B'>;
     nativeAgent?: Record<string, string>;
     fallback?: string;
 }

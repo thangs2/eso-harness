@@ -1,0 +1,26 @@
+<aside class="worker-rail">
+    <div class="rail-head"><h2>All workers</h2><span class="rail-count">{{ workers().length }}</span></div>
+    <mat-form-field appearance="outline" subscriptSizing="dynamic" class="worker-search">
+        <mat-label>Search</mat-label>
+        <input matInput [ngModel]="search()" (ngModelChange)="search.set($event)" placeholder="Name or role">
+    </mat-form-field>
+    <div class="rail-list">
+        @if (workers().length === 0) {
+            <p class="rail-empty">No workers registered.</p>
+        } @else if (filtered().length === 0) {
+            <p class="rail-empty">No worker matches “{{ search() }}”.</p>
+        } @else {
+            @for (worker of filtered(); track worker.id) {
+                <button type="button" class="worker-row" [class.active]="selectedId() === worker.id" (click)="selectWorker.emit(worker.id)">
+                    <span class="worker-initial">{{ worker.name.slice(0, 1).toUpperCase() }}</span>
+                    <span class="worker-copy">
+                        <span class="worker-title"><strong>{{ worker.name }}</strong><span class="layer" [class.gate]="worker.layer === 'gate'">{{ worker.layer }}</span></span>
+                        <small>{{ worker.role }} · {{ worker.status }}</small>
+                        <small class="worker-model">{{ summaries()[worker.id] || 'No placement' }}</small>
+                    </span>
+                    <span class="worker-dot" [class.live]="worker.status === 'active'" [attr.aria-label]="worker.status"></span>
+                </button>
+            }
+        }
+    </div>
+</aside>

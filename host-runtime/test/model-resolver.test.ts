@@ -18,6 +18,43 @@ describe('model-resolver', () => {
         expect(resolution.tier).toBe('balanced');
     });
 
+    it('lets a per-runtime worker model beat the runtime tier map', () => {
+        const resolution = resolveModel({
+            runtime: {
+                hostId: 'agy', runtimeId: 'agy', runtimeKey: 'agy:agy', runtimeKind: 'cli',
+                models: ['gemini-4-neon', 'gemini-3.8-flash'], defaultModel: 'auto',
+                modelTiers: { fast: { model: 'gemini-3.8-flash' } },
+            },
+            placement: { workerId: 'worker-qc', modelTier: 'fast', models: { 'agy:agy': 'gemini-4-neon' } },
+            runtimeKey: 'agy:agy',
+        });
+        expect(resolution.model).toBe('gemini-4-neon');
+        expect(resolution.source).toBe('worker');
+        expect(resolution.tier).toBe('fast');
+        expect(resolution.modelKnownOnRuntime).toBe(true);
+    });
+
+    it('falls back to the worker model when no per-runtime model matches', () => {
+        const resolution = resolveModel({
+            runtime: { hostId: 'cursor', runtimeId: 'cursor-agent', runtimeKey: 'cursor:cursor-agent', runtimeKind: 'cli', models: ['grok-4'] },
+            placement: { workerId: 'worker-qc-2', modelTier: 'balanced', model: 'grok-4', models: { 'agy:agy': 'gemini-4-neon' } },
+            runtimeKey: 'cursor:cursor-agent',
+        });
+        expect(resolution.model).toBe('grok-4');
+        expect(resolution.source).toBe('worker');
+    });
+
+    it('still lets explicit --model beat the per-worker model', () => {
+        const resolution = resolveModel({
+            explicitModel: 'gemini-3.8-flash',
+            runtime: { hostId: 'agy', runtimeId: 'agy', runtimeKey: 'agy:agy', runtimeKind: 'cli', models: ['gemini-4-neon', 'gemini-3.8-flash'] },
+            placement: { workerId: 'worker-qc', modelTier: 'fast', model: 'gemini-4-neon' },
+            runtimeKey: 'agy:agy',
+        });
+        expect(resolution.model).toBe('gemini-3.8-flash');
+        expect(resolution.source).toBe('explicit');
+    });
+
     it('falls back to the host runtime default model and records the tier gap', async () => {
         const snapshot = await makeSnapshot();
         const runtime = snapshot.hosts[0].runtimes[0];

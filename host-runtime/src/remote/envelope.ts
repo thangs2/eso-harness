@@ -12,7 +12,7 @@
 export const ENVELOPE_DOMAIN = 'eso-modeb-v1';
 export const MAX_PROMPT_CHARS = 200_000;
 export const MIN_REMOTE_SECRET_CHARS = 8;
-export const ADAPTER_NAMES = ['dry', 'cursor', 'agy'] as const;
+export const ADAPTER_NAMES = ['dry', 'cursor', 'agy', 'main-chat'] as const;
 
 export type EnvelopeErrorCode =
     | 'ENVELOPE_INVALID'

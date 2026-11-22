@@ -1,0 +1,131 @@
+<section class="section-card">
+    <header class="section-head">
+        <div>
+            <h3>Permissions &amp; evidence</h3>
+            <p>Where this worker may act and what it must prove before acting.</p>
+        </div>
+        <div class="section-actions">
+            <span class="section-meta">{{ form.controls.verbs.value.length }} verbs · {{ form.controls.evidence.length }} checks</span>
+            <button mat-stroked-button type="button" (click)="toggleCheck()">Test policy</button>
+        </div>
+    </header>
+
+    <details class="policy-help">
+        <summary>What do these mean?</summary>
+        <dl>
+            <div><dt>Capability</dt><dd>A descriptive skill label. Not enforced.</dd></div>
+            <div><dt>Verb</dt><dd>An enforced action: read · write · append · approve · configure · handoff.</dd></div>
+            <div><dt>Scope</dt><dd>The path or glob where the verb may act.</dd></div>
+            <div><dt>Required evidence</dt><dd>Proof the worker must supply before acting.</dd></div>
+            <div><dt>Escalation</dt><dd>What happens when policy denies.</dd></div>
+        </dl>
+    </details>
+
+    <form [formGroup]="form" class="policy-form" autocomplete="off">
+        <div class="policy-field">
+            <span class="field-label">Scopes — where it may act</span>
+            <div class="tag-list" formArrayName="scopes">
+                @for (control of form.controls.scopes.controls; track control; let i = $index) {
+                    <span class="tag" [class.tag-invalid]="!scopeIsValid(control.value)">
+                        <code>{{ control.value }}</code>
+                        <button type="button" [attr.aria-label]="'Remove scope ' + control.value" (click)="removeScope(i)">×</button>
+                    </span>
+                } @empty { <span class="tag-empty">No scope. Write actions will be denied.</span> }
+            </div>
+            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full">
+                <mat-label>Add scope</mat-label>
+                <input matInput formControlName="scopeInput" (keyup.enter)="addScope()" placeholder="/tmp/slp/build/ or agents/**">
+                <button mat-button matSuffix type="button" (click)="addScope()">Add</button>
+            </mat-form-field>
+            @if (scopeError.value; as message) { <p class="field-error">{{ message }}</p> }
+            <p class="field-help">Path prefix, glob, or symbolic scope. Use <code>agents/**</code> for a tree.</p>
+        </div>
+
+        <div class="policy-field">
+            <span class="field-label">Capabilities — skills this worker has</span>
+            <div class="tag-list" formArrayName="capabilities">
+                @for (control of form.controls.capabilities.controls; track control; let i = $index) {
+                    <span class="tag">{{ control.value }}<button type="button" [attr.aria-label]="'Remove capability ' + control.value" (click)="removeCapability(i)">×</button></span>
+                } @empty { <span class="tag-empty">No capabilities. Optional, descriptive only.</span> }
+            </div>
+            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full">
+                <mat-label>Add capability</mat-label>
+                <input matInput formControlName="capabilityInput" (keyup.enter)="addCapability()" placeholder="be, fe, qc">
+                <button mat-button matSuffix type="button" (click)="addCapability()">Add</button>
+            </mat-form-field>
+            @if (capabilityError.value; as message) { <p class="field-error">{{ message }}</p> }
+            <div class="tag-suggestions">@for (item of ['be','fe','qc','review','design','pm']; track item) { <button type="button" (click)="suggestion(item)">{{ item }}</button> }</div>
+        </div>
+
+        <div class="policy-field">
+            <span class="field-label">Allowed actions — verbs it may use</span>
+            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full">
+                <mat-select multiple formControlName="verbs">
+                    <mat-option value="read">read — inspect files</mat-option>
+                    <mat-option value="write">write — create or replace files</mat-option>
+                    <mat-option value="append">append — add to files or logs</mat-option>
+                    <mat-option value="approve">approve — pass a gate</mat-option>
+                    <mat-option value="configure">configure — change settings</mat-option>
+                    <mat-option value="handoff">handoff — pass work to another worker</mat-option>
+                </mat-select>
+            </mat-form-field>
+            <p class="field-help">Verb is enforced. <code>configure</code> is always denied.</p>
+        </div>
+
+        <div class="policy-field">
+            <span class="field-label">Required evidence — proof before acting</span>
+            <div class="tag-list" formArrayName="evidence">
+                @for (control of form.controls.evidence.controls; track control; let i = $index) {
+                    <span class="tag tag-evidence">{{ evidenceLabel(control.value) }}<button type="button" aria-label="Remove evidence" (click)="removeEvidence(i)">×</button></span>
+                } @empty { <span class="tag-empty">No evidence required.</span> }
+            </div>
+            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full">
+                <mat-label>Evidence type</mat-label>
+                <mat-select formControlName="evidenceKind">
+                    <mat-option value="test">Tests pass</mat-option>
+                    <mat-option value="verify">Verify result</mat-option>
+                    <mat-option value="audit">Audit score</mat-option>
+                    <mat-option value="audit-critical">Audit critical findings = 0</mat-option>
+                    <mat-option value="scenario">Scenario executed</mat-option>
+                </mat-select>
+            </mat-form-field>
+            @if (form.controls.evidenceKind.value === 'audit' || form.controls.evidenceKind.value === 'verify') {
+                <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full">
+                    <mat-label>{{ form.controls.evidenceKind.value === 'audit' ? 'Minimum rubric score' : 'Required verify result' }}</mat-label>
+                    <input matInput formControlName="evidenceValue">
+                </mat-form-field>
+            }
+            <button mat-stroked-button type="button" (click)="addEvidence()">Add requirement</button>
+        </div>
+
+        <div class="policy-field">
+            <span class="field-label">When policy blocks — escalation</span>
+            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full">
+                <mat-select formControlName="escalation">
+                    <mat-option value="allow">allow — report the denial</mat-option>
+                    <mat-option value="stop+notify">stop + notify — stop and tell the operator</mat-option>
+                    <mat-option value="run+warn+notify">run + warn + notify — continue with warning</mat-option>
+                </mat-select>
+            </mat-form-field>
+        </div>
+
+        @for (error of validationErrors(); track error) { <p class="field-error">{{ error }}</p> }
+    </form>
+
+    @if (showCheck.value) {
+        <section class="policy-check">
+            <header><div><p class="eyebrow">Policy check</p><small>{{ worker().scope || 'no scope' }} · {{ worker().verbs.join(', ') || 'no verbs' }}</small></div><button mat-button type="button" (click)="toggleCheck()">Close</button></header>
+            <form [formGroup]="checkForm" class="policy-check-form">
+                <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Verb</mat-label>
+                    <mat-select formControlName="verb">@for (verb of ['read','write','append','approve','configure','handoff']; track verb) { <mat-option [value]="verb">{{ verb }}</mat-option> }</mat-select>
+                </mat-form-field>
+                <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Path</mat-label><input matInput formControlName="path" placeholder="agents/rules/core.md"></mat-form-field>
+                <button mat-flat-button color="primary" type="button" [disabled]="checking.value" (click)="runCheck()">{{ checking.value ? 'Checking…' : 'Run check' }}</button>
+            </form>
+            @if (checkError.value; as message) { <p class="field-error" role="alert">{{ message }}</p> }
+            @if (checkResult.value; as result) {
+                <div class="policy-result" [class.policy-deny]="result.decision === 'DENY'"><strong>{{ result.decision }}</strong><span>{{ result.reasons?.length ? result.reasons.join(' · ') : 'policy satisfied' }}</span></div>
+            }
+        </section>
+    }
+</section>

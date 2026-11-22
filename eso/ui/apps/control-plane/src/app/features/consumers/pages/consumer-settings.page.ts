@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnInit, computed, effect, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
@@ -8,7 +8,9 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { ConsumerProfileService } from '../../../core/consumers/consumer-profile.service.js';
-import type { ConsumerProfile, HostDto, ObservationDto, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, McpProviderDto, WorkerConfigDto, EvidenceRequirementDto, FlowSummaryDto, FlowDefinitionDto, HostRuntimeDto, WorkerPlacementDto, WorkerModelTier, WorkerPlacementFallback, LegacyHarnessReportDto, HarnessMigrationPreviewDto, BoundaryViewDto, FolderPolicyDto, BoundaryPathType, BoundaryReadMode, BoundaryWriteMode, JudgmentResponseDto, JevDecisionDto } from '../../../../../../../libs/api-client/types.js';
+import { WorkersSettingsComponent } from '../workers/workers-settings.component.js';
+import { WorkerOverviewComponent } from '../workers/worker-overview.component.js';
+import type { ConsumerProfile, HostDto, ObservationDto, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, McpProviderDto, WorkerConfigDto, EvidenceRequirementDto, FlowSummaryDto, FlowDefinitionDto, HostRuntimeDto, LegacyHarnessReportDto, HarnessMigrationPreviewDto, BoundaryViewDto, FolderPolicyDto, BoundaryPathType, BoundaryReadMode, BoundaryWriteMode, JudgmentResponseDto, JevDecisionDto } from '../../../../../../../libs/api-client/types.js';
 
 /**
  * Only remaining occurrence of the pre-P0.3 host-binding key: settings saved by an older UI.
@@ -87,17 +89,6 @@ interface WorkerEdge {
     on: string;
 }
 
-interface WorkerDraft {
-    name: string;
-    role: string;
-    layer: WorkerLayer;
-    scope: string;
-    capabilities: string;
-    verbs: string;
-    bar: string;
-    escalation: string;
-}
-
 interface PluginEntry {
     id: string;
     label: string;
@@ -154,7 +145,7 @@ function defaultPlugins(): PluginEntry[] {
 @Component({
     selector: 'eso-consumer-settings-page',
     standalone: true,
-    imports: [FormsModule, MatButtonModule, MatCheckboxModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatSlideToggleModule],
+    imports: [WorkersSettingsComponent, WorkerOverviewComponent, FormsModule, MatButtonModule, MatCheckboxModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatSlideToggleModule],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div class="settings-page">
@@ -239,10 +230,13 @@ function defaultPlugins(): PluginEntry[] {
                 </section>
             }
             @if (legacyHarness()?.detected) {
-                <section class="legacy-panel" aria-label="Legacy harness archive">
+                <details class="legacy-panel legacy-collapsible" aria-label="Legacy harness archive">
+                    <summary class="legacy-summary">
+                        <span class="eyebrow">Legacy harness</span>
+                        <strong>Old harness state detected</strong>
+                        <span class="summary-action">Review</span>
+                    </summary>
                     <div class="legacy-copy">
-                        <p class="eyebrow">Legacy harness</p>
-                        <h2>Old harness state detected</h2>
                         <p class="section-hint">ESO can move known v1 harness state into this repo's <code>archive/</code> folder. Active host hooks and canonical ESO material are left untouched.</p>
                         <ul class="legacy-list">
                             @for (entry of legacyHarness()?.entries; track entry.path) {
@@ -260,7 +254,7 @@ function defaultPlugins(): PluginEntry[] {
                             <button mat-flat-button color="primary" type="button" [disabled]="legacyArchiving()" (click)="legacyArchiveConfirm.set(true)">Archive legacy</button>
                         }
                     </div>
-                </section>
+                </details>
             }
 
             @if (loading()) {
@@ -749,432 +743,24 @@ function defaultPlugins(): PluginEntry[] {
                         }
 
                         @case ('workers') {
-                            <section class="tab-panel" role="tabpanel">
-                                <header class="tab-intro">
-                                    <p class="eyebrow">Multi-Agent (Workers)</p>
-                                    <h2>Agent identities, separate from deployment</h2>
-                                    <p>A worker is a host-neutral identity: name, role, layer, scope. Its host placement is a separate deployment step. Credentials are never stored here.</p>
-                                </header>
+                            <section class="tab-panel workers-page" role="tabpanel">
+                                <eso-worker-overview
+                                    [workerCount]="workers().length"
+                                    [gateCount]="gateCount()"
+                                    [peerCount]="peerCount()"
+                                    [placementCount]="workerPlacementCount()"
+                                    [hostCoverage]="workerHostCoverage()"
+                                    [flow]="defaultFlow()"
+                                    (openFlows)="openFlows()"
+                                    (openDiagram)="openDiagram.set('workers')"
+                                />
 
-                                <section class="slp-orchestration">
-                                    <div class="orchestration-node supervisor"><span>Supervisor</span><strong>Operator</strong><small>approve · escalate · sign Done</small></div>
-                                    <span class="orchestration-arrow">→</span>
-                                    <div class="orchestration-node lead"><span>Lead</span><strong>Main chat agent</strong><small>split · dispatch · roll up</small></div>
-                                    <span class="orchestration-arrow">→</span>
-                                    <div class="orchestration-node workers"><span>Workers</span><strong>7 positions</strong><small>peer · gate</small></div>
-                                    <p>Lead is not a worker; no layer; not dispatchable. Workers below are the only rows with peer/gate.</p>
-                                </section>
-
-                                <div class="agent-stats worker-stats">
-                                    <div><strong>{{ workers().length }}</strong><span>workers</span></div>
-                                    <div><strong>{{ workerRoleCount() }}</strong><span>roles in use</span></div>
-                                    <div><strong>{{ workerHostCoverage() }}</strong><span>host bindings</span></div>
-                                    <div><strong>{{ workerPlacementCount() }}</strong><span>host placements</span></div>
-                                </div>
-
-                                <section class="formation-panel">
-                                    <div class="formation-head">
-                                        <div><span class="scope-badge">DEFAULT FLOW</span><strong>{{ defaultFlow()?.name || 'No default flow' }}</strong><small>@if (defaultFlow(); as flow) { {{ flow.id }} · v{{ flow.version }} · {{ flow.status }} · edges are read-only here } @else { Publish a flow and set it as default. }</small></div>
-                                        <button mat-stroked-button type="button" (click)="openFlows()">Open flow editor</button>
-                                    </div>
-                                    @if (workerEdges().length === 0) {
-                                        <p class="muted">No default flow edges. Open the flow editor to create and publish one.</p>
-                                    } @else {
-                                        <div class="formation-chain">
-                                            @for (edge of workerEdges(); track edge.from + edge.to + edge.on) {
-                                                <span class="formation-edge"><b>{{ workerName(edge.from) }}</b> → <b>{{ workerName(edge.to) }}</b><em>{{ edge.on }}</em></span>
-                                            }
-                                        </div>
-                                    }
-                                    <button type="button" class="formation-flow" (click)="openDiagram.set('workers')">
-                                        <span class="formation-flow-preview"><img src="assets/diagrams/that-tinh-tran-diagram.svg" alt="Seven-Star Formation worker flow"></span>
-                                        <span class="formation-flow-copy"><strong>View the worker flow</strong><small>Original Seven-Star Formation diagram · click to open</small></span>
-                                    </button>
-
-                                </section>
-
-                                <section class="workers-section">
-                                    <header class="workers-head">
-                                        <div><h3>Worker definitions</h3><p class="section-hint">Identity, policy, then deployment. Select a worker to inspect it. This is host-neutral.</p></div>
-                                        <div class="workers-head-actions">
-                                            <input #workerFileInput type="file" accept=".md,.mdc" multiple hidden (change)="onWorkerFiles($event)">
-                                            <input #workerFolderInput type="file" accept=".md,.mdc" webkitdirectory directory multiple hidden (change)="onWorkerFiles($event)">
-                                            <button mat-stroked-button type="button" (click)="openFlows()">Flows</button>
-                                            <button mat-stroked-button type="button" [disabled]="workerSyncing()" (click)="syncWorkerSources()">{{ workerSyncing() ? 'Syncing…' : 'Sync sources' }}</button>
-                                            <button mat-stroked-button type="button" [disabled]="workerImporting()" (click)="workerFileInput.click()">{{ workerImporting() ? 'Reading…' : 'Import agents' }}</button>
-                                            <button mat-stroked-button type="button" [disabled]="workerImporting()" (click)="workerFolderInput.click()">Import folder</button>
-                                            <button mat-flat-button color="primary" type="button" (click)="addWorker()">Add worker</button>
-                                        </div>
-                                    </header>
-                                    <div class="worker-source-status">
-                                        <span><strong>{{ workerSourceStatus().source }}</strong> source files · <strong>{{ workerSourceStatus().projections }}</strong> projections</span>
-                                        @if (workerSourceStatus().drift.length > 0) {
-                                            <span class="worker-drift-count">{{ workerSourceStatus().drift.length }} external change(s)</span>
-                                        } @else {
-                                            <span class="muted">sources and projections in sync</span>
-                                        }
-                                    </div>
-                                    @if (workerSourceStatus().drift.length > 0) {
-                                        <div class="worker-drift">
-                                            @for (item of workerSourceStatus().drift; track item.file + item.kind) {
-                                                <div><code>{{ item.file }}</code><span>{{ item.kind }}</span>@if (item.kind === 'projection_changed') { <button mat-button type="button" (click)="promoteProjection(item.file)">Promote</button> }</div>
-                                            }
-                                        </div>
-                                    }
-                                    @if (workerImportPreview(); as preview) {
-                                        <section class="worker-import-preview">
-                                            <header><div><h3>Import preview</h3><p>{{ preview.candidates.length }} agent file(s) · {{ preview.skipped.length }} skipped</p></div><button mat-button type="button" (click)="closeImportPreview()">Cancel</button></header>
-                                            @if (preview.candidates.length > 0) {
-                                                <div class="worker-table-wrap">
-                                                    <table class="worker-table">
-                                                        <thead><tr><th>Import</th><th>Source</th><th>Detected</th><th>Mapped worker</th><th>Action</th><th>Warnings</th></tr></thead>
-                                                        <tbody>
-                                                            @for (candidate of preview.candidates; track candidate.sourceHash) {
-                                                                <tr>
-                                                                    <td><mat-checkbox [checked]="importSelectedHashes().includes(candidate.sourceHash)" (change)="toggleImport(candidate.sourceHash, $event.checked)"></mat-checkbox></td>
-                                                                    <td><code>{{ candidate.sourceFile }}</code></td>
-                                                                    <td><span class="badge">{{ candidate.sourceType }}</span></td>
-                                                                    <td><strong>{{ candidate.worker.name }}</strong><br><code>{{ candidate.worker.id }} · {{ candidate.worker.role }} · {{ candidate.worker.layer }}</code></td>
-                                                                    <td>
-                                                                        @if (candidate.conflict) {
-                                                                            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="import-action-field"><mat-label>Conflict</mat-label>
-                                                                                <mat-select [ngModel]="importAction(candidate.sourceHash)" (ngModelChange)="setImportAction(candidate.sourceHash, $event)">
-                                                                                    <mat-option value="skip">skip</mat-option>
-                                                                                    <mat-option value="replace">replace</mat-option>
-                                                                                    <mat-option value="copy">copy</mat-option>
-                                                                                </mat-select>
-                                                                            </mat-form-field>
-                                                                        } @else { <span class="badge">import</span> }
-                                                                    </td>
-                                                                    <td>@if (candidate.warnings.length) { <small class="import-warning">{{ candidate.warnings.join(' · ') }}</small> } @else { <small class="muted">none</small> }</td>
-                                                                </tr>
-                                                            }
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                                <div class="import-actions"><button mat-flat-button color="primary" type="button" [disabled]="importSelectedHashes().length === 0" (click)="importWorkers()">Import {{ importableCount() }} selected</button></div>
-                                            }
-                                            @if (preview.skipped.length > 0) {
-                                                <div class="import-skipped">
-                                                    <h4>Skipped</h4>
-                                                    @for (item of preview.skipped; track item.sourceFile + item.reason) { <div><code>{{ item.sourceFile }}</code><span>{{ item.reason }}</span></div> }
-                                                </div>
-                                            }
-                                        </section>
-                                    }
-                                    @if (workerImportDirty()) {
-                                        <div class="import-dirty">
-                                            <div><strong>Imported workers are not saved.</strong><span>Review the inspector, then Save settings.</span></div>
-                                            <button mat-flat-button color="primary" type="button" (click)="save()">Save settings</button>
-                                        </div>
-                                    }
-                                    <div class="workers-layout">
-                                        <div class="workers-list">
-                                            @if (workers().length === 0) {
-                                                <p class="muted worker-empty">No workers registered. Add a worker to start the formation.</p>
-                                            } @else {
-                                                @for (worker of workers(); track worker.id) {
-                                                    <button type="button" class="worker-card" [class.active]="selectedWorker()?.id === worker.id" (click)="selectWorker(worker.id)">
-                                                        <span class="worker-avatar">{{ worker.name.slice(0, 1).toUpperCase() }}</span>
-                                                        <span class="worker-card-copy"><strong>{{ worker.name }}</strong><small>{{ worker.role }} · {{ worker.layer }}</small><small>{{ worker.hostBindingIds.length === 0 ? 'Not deployed' : worker.hostBindingIds.length + ' binding' + (worker.hostBindingIds.length === 1 ? '' : 's') }}</small><small class="worker-placement-summary">{{ placementSummary(worker.id) }}</small></span>
-                                                        <span class="badge" [class.badge-warn]="worker.layer === 'gate'">{{ worker.status }}</span>
-                                                    </button>
-                                                }
-                                            }
-                                        </div>
-                                        <div class="worker-inspector">
-                                            @if (selectedWorker(); as worker) {
-                                                <header class="inspector-head">
-                                                    <div><p class="eyebrow">Worker</p><h3>{{ worker.name || 'Unnamed worker' }}</h3><small>{{ worker.id }}</small>@if (worker.sourceFile) { <small class="source-badge">imported · {{ worker.sourceFile }}</small> }</div>
-                                                    <span class="badge" [class.badge-warn]="worker.layer === 'gate'">{{ worker.layer }}</span>
-                                                </header>
-                                                <section class="inspector-block">
-                                                    <h4>Identity</h4>
-                                                    <div class="inspector-grid">
-                                                        <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Name</mat-label><input matInput [ngModel]="worker.name" (ngModelChange)="updateWorkerField(worker.id, 'name', $event)"></mat-form-field>
-                                                        <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Role</mat-label>
-                                                            <mat-select [ngModel]="worker.role" (ngModelChange)="updateWorkerField(worker.id, 'role', $event)">
-                                                                @for (role of workerRoles; track role) { <mat-option [value]="role">{{ role }}</mat-option> }
-                                                            </mat-select>
-                                                        </mat-form-field>
-                                                        <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Layer</mat-label>
-                                                            <mat-select [ngModel]="worker.layer" (ngModelChange)="updateWorkerField(worker.id, 'layer', $event)">
-                                                                <mat-option value="peer">peer</mat-option>
-                                                                <mat-option value="gate">gate</mat-option>
-                                                            </mat-select>
-                                                        </mat-form-field>
-                                                        <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Status</mat-label>
-                                                            <mat-select [ngModel]="worker.status" (ngModelChange)="setWorkerStatus(worker.id, $event)">
-                                                                @for (status of workerStatuses; track status) { <mat-option [value]="status">{{ status }}</mat-option> }
-                                                            </mat-select>
-                                                        </mat-form-field>
-                                                    </div>
-                                                    <details class="instructions-panel" [open]="!!worker.instructions">
-                                                        <summary>Instructions — prompt body @if (worker.instructions) { <span class="badge">set</span> }</summary>
-                                                        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full"><mat-label>Prompt body</mat-label><textarea matInput rows="4" [ngModel]="worker.instructions || ''" (ngModelChange)="updateWorkerField(worker.id, 'instructions', $event)"></textarea></mat-form-field>
-                                                        <p class="field-help">Imported subagent prompt. Kept in the worker file; not shown to the host until a host runtime executes it.</p>
-                                                    </details>
-                                                    @if (worker.status !== 'active') {
-                                                        <div class="worker-status-hint"><span>Declared workers cannot be checked or executed.</span><button mat-stroked-button type="button" (click)="activateWorker(worker.id)">Activate worker</button></div>
-                                                    }
-                                                </section>
-                                                <section class="inspector-block policy-block">
-                                                    <div class="inspector-block-head">
-                                                        <h4>Permissions &amp; evidence</h4>
-                                                        <p>What this worker may do, where it may do it, and what it must prove.</p>
-                                                    </div>
-                                                    <details class="policy-help">
-                                                        <summary>What do these mean?</summary>
-                                                        <dl>
-                                                            <div><dt>Capability</dt><dd>A skill label. It describes what kind of work the worker can take. It is not a permission and is not enforced today.</dd></div>
-                                                            <div><dt>Verb</dt><dd>An enforced action: read · write · append · approve · configure · handoff. A worker can only do what its verbs allow.</dd></div>
-                                                            <div><dt>Scope</dt><dd>The path or glob where the verb may act. A write outside scope is denied.</dd></div>
-                                                            <div><dt>Required evidence</dt><dd>Proof the worker must supply before write, append, approve, or handoff. It is a label the caller passes, not a file upload.</dd></div>
-                                                            <div><dt>Escalation</dt><dd>What the caller should do when the check denies: report, stop and notify, or continue with a warning.</dd></div>
-                                                        </dl>
-                                                    </details>
-                                                    <div class="policy-field">
-                                                        <span class="field-label">Scopes — where it may act</span>
-                                                        <div class="tag-list">
-                                                            @for (scope of workerScopeList(worker); track scope) {
-                                                                <span class="tag" [class.tag-invalid]="!scopeIsValid(scope)"><code>{{ scope }}</code><button type="button" aria-label="Remove scope" (click)="removeWorkerScope(worker.id, scope)">×</button></span>
-                                                            } @empty {
-                                                                <span class="tag-empty">No scope. Write actions will be denied.</span>
-                                                            }
-                                                        </div>
-                                                        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full">
-                                                            <mat-label>Add scope</mat-label>
-                                                            <input matInput [ngModel]="newScope()" (ngModelChange)="newScope.set($event)" (keyup.enter)="addWorkerScope(worker.id)" placeholder="/tmp/slp/build/ or agents/**">
-                                                            <button mat-button matSuffix type="button" (click)="addWorkerScope(worker.id)">Add</button>
-                                                        </mat-form-field>
-                                                        @if (scopeInputError(); as inputError) { <p class="field-error">{{ inputError }}</p> }
-                                                        <p class="field-help">Path prefix, glob, or symbolic scope. Use <code>agents/**</code> for a tree. Invalid paths are rejected.</p>
-                                                    </div>
-                                                    <div class="policy-field">
-                                                        <span class="field-label">Capabilities — skills this worker has</span>
-                                                        <div class="tag-list">
-                                                            @for (capability of worker.capabilities; track capability) {
-                                                                <span class="tag">{{ capability }}<button type="button" aria-label="Remove capability" (click)="removeWorkerCapability(worker.id, capability)">×</button></span>
-                                                            } @empty {
-                                                                <span class="tag-empty">No capabilities. Optional, descriptive only.</span>
-                                                            }
-                                                        </div>
-                                                        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full">
-                                                            <mat-label>Add capability</mat-label>
-                                                            <input matInput [ngModel]="newCapability()" (ngModelChange)="newCapability.set($event)" (keyup.enter)="addWorkerCapability(worker.id)" placeholder="be, fe, qc">
-                                                            <button mat-button matSuffix type="button" (click)="addWorkerCapability(worker.id)">Add</button>
-                                                        </mat-form-field>
-                                                        @if (capabilityInputError(); as inputError) { <p class="field-error">{{ inputError }}</p> }
-                                                        <div class="tag-suggestions">
-                                                            @for (suggestion of ['be','fe','qc','review','design','pm']; track suggestion) { <button type="button" (click)="quickCapability(worker.id, suggestion)">{{ suggestion }}</button> }
-                                                        </div>
-                                                        <p class="field-help">Lowercase slug only. Capability is a skill label, not a permission.</p>
-                                                    </div>
-                                                    <div class="policy-field">
-                                                        <span class="field-label">Allowed actions — verbs it may use</span>
-                                                        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full">
-                                                            <mat-select multiple [ngModel]="worker.verbs" (ngModelChange)="setWorkerVerbs(worker.id, $event)">
-                                                                <mat-option value="read">read — inspect files</mat-option>
-                                                                <mat-option value="write">write — create or replace files</mat-option>
-                                                                <mat-option value="append">append — add to files or logs</mat-option>
-                                                                <mat-option value="approve">approve — pass a gate</mat-option>
-                                                                <mat-option value="configure">configure — change settings</mat-option>
-                                                                <mat-option value="handoff">handoff — pass work to another worker</mat-option>
-                                                            </mat-select>
-                                                        </mat-form-field>
-                                                        <p class="field-help">Verb is an enforced permission. Gate workers may write only inside their evidence scope; <code>configure</code> is always denied.</p>
-                                                    </div>
-                                                    <div class="policy-field">
-                                                        <span class="field-label">Required evidence — proof before acting</span>
-                                                        <div class="tag-list">
-                                                            @for (requirement of worker.bar; track $index) {
-                                                                <span class="tag tag-evidence">{{ evidenceLabel(requirement) }}<button type="button" aria-label="Remove evidence" (click)="removeWorkerEvidence(worker.id, $index)">×</button></span>
-                                                            } @empty {
-                                                                <span class="tag-empty">No evidence required.</span>
-                                                            }
-                                                        </div>
-                                                        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full">
-                                                            <mat-label>Evidence type</mat-label>
-                                                            <mat-select [ngModel]="newEvidenceKind()" (ngModelChange)="newEvidenceKind.set($event)">
-                                                                <mat-option value="test">Tests pass</mat-option>
-                                                                <mat-option value="verify">Verify result</mat-option>
-                                                                <mat-option value="audit">Audit score</mat-option>
-                                                                <mat-option value="audit-critical">Audit critical findings = 0</mat-option>
-                                                                <mat-option value="scenario">Scenario executed</mat-option>
-                                                            </mat-select>
-                                                        </mat-form-field>
-                                                        @if (newEvidenceKind() === 'audit' || newEvidenceKind() === 'verify') {
-                                                            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full">
-                                                                <mat-label>{{ newEvidenceKind() === 'audit' ? 'Minimum rubric score' : 'Required verify result' }}</mat-label>
-                                                                <input matInput type="number" [ngModel]="newEvidenceValue()" (ngModelChange)="newEvidenceValue.set($event)" [placeholder]="newEvidenceKind() === 'audit' ? '85' : 'PASS'">
-                                                            </mat-form-field>
-                                                        }
-                                                        @if (evidenceInputError(); as inputError) { <p class="field-error">{{ inputError }}</p> }
-                                                        <button mat-stroked-button type="button" (click)="addWorkerEvidence(worker.id)">Add requirement</button>
-                                                        <p class="field-help">Checked as a typed value, not a text label. Audit compares rubric score; verify compares status; test/scenario require a pass flag.</p>
-                                                    </div>
-                                                    <div class="policy-field">
-                                                        <span class="field-label">When policy blocks — escalation</span>
-                                                        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full">
-                                                            <mat-select [ngModel]="worker.escalation" (ngModelChange)="updateWorkerField(worker.id, 'escalation', $event)">
-                                                                <mat-option value="allow">allow — report the denial</mat-option>
-                                                                <mat-option value="stop+notify">stop + notify — stop and tell the operator</mat-option>
-                                                                <mat-option value="run+warn+notify">run + warn + notify — continue with warning</mat-option>
-                                                            </mat-select>
-                                                        </mat-form-field>
-                                                    </div>
-                                                    @if (workerValidationErrors().length > 0) {
-                                                        @for (error of workerValidationErrors(); track error) { <p class="field-error">{{ error }}</p> }
-                                                    }
-
-                                                </section>
-                                                <section class="inspector-block">
-                                                    <h4>Deployment</h4>
-                                                    @if (hostProfiles().length === 0) {
-                                                        <div class="formation-empty compact"><div><strong>No host bindings yet</strong><span>Create one in Host bindings first.</span></div><button mat-stroked-button type="button" (click)="selectTab('hosts')">Open Host bindings</button></div>
-                                                    } @else {
-                                                        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full"><mat-label>Host bindings · {{ worker.hostBindingIds.length }} selected</mat-label>
-                                                            <mat-select multiple [ngModel]="worker.hostBindingIds" (ngModelChange)="setWorkerHostBindings(worker.id, $event)">
-                                                                @for (binding of hostProfiles(); track binding.id) { <mat-option [value]="binding.id">{{ bindingLabel(binding) }}</mat-option> }
-                                                            </mat-select>
-                                                        </mat-form-field>
-                                                        <p class="field-help">Optional deployment association. The host placement below controls which runtime may execute this worker.</p>
-                                                    }
-                                                </section>
-                                                <section class="inspector-block placement-block">
-                                                    <div class="inspector-block-head">
-                                                        <h4>Host placement</h4>
-                                                        <p>Where this worker may be hosted, which model tier it requests, and the native agent each allowed host should use. ESO stores the placement policy; the host applies it.</p>
-                                                    </div>
-                                                    @if (hostRuntimes().length === 0) {
-                                                        <div class="formation-empty compact">
-                                                            <div><strong>No host runtimes registered</strong><span>Register a host runtime before placing this worker.</span></div>
-                                                            <button mat-stroked-button type="button" (click)="openHosts()">Open Hosts</button>
-                                                        </div>
-                                                    } @else {
-                                                        <div class="policy-field">
-                                                            <span class="field-label">Allowed runtimes — {{ placementDraftFor(worker.id).allowedHosts.length }} selected</span>
-                                                            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full">
-                                                                <mat-select multiple [ngModel]="placementDraftFor(worker.id).allowedHosts" (ngModelChange)="setPlacementHosts(worker.id, $event)">
-                                                                    @for (option of runtimeOptionsFor(worker.id); track option.value) {
-                                                                        <mat-option [value]="option.value">{{ option.label }}</mat-option>
-                                                                    }
-                                                                </mat-select>
-                                                            </mat-form-field>
-                                                            <p class="field-help">Placement targets a runtime key. Empty means this worker has no allowed runtime.</p>
-                                                            @if (legacyPlacementKeys(worker.id).length > 0) {
-                                                                <p class="field-error">Legacy host id without a runtime: {{ legacyPlacementKeys(worker.id).join(', ') }} — pick a runtime key to replace it before saving.</p>
-                                                            }
-                                                        </div>
-                                                        <div class="placement-grid">
-                                                            <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                                                                <mat-label>Model tier</mat-label>
-                                                                <mat-select [ngModel]="placementDraftFor(worker.id).modelTier" (ngModelChange)="setPlacementModelTier(worker.id, $event)">
-                                                                    <mat-option value="fast">Fast — cheapest capable model</mat-option>
-                                                                    <mat-option value="balanced">Balanced — default</mat-option>
-                                                                    <mat-option value="reasoning">Reasoning — deepest model</mat-option>
-                                                                </mat-select>
-                                                            </mat-form-field>
-                                                            <mat-form-field appearance="outline" subscriptSizing="dynamic">
-                                                                <mat-label>Fallback</mat-label>
-                                                                <mat-select [ngModel]="placementDraftFor(worker.id).fallback" (ngModelChange)="setPlacementFallback(worker.id, $event)">
-                                                                    <mat-option value="block">Block — do not fall back</mat-option>
-                                                                    <mat-option value="next-host">Next host — try another allowed host</mat-option>
-                                                                    <mat-option value="next-tier">Next tier — drop to a cheaper tier</mat-option>
-                                                                </mat-select>
-                                                            </mat-form-field>
-                                                        </div>
-                                                        <div class="policy-field">
-                                                            <span class="field-label">Native agent mapping — per allowed runtime</span>
-                                                            @if (placementDraftFor(worker.id).allowedHosts.length === 0) {
-                                                                <span class="tag-empty">Select at least one allowed runtime to map a native agent.</span>
-                                                            } @else {
-                                                                @for (runtimeKey of placementDraftFor(worker.id).allowedHosts; track runtimeKey) {
-                                                                    <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full">
-                                                                        <mat-label>Native agent · {{ runtimeKey }}</mat-label>
-                                                                        <input matInput [ngModel]="placementDraftFor(worker.id).nativeAgent[runtimeKey] || ''" (ngModelChange)="setNativeAgent(worker.id, runtimeKey, $event)" placeholder="cursor / agy / claude">
-                                                                    </mat-form-field>
-                                                                }
-                                                            }
-                                                            <p class="field-help">Host-native agent name this runtime uses for the worker — Cursor, AGY, or another installed agent id.</p>
-                                                        </div>
-                                                        @if (placementNotice(); as message) { <p class="placement-feedback" role="status">{{ message }}</p> }
-                                                        @if (placementError(); as message) { <p class="field-error" role="alert">{{ message }}</p> }
-                                                        <div class="placement-actions">
-                                                            <button mat-stroked-button type="button" [disabled]="!placementDirty(worker.id)" (click)="resetPlacement(worker.id)">Reset</button>
-                                                            <button mat-flat-button color="primary" type="button" [disabled]="placementSaving() || !placementDirty(worker.id)" (click)="savePlacement(worker.id)">{{ placementSaving() ? 'Saving…' : 'Save placement' }}</button>
-                                                        </div>
-                                                    }
-                                                </section>
-                                                <section class="inspector-actions">
-                                                    <button mat-stroked-button type="button" [disabled]="worker.status !== 'active'" (click)="openPolicyCheck(worker)">Test policy</button>
-                                                    <button mat-stroked-button type="button" (click)="removeWorker(worker.id)">Remove</button>
-                                                </section>
-                                                @if (policyWorker()?.id === worker.id) {
-                                                    <section class="worker-policy-check inspector-policy">
-                                                        <header><div><p class="eyebrow">Policy check</p><small>{{ worker.scope || 'no scope' }} · {{ worker.verbs.join(', ') || 'no verbs' }}</small></div><button mat-button type="button" (click)="closePolicyCheck()">Close</button></header>
-                                                        <div class="policy-check-form">
-                                                            <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Verb</mat-label>
-                                                                <mat-select [ngModel]="policyVerb()" (ngModelChange)="policyVerb.set($event)">
-                                                                    @for (verb of ['read','write','append','approve','configure','handoff']; track verb) { <mat-option [value]="verb">{{ verb }}</mat-option> }
-                                                                </mat-select>
-                                                            </mat-form-field>
-                                                            <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Path</mat-label><input matInput [ngModel]="policyPath()" (ngModelChange)="policyPath.set($event)" placeholder="agents/rules/core.md"></mat-form-field>
-                                                            <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Evidence type</mat-label>
-                                                                <mat-select [ngModel]="policyEvidenceKind()" (ngModelChange)="policyEvidenceKind.set($event)">
-                                                                    <mat-option value="test">Tests pass</mat-option>
-                                                                    <mat-option value="verify">Verify result</mat-option>
-                                                                    <mat-option value="audit">Audit score</mat-option>
-                                                                    <mat-option value="audit-critical">Audit critical findings = 0</mat-option>
-                                                                    <mat-option value="scenario">Scenario executed</mat-option>
-                                                                </mat-select>
-                                                            </mat-form-field>
-                                                            @if (policyEvidenceKind() === 'audit' || policyEvidenceKind() === 'verify') {
-                                                                <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>{{ policyEvidenceKind() === 'audit' ? 'Rubric score' : 'Verify result' }}</mat-label><input matInput [ngModel]="policyEvidenceValue()" (ngModelChange)="policyEvidenceValue.set($event)" placeholder="90"></mat-form-field>
-                                                            }
-                                                            <button mat-flat-button color="primary" type="button" [disabled]="policyChecking()" (click)="runPolicyCheck()">{{ policyChecking() ? 'Checking…' : 'Run check' }}</button>
-                                                        </div>
-                                                        @if (policyResult(); as result) {
-                                                            <div class="policy-result" [class.policy-deny]="result.decision === 'DENY'"><strong>{{ result.decision }}</strong>@if (result.reasons?.length) { <span>{{ result.reasons.join(' · ') }}</span> } @else { <span>policy satisfied</span> }</div>
-                                                        }
-                                                    </section>
-                                                }
-                                            } @else {
-                                                <p class="muted worker-empty">Select a worker or add one.</p>
-                                            }
-                                        </div>
-                                    </div>
-                                </section>
-
-                                @if (workerImports().length > 0) {
-                                    <details class="import-history">
-                                        <summary>Import history · {{ workerImports().length }}</summary>
-                                        <div class="worker-table-wrap">
-                                            <table class="worker-table">
-                                                <thead><tr><th>Source</th><th>Worker</th><th>Action</th><th>At</th></tr></thead>
-                                                <tbody>
-                                                    @for (record of workerImports(); track record.import_id) {
-                                                        <tr><td><code>{{ record.source_file }}</code><br><small>{{ record.source_type }}</small></td><td><code>{{ record.worker_id }}</code></td><td><span class="badge">{{ record.action }}</span></td><td>{{ record.imported_at }}</td></tr>
-                                                    }
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </details>
-                                }
-
-                                <section class="workers-section">
-                                    <h3>What a worker does not own</h3>
-                                    <p class="muted">A worker does not own the Stack, the host runtime, or the knowledge base. Those stay with the consumer, the host, and the artifact owner. The worker only carries a role and scope into a turn.</p>
-                                </section>
-
-                                @if (openDiagram(); as diagram) {
-                                    <div class="diagram-lightbox" role="dialog" aria-modal="true" (click)="openDiagram.set(null)">
-                                        <div class="diagram-lightbox-panel" (click)="$event.stopPropagation()">
-                                            <header><strong>{{ diagramTitle() }}</strong><button mat-stroked-button type="button" (click)="openDiagram.set(null)">Close</button></header>
-                                            <div class="diagram-lightbox-body"><img [src]="diagramSrc()" [alt]="diagramTitle()"></div>
-                                        </div>
-                                    </div>
-                                }
+                                <eso-workers-settings
+                                    [consumerId]="consumerId"
+                                    [hostProfiles]="hostProfiles()"
+                                    [hostRuntimes]="hostRuntimes()"
+                                    (workersChange)="workers.set($event)"
+                                />
                             </section>
                         }
 
@@ -1940,10 +1526,10 @@ function defaultPlugins(): PluginEntry[] {
                 <footer class="settings-actions">
                     <button mat-stroked-button type="button" (click)="back()">Back</button>
                     <div class="settings-footer-right">
-                        <span class="dirty-state" role="status" aria-live="polite" [class.dirty-state-on]="dirty() || workerImportDirty()">
-                            {{ dirty() || workerImportDirty() ? 'Unsaved changes' : 'All changes saved' }}
+                        <span class="dirty-state" role="status" aria-live="polite" [class.dirty-state-on]="dirty() || workerImportDirty() || workerDirty()">
+                            {{ dirty() || workerImportDirty() || workerDirty() ? 'Unsaved changes' : 'All changes saved' }}
                         </span>
-                        <button mat-stroked-button type="button" [disabled]="saving() || (!dirty() && !workerImportDirty()) || (activeTab() === 'workers' && workerValidationErrors().length > 0)" (click)="save()">Save changes</button>
+                        <button mat-stroked-button type="button" [disabled]="saving() || (!dirty() && !workerImportDirty() && !workerDirty()) || (activeTab() === 'workers' && ((workersSettings()?.validationErrors().length ?? 0) > 0))" (click)="save()">Save changes</button>
                         @if (activeTab() === lastTab) {
                             <button mat-flat-button color="primary" type="button" [disabled]="saving()" (click)="finish()">{{ saving() ? 'Saving…' : 'Finish' }}</button>
                         } @else {
@@ -2007,6 +1593,15 @@ function defaultPlugins(): PluginEntry[] {
         .grant-row { display: flex; gap: var(--space-3); align-items: center; justify-content: space-between; padding: var(--space-2); border-bottom: 1px solid var(--line); }
         .grant-row span { color: var(--muted); font-size: var(--text-xs); }
         .legacy-panel { display: grid; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--warn-ink); border-radius: var(--radius-md); background: var(--warn-bg); }
+        .legacy-panel.legacy-collapsible { display: block; padding: 0; }
+        .legacy-summary { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-4); cursor: pointer; list-style: none; }
+        .legacy-summary::-webkit-details-marker { display: none; }
+        .legacy-summary .eyebrow { margin: 0; }
+        .legacy-summary strong { font-size: var(--text-sm); }
+        .legacy-summary .summary-action { margin-left: auto; color: var(--brand); font-size: var(--text-xs); }
+        .legacy-collapsible[open] .legacy-summary { border-bottom: 1px solid color-mix(in srgb, var(--warn-ink) 35%, transparent); }
+        .legacy-collapsible .legacy-copy { padding: var(--space-3) var(--space-4) 0; }
+        .legacy-collapsible .legacy-actions { padding: 0 var(--space-4) var(--space-3); }
         .legacy-copy { display: grid; gap: var(--space-2); }
         .legacy-copy h2 { margin: 0; font-size: var(--text-md); }
         .legacy-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; justify-content: flex-end; }
@@ -2128,58 +1723,7 @@ export class ConsumerSettingsPage implements OnInit {
     readonly consumerId = this.route.snapshot.paramMap.get('id') || 'unknown';
     readonly consumers = signal<{ id: string; name?: string }[]>([]);
     private readonly hydrated = signal(false);
-    private readonly draftEffect = effect(() => {
-        if (!this.hydrated()) return;
-        const draft = {
-            name: this.name(),
-            owner: this.owner(),
-            locale: this.locale(),
-            tags: this.tags(),
-            description: this.description(),
-            stackLayers: this.stackLayers(),
-            stackVersions: this.stackVersions(),
-            activeStackVersion: this.activeStackVersion(),
-            newStackVersion: this.newStackVersion(),
-            hostProfiles: this.hostProfiles(),
-            developers: this.developers(),
-            formationHostIds: this.formationHostIds(),
-            jiraEnabled: this.jiraEnabled(),
-            jiraProject: this.jiraProject(),
-            jiraSyncMode: this.jiraSyncMode(),
-            sdlcEnabled: this.sdlcEnabled(),
-            sdlcPipeline: this.sdlcPipeline(),
-            crProcess: this.crProcess(),
-            artifactKinds: this.artifactKinds(),
-            representations: this.representations(),
-            docgraphIndex: this.docgraphIndex(),
-            docgraphScope: this.docgraphScope(),
-            documentStatusRequired: this.documentStatusRequired(),
-            preflightRequired: this.preflightRequired(),
-            goNoGoRequired: this.goNoGoRequired(),
-            crossCheckRequired: this.crossCheckRequired(),
-            pipelineContractRequired: this.pipelineContractRequired(),
-            openRegisterRequired: this.openRegisterRequired(),
-            buildEnforcementRequired: this.buildEnforcementRequired(),
-            quartetProfile: this.quartetProfile(),
-            manifestEnabled: this.manifestEnabled(),
-            manifestPath: this.manifestPath(),
-            manifestHumanHeaderKeys: this.manifestHumanHeaderKeys(),
-            manifestAiHeaderKeys: this.manifestAiHeaderKeys(),
-            manifestFacets: this.manifestFacets(),
-            manifestRelations: this.manifestRelations(),
-            manifestChecks: this.manifestChecks(),
-            consent: this.consent(),
-            events: this.events(),
-        };
-        try {
-            localStorage.setItem(`eso.consumer-settings.${this.consumerId}`, JSON.stringify(draft));
-        } catch {
-            // Storage may be unavailable; the in-memory draft still works.
-        }
-        this.currentDraft.set(JSON.stringify(draft));
-    });
-
-    readonly name = signal('');
+        readonly name = signal('');
     readonly owner = signal('');
     readonly locale = signal('vi-VN');
     readonly tags = signal('');
@@ -2240,69 +1784,24 @@ export class ConsumerSettingsPage implements OnInit {
     readonly detectedHosts = signal<Array<{ hostId: string; label: string; markers: string[] }>>([]);
     readonly developers = signal<string[]>([]);
     readonly workers = signal<WorkerEntry[]>(defaultWorkers());
-    readonly selectedWorkerId = signal('');
-    readonly selectedWorker = computed(() =>
-        this.workers().find((worker) => worker.id === this.selectedWorkerId()) || this.workers()[0] || null
-    );
-    readonly hostRuntimes = signal<HostRuntimeDto[]>([]);
+    readonly workersSettings = viewChild(WorkersSettingsComponent);
+    readonly gateCount = computed(() => this.workers().filter((worker) => worker.layer === 'gate').length);
+    readonly peerCount = computed(() => this.workers().filter((worker) => worker.layer === 'peer').length);
+    readonly workerDirty = computed(() => this.workersSettings()?.dirty() ?? false);
+        readonly hostRuntimes = signal<HostRuntimeDto[]>([]);
     readonly hosts = signal<HostDto[]>([]);
-    readonly workerPlacements = signal<Record<string, WorkerPlacementDto>>({});
-    readonly placementDrafts = signal<Record<string, WorkerPlacementDto>>({});
-    readonly placementSaving = signal(false);
-    readonly placementNotice = signal('');
-    readonly placementError = signal('');
 
-    readonly workerValidationErrors = computed(() => {
-        const errors: string[] = [];
-        for (const worker of this.workers()) {
-            for (const scope of this.workerScopeList(worker)) {
-                if (!this.scopeIsValid(scope)) errors.push(`${worker.name}: invalid scope "${scope}"`);
-            }
-            for (const capability of worker.capabilities) {
-                if (!/^[a-z][a-z0-9-]{0,31}$/.test(capability)) errors.push(`${worker.name}: invalid capability "${capability}"`);
-            }
-            for (const requirement of worker.bar) {
-                if (!this.requirementIsValid(requirement)) errors.push(`${worker.name}: invalid evidence requirement "${this.evidenceLabel(requirement)}"`);
-            }
-        }
-        return errors;
-    });
     readonly workerEdges = signal<WorkerEdge[]>([]);
     readonly defaultFlow = signal<FlowDefinitionDto | null>(null);
-    readonly policyWorker = signal<WorkerEntry | null>(null);
-    readonly policyVerb = signal('read');
-    readonly policyPath = signal('');
-    readonly policyEvidenceKind = signal<'test' | 'verify' | 'audit' | 'audit-critical' | 'scenario'>('test');
-    readonly policyEvidenceValue = signal('');
-    readonly policyResult = signal<any | null>(null);
-    readonly policyChecking = signal(false);
-    readonly workerImporting = signal(false);
-    readonly workerImportPreview = signal<any | null>(null);
-    readonly importSelectedHashes = signal<string[]>([]);
-    readonly importActions = signal<Record<string, 'import' | 'replace' | 'copy' | 'skip'>>({});
-    readonly workerImportDirty = signal(false);
-    readonly workerImports = signal<any[]>([]);
-    readonly ruleFiles = signal<any[]>([]);
-    readonly workerSourceStatus = signal<any>({ source: 0, projections: 0, drift: [] });
-    readonly workerSyncing = signal(false);
-    readonly materialCounts = signal<{ skills: number; hooks: number; subagents: number; rules: number }>({ skills: 0, hooks: 0, subagents: 0, rules: 0 });
+                                                readonly workerImportDirty = signal(false);
+        readonly ruleFiles = signal<any[]>([]);
+            readonly materialCounts = signal<{ skills: number; hooks: number; subagents: number; rules: number }>({ skills: 0, hooks: 0, subagents: 0, rules: 0 });
     readonly ruleImporting = signal(false);
     readonly ruleImportPreview = signal<any | null>(null);
     readonly ruleSelectedHashes = signal<string[]>([]);
     readonly ruleImportActions = signal<Record<string, 'skip' | 'replace' | 'copy'>>({});
-    readonly newCapability = signal('');
-    readonly newEvidenceKind = signal<'test' | 'verify' | 'audit' | 'audit-critical' | 'scenario'>('test');
-    readonly newEvidenceValue = signal('85');
-    readonly newScope = signal('');
-    readonly scopeInputError = signal('');
-    readonly capabilityInputError = signal('');
-    readonly evidenceInputError = signal('');
-    readonly formationHostIds = signal<string[]>([]);
-    readonly workerDraft = signal<WorkerDraft>({ name: '', role: 'dev', layer: 'peer', scope: '', capabilities: '', verbs: 'read,append', bar: '', escalation: 'allow' });
-    readonly workerRoles = ['scout', 'plan', 'build', 'fixbug', 'verify', 'audit', 'qc', 'lead', 'ba', 'dev', 'fe', 'be', 'qa', 'pm', 'review'];
-    readonly workerStatuses: Array<'declared' | 'active' | 'paused' | 'retired'> = ['declared', 'active', 'paused', 'retired'];
-    readonly newDeveloperId = signal('');
-    readonly bindingDeveloper = signal('');
+                                readonly formationHostIds = signal<string[]>([]);
+                    readonly bindingDeveloper = signal('');
     readonly addingHostFor = signal<string | null>(null);
     readonly removingDeveloper = signal<string | null>(null);
     readonly expandedProfile = signal<string | null>(null);
@@ -2367,10 +1866,8 @@ export class ConsumerSettingsPage implements OnInit {
     readonly observationsLoading = signal(false);
     readonly observationsError = signal<string | null>(null);
     private observationsLoaded = false;
-    readonly sourceOptions = ['eso-native', 'host-native', 'market', 'none'];
-    readonly policySources = ['host-native', 'eso-native', 'market'];
-    readonly jiraModes = ['off', 'push', 'two-way'];
-    readonly artifactKindOptions = ['BRD', 'PRD', 'FRD', 'SRS', 'ADR', 'Spec', 'Runbook', 'Manifest', 'WBS', 'WBS dictionary', 'Atomic WBS', 'Decision', 'Open register'];
+        readonly policySources = ['host-native', 'eso-native', 'market'];
+        readonly artifactKindOptions = ['BRD', 'PRD', 'FRD', 'SRS', 'ADR', 'Spec', 'Runbook', 'Manifest', 'WBS', 'WBS dictionary', 'Atomic WBS', 'Decision', 'Open register'];
     readonly representationOptions = ['human', 'agent', 'machine'];
     readonly manifestFacetOptions = ['kind', 'origin', 'custodian', 'liveness', 'kt-state', 'owner', 'representation'];
     readonly manifestRelationOptions = ['derived_from', 'source_of_truth', 'human_sot', 'blocks', 'owns_kinds', 'references'];
@@ -2568,24 +2065,9 @@ export class ConsumerSettingsPage implements OnInit {
         this.stackVersions.update((versions) => versions.map((item) => item.version === version ? { ...item, layers: this.stackLayers().map((layer) => ({ ...layer, allowedSources: layer.allowedSources ? [...layer.allowedSources] : undefined })) } : item));
     }
 
-    hostPlugins(): PluginEntry[] { return this.plugins().filter((plugin) => plugin.type === 'host'); }
-    activeHostRuntimes(): HostRuntimeDto[] { return this.hostRuntimes().filter((host) => host.health !== 'offline'); }
-    activeHosts(): HostDto[] { return this.hosts().filter((host) => host.runtimes.some((runtime) => runtime.health !== 'offline')); }
+            activeHosts(): HostDto[] { return this.hosts().filter((host) => host.runtimes.some((runtime) => runtime.health !== 'offline')); }
     hostTypeLabel(type: string): string { return HOST_TYPE_LABELS[type] || type; }
-    runtimeOptionsFor(workerId: string): Array<{ value: string; label: string; legacy: boolean }> {
-        const allowed = this.placementDraftFor(workerId).allowedHosts;
-        const runtimeKeys = new Set(this.hostRuntimes().map((runtime) => runtime.runtimeKey));
-        const options = this.hostRuntimes().map((runtime) => ({ value: runtime.runtimeKey, label: `${runtime.runtimeKey} · ${runtime.hostType}`, legacy: false }));
-        for (const key of allowed) {
-            if (!runtimeKeys.has(key)) options.push({ value: key, label: `${key} · legacy host id (no runtime)`, legacy: true });
-        }
-        return options.sort((left, right) => left.value.localeCompare(right.value));
-    }
-    legacyPlacementKeys(workerId: string): string[] {
-        const runtimeKeys = new Set(this.hostRuntimes().map((runtime) => runtime.runtimeKey));
-        return this.placementDraftFor(workerId).allowedHosts.filter((key) => !runtimeKeys.has(key));
-    }
-    hostAvailable(hostId: string): boolean { return this.hostRuntimes().some((host) => host.hostId === hostId && host.health !== 'offline'); }
+            hostAvailable(hostId: string): boolean { return this.hostRuntimes().some((host) => host.hostId === hostId && host.health !== 'offline'); }
     hostHealth(hostId: string): string { return this.hostRuntimes().find((host) => host.hostId === hostId)?.health || 'unregistered'; }
     hostTypeFor(hostId: string): string {
         const hostType = this.hosts().find((host) => host.hostId === hostId)?.hostType;
@@ -2629,72 +2111,13 @@ export class ConsumerSettingsPage implements OnInit {
         const capability = layerId === 'memory' ? 'memory' : 'code-graph';
         return this.plugins().filter((plugin) => plugin.type === 'provider' && plugin.capabilities.includes(capability));
     }
-    providersForLayer(layer: StackLayer): PluginEntry[] {
-        return this.marketProviders(layer.id === 'memory' ? 'memory' : 'codeGraph');
-    }
-
-    mcpSource(providerId: string | undefined): string {
-        return this.plugins().find((plugin) => plugin.id === providerId)?.mcpSource || 'host MCP config';
-    }
-    hostLabel(pluginId: string): string {
+            hostLabel(pluginId: string): string {
         const host = this.hostRuntimes().find((item) => item.hostId === pluginId);
         if (host) return `${host.hostId} · ${this.hostTypeFor(host.hostId)}`;
         return this.plugins().find((plugin) => plugin.id === pluginId)?.label || pluginId;
     }
 
-    normalizeWorker(worker: any): WorkerEntry {
-        const hostBindingIds = Array.isArray(worker?.hostBindingIds)
-            ? worker.hostBindingIds.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
-            : worker?.hostBindingId ? [String(worker.hostBindingId)] : [];
-        return {
-            id: String(worker?.id || `worker-${Date.now().toString(36)}`),
-            name: String(worker?.name || 'Unnamed worker'),
-            role: String(worker?.role || 'dev'),
-            layer: worker?.layer === 'gate' ? 'gate' : 'peer',
-            hostBindingIds,
-            scope: String(worker?.scope || ''),
-            status: ['active', 'paused', 'retired'].includes(worker?.status) ? worker.status : 'declared',
-            capabilities: Array.isArray(worker?.capabilities) ? worker.capabilities : [],
-            verbs: Array.isArray(worker?.verbs) ? worker.verbs : ['read', 'append'],
-            bar: Array.isArray(worker?.bar) ? worker.bar.map((item: any) => typeof item === 'string' ? { kind: 'manual', label: item } : item) : [],
-            escalation: String(worker?.escalation || 'allow'),
-            instructions: String(worker?.instructions || ''),
-            sourceFile: worker?.sourceFile ? String(worker.sourceFile) : undefined,
-            sourceHash: worker?.sourceHash ? String(worker.sourceHash) : undefined,
-            sourceType: worker?.sourceType ? String(worker.sourceType) : undefined,
-        };
-    }
-
-    setWorkerDraft<K extends keyof WorkerDraft>(key: K, value: WorkerDraft[K]): void {
-        this.workerDraft.update((draft) => ({ ...draft, [key]: value }));
-    }
-
-    setWorkerRole(role: string): void {
-        this.workerDraft.update((draft) => ({
-            ...draft,
-            role,
-            layer: ['verify', 'audit', 'qc'].includes(role) ? 'gate' : 'peer',
-        }));
-    }
-
-    bindingLabel(binding: HostProfile): string {
-        return `${binding.userId} · ${this.hostLabel(binding.hostId)} · v${binding.stackVersion}`;
-    }
-
-    formationBindingLabel(id: string): string {
-        const binding = this.hostProfiles().find((item) => item.id === id);
-        return binding ? this.bindingLabel(binding) : 'Missing binding';
-    }
-
-    workerBindingLabel(worker: WorkerEntry): string {
-        const labels = worker.hostBindingIds
-            .map((id) => this.hostProfiles().find((item) => item.id === id))
-            .filter((binding): binding is HostProfile => Boolean(binding))
-            .map((binding) => this.bindingLabel(binding));
-        return labels.length > 0 ? labels.join(' · ') : 'No binding yet';
-    }
-
-    workerRoleCount(): number {
+                            workerRoleCount(): number {
         return new Set(this.workers().map((worker) => worker.role)).size;
     }
 
@@ -2706,34 +2129,7 @@ export class ConsumerSettingsPage implements OnInit {
         return this.workers().reduce((sum, worker) => sum + worker.hostBindingIds.length, 0);
     }
 
-    validFormationHostIds(): string[] {
-        const valid = new Set(this.hostProfiles().map((profile) => profile.id));
-        return this.formationHostIds().filter((id) => valid.has(id));
-    }
-
-    canApplyFormation(): boolean {
-        return this.workers().length > 0 && this.validFormationHostIds().length > 0;
-    }
-
-    formationApplyReason(): string {
-        if (this.workers().length === 0) return 'No workers in the formation. Use Reset to default or add a worker.';
-        if (this.hostProfiles().length === 0) return 'No host bindings exist. Create one in Host bindings first.';
-        if (this.formationHostIds().length === 0) return 'Select at least one host binding above.';
-        if (this.validFormationHostIds().length === 0) return 'Selected host bindings no longer exist. Select again.';
-        return '';
-    }
-
-    clearFormationPlacements(): void {
-        this.workers.update((workers) => workers.map((worker) => ({ ...worker, hostBindingIds: [] })));
-    }
-
-    applyFormationHosts(): void {
-        const hostBindingIds = this.validFormationHostIds();
-        if (hostBindingIds.length === 0) return;
-        this.workers.update((workers) => workers.map((worker) => ({ ...worker, hostBindingIds: [...hostBindingIds] })));
-    }
-
-    private loadFlowSummaries(id: string): void {
+                        private loadFlowSummaries(id: string): void {
         this.service.getFlows(id)
             .then((flows) => this.flowSummaries.set(flows))
             .catch(() => this.flowSummaries.set([]));
@@ -2749,31 +2145,7 @@ export class ConsumerSettingsPage implements OnInit {
         this.newFlowVersion.set(this.flowVersionOptions().at(-1) || 1);
     }
 
-    private loadWorkerSourceStatus(id: string): void {
-        this.service.getWorkerSourceStatus(id)
-            .then((status) => this.workerSourceStatus.set(status))
-            .catch(() => this.workerSourceStatus.set({ source: 0, projections: 0, drift: [] }));
-    }
-
-    syncWorkerSources(): void {
-        this.workerSyncing.set(true);
-        this.service.syncWorkerSources(this.consumerId)
-            .then((status) => this.workerSourceStatus.set(status))
-            .catch((err) => this.error.set(err?.detail || err?.message || 'Worker sync failed'))
-            .finally(() => this.workerSyncing.set(false));
-    }
-
-    promoteProjection(file: string): void {
-        const id = file.replace(/\.md$/, '');
-        this.service.promoteWorkerProjection(this.consumerId, id)
-            .then(() => {
-                this.loadWorkerFiles(this.consumerId);
-                this.loadWorkerSourceStatus(this.consumerId);
-            })
-            .catch((err) => this.error.set(err?.detail || err?.message || 'Promote failed'));
-    }
-
-    private loadDefaultFlow(id: string): void {
+                private loadDefaultFlow(id: string): void {
         this.service.getDefaultFlow(id)
             .then((flow) => {
                 this.defaultFlow.set(flow);
@@ -2873,303 +2245,7 @@ export class ConsumerSettingsPage implements OnInit {
         this.ruleImportActions.set({});
     }
 
-    onWorkerFiles(event: Event): void {
-        const input = event.target as HTMLInputElement;
-        const files = Array.from(input.files || []);
-        input.value = '';
-        if (files.length === 0) return;
-        this.workerImporting.set(true);
-        Promise.all(files.map(async (file) => ({ name: file.name, content: await file.text() })))
-            .then((payload) => this.service.previewWorkerImport(this.consumerId, payload))
-            .then((preview) => {
-                this.workerImportPreview.set(preview);
-                this.importSelectedHashes.set(preview.candidates.map((candidate: any) => candidate.sourceHash));
-                this.importActions.set(Object.fromEntries(preview.candidates.map((candidate: any) => [candidate.sourceHash, candidate.conflict ? 'skip' : 'import'])));
-            })
-            .catch((err) => this.error.set(err?.detail || err?.message || 'Import preview failed'))
-            .finally(() => this.workerImporting.set(false));
-    }
-
-    toggleImport(hash: string, checked: boolean): void {
-        this.importSelectedHashes.update((hashes) => checked
-            ? [...new Set([...hashes, hash])]
-            : hashes.filter((item) => item !== hash));
-    }
-
-    importAction(hash: string): 'import' | 'replace' | 'copy' | 'skip' {
-        return this.importActions()[hash] || 'import';
-    }
-
-    setImportAction(hash: string, action: 'import' | 'replace' | 'copy' | 'skip'): void {
-        this.importActions.update((actions) => ({ ...actions, [hash]: action }));
-    }
-
-    importableCount(): number {
-        const preview = this.workerImportPreview();
-        if (!preview) return 0;
-        const selected = new Set(this.importSelectedHashes());
-        return preview.candidates.filter((candidate: any) => selected.has(candidate.sourceHash) && this.importAction(candidate.sourceHash) !== 'skip').length;
-    }
-
-    importWorkers(): void {
-        const preview = this.workerImportPreview();
-        if (!preview) return;
-        const selected = new Set(this.importSelectedHashes());
-        const imported: WorkerEntry[] = [];
-        for (const candidate of preview.candidates) {
-            if (!selected.has(candidate.sourceHash)) continue;
-            const action = this.importAction(candidate.sourceHash);
-            if (action === 'skip') continue;
-            const worker = this.normalizeWorker(candidate.worker);
-            let targetId = worker.id;
-            if (action === 'replace' && candidate.conflictWith) {
-                this.workers.update((workers) => workers.filter((item) => item.id !== candidate.conflictWith));
-                targetId = candidate.conflictWith;
-            }
-            if (action === 'copy') {
-                let suffix = 2;
-                targetId = `${worker.id}-copy`;
-                while (this.workers().some((item) => item.id === targetId)) targetId = `${worker.id}-copy-${suffix++}`;
-            }
-            const next = { ...worker, id: targetId };
-            this.workers.update((workers) => [...workers.filter((item) => item.id !== targetId), next]);
-            imported.push(next);
-            void this.service.recordWorkerImport(this.consumerId, {
-                sourceFile: candidate.sourceFile,
-                sourceHash: candidate.sourceHash,
-                sourceType: candidate.sourceType,
-                workerId: targetId,
-                action: action === 'import' ? 'import' : action,
-            }).catch(() => undefined);
-        }
-        if (imported.length === 0) return;
-        this.selectedWorkerId.set(imported[0].id);
-        this.workerImportPreview.set(null);
-        this.importSelectedHashes.set([]);
-        this.importActions.set({});
-        this.workerImportDirty.set(true);
-        this.saved.set(false);
-        this.loadWorkerImports();
-    }
-
-    loadWorkerImports(): void {
-        this.service.getWorkerImports(this.consumerId)
-            .then((records) => this.workerImports.set(records))
-            .catch(() => this.workerImports.set([]));
-    }
-
-    closeImportPreview(): void {
-        this.workerImportPreview.set(null);
-        this.importSelectedHashes.set([]);
-    }
-
-    selectWorker(id: string): void {
-        this.selectedWorkerId.set(id);
-        this.newEvidenceValue.set('85');
-        this.evidenceInputError.set('');
-        this.placementNotice.set('');
-        this.placementError.set('');
-    }
-
-    updateWorkerField<K extends 'name' | 'role' | 'layer' | 'scope' | 'escalation' | 'instructions'>(id: string, key: K, value: WorkerEntry[K]): void {
-        this.workers.update((workers) => workers.map((worker) => worker.id === id ? { ...worker, [key]: value } : worker));
-    }
-
-    setWorkerVerbs(id: string, verbs: string[]): void {
-        this.workers.update((workers) => workers.map((worker) => worker.id === id ? { ...worker, verbs: [...verbs] } : worker));
-    }
-
-    workerScopeList(worker: WorkerEntry): string[] {
-        return worker.scope.split(',').map((item) => item.trim()).filter(Boolean);
-    }
-
-    scopeIsValid(scope: string): boolean {
-        return /^(\/|\.\.?\/)?[A-Za-z0-9._*/-]+$/.test(scope);
-    }
-
-    evidenceLabel(requirement: EvidenceRequirementDto): string {
-        if (requirement.kind === 'audit') return `Audit ${requirement.metric || 'rubric'} ${requirement.op || '>='} ${requirement.value ?? 0}`;
-        if (requirement.kind === 'verify') return `Verify ${requirement.value || 'PASS'}`;
-        if (requirement.kind === 'test') return 'Tests pass';
-        if (requirement.kind === 'scenario') return 'Scenario executed';
-        return requirement.label || requirement.kind;
-    }
-
-    requirementIsValid(requirement: EvidenceRequirementDto): boolean {
-        if (requirement.kind === 'audit') return Number.isFinite(Number(requirement.value));
-        if (requirement.kind === 'verify') return String(requirement.value || 'PASS').length > 0;
-        return requirement.kind === 'test' || requirement.kind === 'scenario';
-    }
-
-    addWorkerScope(id: string): void {
-        const values = this.newScope().split(',').map((item) => item.trim()).filter(Boolean);
-        if (values.length === 0) return;
-        const invalid = values.find((value) => !/^(\/|\.\.?\/)?[A-Za-z0-9._*/-]+$/.test(value));
-        if (invalid) {
-            this.scopeInputError.set(`Scope must be a path or glob: ${invalid}`);
-            return;
-        }
-        this.scopeInputError.set('');
-        this.workers.update((workers) => workers.map((worker) => {
-            if (worker.id !== id) return worker;
-            const existing = new Set(this.workerScopeList(worker));
-            values.forEach((value) => existing.add(value));
-            return { ...worker, scope: [...existing].join(', ') };
-        }));
-        this.newScope.set('');
-    }
-
-    removeWorkerScope(id: string, value: string): void {
-        this.workers.update((workers) => workers.map((worker) => worker.id === id
-            ? { ...worker, scope: this.workerScopeList(worker).filter((item) => item !== value).join(', ') }
-            : worker));
-    }
-
-    addWorkerCapability(id: string): void {
-        const values = this.newCapability().split(',').map((item) => item.trim().toLowerCase()).filter(Boolean);
-        if (values.length === 0) return;
-        const invalid = values.find((value) => !/^[a-z][a-z0-9-]{0,31}$/.test(value));
-        if (invalid) {
-            this.capabilityInputError.set(`Capability must be a lowercase slug: ${invalid}`);
-            return;
-        }
-        this.capabilityInputError.set('');
-        this.workers.update((workers) => workers.map((worker) => {
-            if (worker.id !== id) return worker;
-            const existing = new Set(worker.capabilities);
-            values.forEach((value) => existing.add(value));
-            return { ...worker, capabilities: [...existing] };
-        }));
-        this.newCapability.set('');
-    }
-
-    removeWorkerCapability(id: string, capability: string): void {
-        this.workers.update((workers) => workers.map((worker) => worker.id === id
-            ? { ...worker, capabilities: worker.capabilities.filter((item) => item !== capability) }
-            : worker));
-    }
-
-    addWorkerEvidence(id: string): void {
-        const kind = this.newEvidenceKind();
-        let requirement: EvidenceRequirementDto;
-        if (kind === 'audit') {
-            const value = Number(this.newEvidenceValue());
-            if (!Number.isFinite(value)) {
-                this.evidenceInputError.set('Audit threshold must be a number.');
-                return;
-            }
-            requirement = { kind: 'audit', metric: 'rubric', op: '>=', value };
-        } else if (kind === 'verify') {
-            requirement = { kind: 'verify', metric: 'status', op: '==', value: this.newEvidenceValue().trim().toUpperCase() || 'PASS' };
-        } else if (kind === 'audit-critical') {
-            requirement = { kind: 'audit', metric: 'critical', op: '==', value: 0 };
-        } else if (kind === 'scenario') {
-            requirement = { kind: 'scenario', metric: 'executed', op: 'truthy', value: true };
-        } else {
-            requirement = { kind: 'test', metric: 'passed', op: 'truthy', value: true };
-        }
-        this.evidenceInputError.set('');
-        this.workers.update((workers) => workers.map((worker) => {
-            if (worker.id !== id) return worker;
-            const label = this.evidenceLabel(requirement);
-            if (worker.bar.some((item) => this.evidenceLabel(item) === label)) return worker;
-            return { ...worker, bar: [...worker.bar, requirement] };
-        }));
-    }
-
-    removeWorkerEvidence(id: string, index: number): void {
-        this.workers.update((workers) => workers.map((worker) => worker.id === id
-            ? { ...worker, bar: worker.bar.filter((_, itemIndex) => itemIndex !== index) }
-            : worker));
-    }
-
-    quickCapability(id: string, value: string): void {
-        this.newCapability.set(value);
-        this.addWorkerCapability(id);
-    }
-
-    setWorkerList(id: string, key: 'capabilities' | 'verbs', value: string): void {
-        const items = splitList(value);
-        this.workers.update((workers) => workers.map((worker) => worker.id === id ? { ...worker, [key]: items } : worker));
-    }
-
-    setWorkerHostBindings(id: string, hostBindingIds: string[]): void {
-        this.workers.update((workers) => workers.map((worker) => worker.id === id ? { ...worker, hostBindingIds: [...hostBindingIds] } : worker));
-    }
-
-    addWorker(): void {
-        const id = `worker-${Date.now().toString(36)}`;
-        const worker: WorkerEntry = {
-            id,
-            name: 'New worker',
-            role: 'dev',
-            layer: 'peer',
-            hostBindingIds: [],
-            scope: '',
-            status: 'declared',
-            capabilities: [],
-            verbs: ['read', 'append'],
-            bar: [],
-            escalation: 'allow',
-        };
-        this.workers.update((workers) => [...workers, worker]);
-        this.selectedWorkerId.set(id);
-    }
-
-    setWorkerStatus(id: string, status: WorkerEntry['status']): void {
-        this.workers.update((workers) => workers.map((worker) => worker.id === id ? { ...worker, status } : worker));
-    }
-
-    activateWorker(id: string): void {
-        this.setWorkerStatus(id, 'active');
-    }
-
-    openPolicyCheck(worker: WorkerEntry): void {
-        this.policyWorker.set(worker);
-        this.policyResult.set(null);
-        this.policyPath.set('');
-        this.policyEvidenceValue.set('');
-    }
-
-    closePolicyCheck(): void {
-        this.policyWorker.set(null);
-        this.policyResult.set(null);
-    }
-
-    buildPolicyEvidence(): any {
-        const kind = this.policyEvidenceKind();
-        if (kind === 'audit' || kind === 'audit-critical') return { kind: 'audit', rubric: Number(this.policyEvidenceValue()) || 0, critical: 0 };
-        if (kind === 'verify') return { kind: 'verify', status: this.policyEvidenceValue().trim().toUpperCase() || 'PASS' };
-        if (kind === 'scenario') return { kind: 'scenario', executed: true };
-        return { kind: 'test', passed: true };
-    }
-
-    runPolicyCheck(): void {
-        const profile = this.current();
-        const worker = this.policyWorker();
-        if (!profile || !worker || this.policyChecking()) return;
-        this.policyChecking.set(true);
-        this.service.checkWorker(profile.id, worker.id, {
-            verb: this.policyVerb(),
-            path: this.policyPath().trim() || undefined,
-            evidence: [this.buildPolicyEvidence()],
-        })
-            .then((result) => this.policyResult.set(result))
-            .catch((err) => this.policyResult.set({ decision: 'DENY', reasons: [err?.detail || err?.message || 'Policy check failed'] }))
-            .finally(() => this.policyChecking.set(false));
-    }
-
-    removeWorker(id: string): void {
-        this.workers.update((workers) => workers.filter((worker) => worker.id !== id));
-        if (this.selectedWorkerId() === id) this.selectedWorkerId.set('');
-        if (this.policyWorker()?.id === id) this.closePolicyCheck();
-    }
-
-    workerName(id: string): string {
-        return this.workers().find((worker) => worker.id === id)?.name || id;
-    }
-
-    updateLayer(id: LayerId, field: 'enabled' | 'required' | 'allowedSources', value: unknown): void {
+                                                                                                                                        updateLayer(id: LayerId, field: 'enabled' | 'required' | 'allowedSources', value: unknown): void {
         if (!this.isStackEditable()) return;
         this.stackLayers.update((layers) => layers.map((layer) => (layer.id === id ? { ...layer, [field]: value } : layer)));
         this.persistActiveLayers();
@@ -3640,11 +2716,7 @@ export class ConsumerSettingsPage implements OnInit {
         return 'Main SDLC pipeline';
     }
 
-    selectedPipelineLabel(): string {
-        return this.pipelineOptions.find((pipeline) => pipeline.id === this.sdlcPipeline())?.label || 'Custom pipeline';
-    }
-
-    pipelineHint(): string {
+        pipelineHint(): string {
         switch (this.sdlcPipeline()) {
             case 'ba-dev': return 'Requirements → implementation';
             case 'dev-qc': return 'Implementation → verification';
@@ -3918,16 +2990,7 @@ export class ConsumerSettingsPage implements OnInit {
         try { return JSON.stringify(evidence ?? null, null, 2); } catch { return String(evidence); }
     }
 
-    private pruneWorkerBindings(): void {
-        const valid = new Set(this.hostProfiles().map((profile) => profile.id));
-        this.formationHostIds.update((ids) => ids.filter((id) => valid.has(id)));
-        this.workers.update((workers) => workers.map((worker) => ({
-            ...worker,
-            hostBindingIds: worker.hostBindingIds.filter((id) => valid.has(id)),
-        })));
-    }
-
-    private loadKnowledgeIndex(id: string): void {
+        private loadKnowledgeIndex(id: string): void {
         this.service.getKnowledge(id)
             .then((summary) => this.knowledgeSummary.set(summary))
             .catch(() => this.knowledgeSummary.set(null));
@@ -4003,168 +3066,7 @@ export class ConsumerSettingsPage implements OnInit {
             .finally(() => this.knowledgeIndexing.set(false));
     }
 
-    private loadWorkerFiles(id: string): void {
-        Promise.all([
-            this.service.getWorkers(id).catch(() => null),
-            this.service.getWorkerPlacement(id).catch(() => [] as WorkerPlacementDto[]),
-        ])
-            .then(([config, placements]) => {
-                if (config && Array.isArray(config.workers) && config.workers.length > 0) {
-                    this.workers.set(config.workers.map((worker) => this.normalizeWorker(worker)));
-                    // Defensive default: if the server has no deployment association yet, show the
-                    // configured formation so the Deployment selector is never silently empty.
-                    const formationIds = this.validFormationHostIds();
-                    if (formationIds.length > 0 && this.workers().every((worker) => worker.hostBindingIds.length === 0)) {
-                        this.applyFormationHosts();
-                    }
-                }
-                this.applyWorkerPlacements(placements);
-                this.pruneWorkerBindings();
-                this.loadWorkerImports();
-            })
-            .catch(() => {
-                // No worker files yet; the default formation remains visible.
-            });
-    }
-
-    private applyWorkerPlacements(placements: WorkerPlacementDto[]): void {
-        const saved: Record<string, WorkerPlacementDto> = {};
-        for (const placement of placements) {
-            if (placement && typeof placement.workerId === 'string' && placement.workerId) {
-                saved[placement.workerId] = this.normalizePlacement(placement);
-            }
-        }
-        this.workerPlacements.set(saved);
-        // Pre-seed every worker's draft so template reads keep a stable object identity between
-        // change-detection passes (a new object per pass loops Material select writeValue).
-        const drafts: Record<string, WorkerPlacementDto> = {};
-        for (const worker of this.workers()) drafts[worker.id] = saved[worker.id] || this.defaultPlacement(worker.id);
-        this.placementDrafts.set(drafts);
-        this.placementNotice.set('');
-        this.placementError.set('');
-    }
-
-    private normalizePlacement(placement: WorkerPlacementDto): WorkerPlacementDto {
-        const tiers: WorkerModelTier[] = ['fast', 'balanced', 'reasoning'];
-        const fallbacks: WorkerPlacementFallback[] = ['block', 'next-host', 'next-tier'];
-        const nativeAgent: Record<string, string> = {};
-        if (placement.nativeAgent && typeof placement.nativeAgent === 'object') {
-            for (const [hostId, agent] of Object.entries(placement.nativeAgent)) {
-                if (typeof agent === 'string' && agent.trim()) nativeAgent[hostId] = agent.trim();
-            }
-        }
-        return {
-            workerId: placement.workerId,
-            allowedHosts: Array.isArray(placement.allowedHosts) ? placement.allowedHosts.filter((hostId): hostId is string => typeof hostId === 'string' && hostId.length > 0) : [],
-            modelTier: tiers.includes(placement.modelTier) ? placement.modelTier : 'balanced',
-            nativeAgent,
-            fallback: fallbacks.includes(placement.fallback) ? placement.fallback : 'block',
-        };
-    }
-
-    private readonly placementDefaults = new Map<string, WorkerPlacementDto>();
-
-    private defaultPlacement(workerId: string): WorkerPlacementDto {
-        const cached = this.placementDefaults.get(workerId);
-        if (cached) return cached;
-        const created: WorkerPlacementDto = { workerId, allowedHosts: [], modelTier: 'balanced', nativeAgent: {}, fallback: 'block' };
-        this.placementDefaults.set(workerId, created);
-        return created;
-    }
-
-    placementDraftFor(workerId: string): WorkerPlacementDto {
-        return this.placementDrafts()[workerId] || this.workerPlacements()[workerId] || this.defaultPlacement(workerId);
-    }
-
-    private placementSignature(placement: WorkerPlacementDto): string {
-        return JSON.stringify({
-            allowedHosts: [...placement.allowedHosts].sort(),
-            modelTier: placement.modelTier,
-            fallback: placement.fallback,
-            nativeAgent: Object.entries(placement.nativeAgent)
-                .filter(([hostId]) => placement.allowedHosts.includes(hostId))
-                .sort(([left], [right]) => left.localeCompare(right)),
-        });
-    }
-
-    placementDirty(workerId: string): boolean {
-        const saved = this.workerPlacements()[workerId] || this.defaultPlacement(workerId);
-        return this.placementSignature(this.placementDraftFor(workerId)) !== this.placementSignature(saved);
-    }
-
-    placementSummary(workerId: string): string {
-        const saved = this.workerPlacements()[workerId];
-        if (!saved) return 'No placement';
-        if (saved.allowedHosts.length === 0) return `Not placed · ${saved.modelTier}`;
-        return `${saved.allowedHosts.length} runtime${saved.allowedHosts.length === 1 ? '' : 's'} · ${saved.modelTier}`;
-    }
-
-    private patchPlacementDraft(workerId: string, patch: Partial<WorkerPlacementDto>): void {
-        this.placementDrafts.update((drafts) => ({
-            ...drafts,
-            [workerId]: { ...this.placementDraftFor(workerId), ...patch, workerId },
-        }));
-        this.placementNotice.set('');
-        this.placementError.set('');
-    }
-
-    setPlacementHosts(workerId: string, allowedHosts: string[]): void {
-        const current = this.placementDraftFor(workerId);
-        const nativeAgent: Record<string, string> = {};
-        for (const runtimeKey of allowedHosts) {
-            const agent = current.nativeAgent[runtimeKey];
-            if (agent) nativeAgent[runtimeKey] = agent;
-        }
-        this.patchPlacementDraft(workerId, { allowedHosts: [...allowedHosts], nativeAgent });
-    }
-
-    setPlacementModelTier(workerId: string, tier: WorkerModelTier): void {
-        this.patchPlacementDraft(workerId, { modelTier: tier });
-    }
-
-    setPlacementFallback(workerId: string, fallback: WorkerPlacementFallback): void {
-        this.patchPlacementDraft(workerId, { fallback });
-    }
-
-    setNativeAgent(workerId: string, runtimeKey: string, value: string): void {
-        const nativeAgent = { ...this.placementDraftFor(workerId).nativeAgent };
-        if (value.trim()) nativeAgent[runtimeKey] = value.trim();
-        else delete nativeAgent[runtimeKey];
-        this.patchPlacementDraft(workerId, { nativeAgent });
-    }
-
-    resetPlacement(workerId: string): void {
-        this.placementDrafts.update((drafts) => {
-            const next = { ...drafts };
-            delete next[workerId];
-            return next;
-        });
-        this.placementNotice.set('');
-        this.placementError.set('');
-    }
-
-    savePlacement(workerId: string): void {
-        if (this.placementSaving()) return;
-        const placement: WorkerPlacementDto = { ...this.placementDraftFor(workerId), workerId };
-        this.placementSaving.set(true);
-        this.placementNotice.set('');
-        this.placementError.set('');
-        this.service.saveWorkerPlacement(this.consumerId, workerId, placement)
-            .then((saved) => {
-                const normalized = this.normalizePlacement({ ...placement, ...saved, workerId });
-                this.workerPlacements.update((placements) => ({ ...placements, [workerId]: normalized }));
-                this.placementDrafts.update((drafts) => {
-                    const next = { ...drafts };
-                    delete next[workerId];
-                    return next;
-                });
-                this.placementNotice.set(`Host placement saved for ${this.workerName(workerId)}.`);
-            })
-            .catch((err) => this.placementError.set(err?.detail || err?.message || 'Could not save host placement'))
-            .finally(() => this.placementSaving.set(false));
-    }
-
-    openHosts(): void {
+                                                openHosts(): void {
         void this.router.navigate(['/hosts']);
     }
 
@@ -4430,7 +3332,7 @@ export class ConsumerSettingsPage implements OnInit {
             },
         };
         const workerConfig: WorkerConfigDto = {
-            workers: this.workers().map((worker) => ({
+            workers: (this.workersSettings()?.snapshot() ?? this.workers()).map((worker) => ({
                 id: worker.id,
                 name: worker.name,
                 role: worker.role,
@@ -4584,11 +3486,8 @@ export class ConsumerSettingsPage implements OnInit {
         }));
         this.plugins.set([...savedPlugins, ...discoveredProviders]);
         this.restoreDraft();
-        this.pruneWorkerBindings();
-        this.hydrated.set(true);
+                this.hydrated.set(true);
         setTimeout(() => { this.lastSaved.set(this.currentDraft()); this.baselineReady.set(true); }, 500);
-        void this.loadWorkerFiles(profile.id);
-        void this.loadWorkerSourceStatus(profile.id);
         void this.loadDefaultFlow(profile.id);
         void this.loadRuleFiles(profile.id);
         void this.loadFlowSummaries(profile.id);

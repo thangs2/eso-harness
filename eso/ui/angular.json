@@ -38,9 +38,10 @@
                   "maximumError": "650kB"
                 },
                 {
+                  // Feature panels (Workers runtime matrix, request detail) are larger than the legacy page shell.
                   "type": "anyComponentStyle",
-                  "maximumWarning": "8kB",
-                  "maximumError": "16kB"
+                  "maximumWarning": "16kB",
+                  "maximumError": "24kB"
                 }
               ]
             },

@@ -467,6 +467,9 @@ export class MemoryPlatformStore implements PlatformStore {
             worker_id: workerId,
             allowed_hosts: clone(config.allowedHosts || []),
             model_tier: config.modelTier || 'balanced',
+            model: config.model || '',
+            models: clone(config.models || {}),
+            modes: Array.isArray(config.modes) ? [...config.modes] : ['A', 'B'],
             native_agent: clone(config.nativeAgent || {}),
             fallback: config.fallback || 'block',
             updated_at: new Date().toISOString(),
@@ -1267,7 +1270,7 @@ export class BunSqlPlatformStore implements PlatformStore {
     async listWorkerHostPolicies(consumerId: string): Promise<any[]> {
         const schema = quoteSchema(schemaNameFor(consumerId));
         return await this.sql.unsafe(
-            `SELECT worker_id,allowed_hosts,model_tier,native_agent,fallback,updated_at
+            `SELECT worker_id,allowed_hosts,model_tier,model,models,modes,native_agent,fallback,updated_at
              FROM ${schema}.knowledge_worker_host_policy ORDER BY worker_id`
         );
     }
@@ -1275,7 +1278,7 @@ export class BunSqlPlatformStore implements PlatformStore {
     async getWorkerHostPolicy(consumerId: string, workerId: string): Promise<any> {
         const schema = quoteSchema(schemaNameFor(consumerId));
         const rows = await this.sql.unsafe(
-            `SELECT worker_id,allowed_hosts,model_tier,native_agent,fallback,updated_at
+            `SELECT worker_id,allowed_hosts,model_tier,model,models,modes,native_agent,fallback,updated_at
              FROM ${schema}.knowledge_worker_host_policy WHERE worker_id=$1`,
             [workerId]
         );
@@ -1286,14 +1289,15 @@ export class BunSqlPlatformStore implements PlatformStore {
         const schema = quoteSchema(schemaNameFor(consumerId));
         const rows = await this.sql.unsafe(
             `INSERT INTO ${schema}.knowledge_worker_host_policy
-             (worker_id,allowed_hosts,model_tier,native_agent,fallback,updated_at)
-             VALUES ($1,$2::text[],$3,$4::jsonb,$5,now())
+             (worker_id,allowed_hosts,model_tier,model,models,modes,native_agent,fallback,updated_at)
+             VALUES ($1,$2::text[],$3,$4,$5::jsonb,$6::text[],$7::jsonb,$8,now())
              ON CONFLICT (worker_id) DO UPDATE SET
                allowed_hosts=EXCLUDED.allowed_hosts, model_tier=EXCLUDED.model_tier,
+               model=EXCLUDED.model, models=EXCLUDED.models, modes=EXCLUDED.modes,
                native_agent=EXCLUDED.native_agent, fallback=EXCLUDED.fallback, updated_at=now()
-             RETURNING worker_id,allowed_hosts,model_tier,native_agent,fallback,updated_at`,
-            [workerId, pgTextArray(config.allowedHosts || []), config.modelTier || 'balanced',
-             config.nativeAgent || {}, config.fallback || 'block']
+             RETURNING worker_id,allowed_hosts,model_tier,model,models,modes,native_agent,fallback,updated_at`,
+            [workerId, pgTextArray(config.allowedHosts || []), config.modelTier || 'balanced', config.model || '',
+             config.models || {}, pgTextArray(config.modes || ['A', 'B']), config.nativeAgent || {}, config.fallback || 'block']
         );
         return rows[0] || null;
     }
@@ -1323,12 +1327,18 @@ export class BunSqlPlatformStore implements PlatformStore {
             await tx.unsafe(`SET LOCAL search_path = ${schema}, platform, public`);
             await tx.unsafe(`DELETE FROM knowledge_worker_edge`);
             await tx.unsafe(`DELETE FROM knowledge_worker_placement`);
-            await tx.unsafe(`DELETE FROM knowledge_worker`);
+            // Keep rows that still exist so the worker host policy (FK, ON DELETE CASCADE) survives a save.
+            await tx.unsafe(`DELETE FROM knowledge_worker WHERE worker_id <> ALL($1::text[])`, [pgTextArray(workers.map((worker) => worker.workerId))]);
             for (const worker of workers) {
                 await tx.unsafe(
                     `INSERT INTO knowledge_worker
                      (worker_id, name, role, layer, scope, status, file_path, content_hash, capabilities, verbs, bar, escalation, indexed_at)
-                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::text[],$10::text[],$11,$12,now())`,
+                     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::text[],$10::text[],$11,$12,now())
+                     ON CONFLICT (worker_id) DO UPDATE SET
+                       name=EXCLUDED.name, role=EXCLUDED.role, layer=EXCLUDED.layer, scope=EXCLUDED.scope,
+                       status=EXCLUDED.status, file_path=EXCLUDED.file_path, content_hash=EXCLUDED.content_hash,
+                       capabilities=EXCLUDED.capabilities, verbs=EXCLUDED.verbs, bar=EXCLUDED.bar,
+                       escalation=EXCLUDED.escalation, indexed_at=now()`,
                     [worker.workerId, worker.name, worker.role, worker.layer, worker.scope, worker.status, worker.filePath, worker.contentHash, pgTextArray(worker.capabilities), pgTextArray(worker.verbs), worker.bar, worker.escalation]
                 );
                 for (const hostBindingId of worker.hostBindingIds) {

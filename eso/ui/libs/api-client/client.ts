@@ -513,6 +513,9 @@ export class ControlPlaneApiClient {
             body: JSON.stringify({
                 allowedHosts: [...placement.allowedHosts],
                 modelTier: placement.modelTier,
+                model: placement.model || '',
+                models: { ...(placement.models || {}) },
+                modes: [...(placement.modes || ['A', 'B'])],
                 nativeAgent: { ...placement.nativeAgent },
                 fallback: placement.fallback,
             }),

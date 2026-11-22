@@ -107,6 +107,11 @@ describe('remote envelope', () => {
         await expectEnvelopeCode(() => validateJobEnvelope(null), 'ENVELOPE_INVALID');
     });
 
+    it('accepts the main-chat adapter for a remote DSH host', async () => {
+        const signed = await signJob(job({ policy: { adapter: 'main-chat', dryRun: false } }), REMOTE_SECRET);
+        expect(signed.envelope.policy.adapter).toBe('main-chat');
+    });
+
     it('requires a non-trivial shared secret', async () => {
         await expectEnvelopeCode(() => signJob(job(), 'short'), 'ENVELOPE_SECRET_MISSING');
     });
