@@ -59,6 +59,7 @@ const PAGE_LABELS: Record<string, string> = {
                         <a routerLink="/consumers" class="header-action">All consumers</a>
                         <div class="account">
                             <button type="button" class="account-trigger" [matMenuTriggerFor]="accountMenu">
+                                <span class="sr-only">Account menu</span>
                                 <span class="avatar" aria-hidden="true">{{ initials() }}</span>
                                 <span class="account-name">{{ auth.user() }}</span>
                                 <span class="account-caret" aria-hidden="true">▾</span>
@@ -159,6 +160,7 @@ const PAGE_LABELS: Record<string, string> = {
         .account-trigger:hover, .account-trigger[aria-expanded="true"] { background: rgba(255,255,255,.14); }
         .avatar { width: 28px; height: 28px; display: inline-grid; place-items: center; border-radius: 50%; background: #7dd3c7; color: #063137; font-weight: 800; font-size: var(--text-xs); }
         .account-name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
         .account-caret { opacity: .7; }
         .app-body { display: grid; grid-template-columns: 260px minmax(0, 1fr); align-items: start; }
         .app-sidebar { position: sticky; top: var(--header-h); align-self: start; min-height: calc(100vh - var(--header-h)); background: #0b1220; border-right: 1px solid #1a2a40; padding: var(--space-4) var(--space-3); display: flex; flex-direction: column; gap: var(--space-4); }

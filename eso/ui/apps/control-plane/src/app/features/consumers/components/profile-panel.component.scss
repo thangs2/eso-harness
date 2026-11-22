@@ -1,0 +1,19 @@
+:host { display: block; min-width: 0; }
+.profile-panel {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.panel-head {
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--line);
+  h3 { margin: 0 0 var(--space-1); font-size: var(--text-lg); text-transform: none; }
+  p { margin: 0; color: var(--muted); font-size: var(--text-xs); }
+}
+.profile-form { display: grid; gap: var(--space-3); }
+.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3) var(--space-4); }
+.full-width { width: 100%; }
+@media (max-width: 760px) { .form-grid { grid-template-columns: 1fr; } }

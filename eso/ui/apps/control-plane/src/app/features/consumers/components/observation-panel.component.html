@@ -1,0 +1,124 @@
+<div class="observation-panel">
+    <header class="observation-hero">
+        <div class="hero-copy">
+            <p class="eyebrow">Observation &amp; evidence</p>
+            <h2>Observation</h2>
+            <p class="lede">Only enabled events are recorded; no secrets, prompt bodies, or file content. JEV decides on evidence, so its mode and consent live here.</p>
+            <div class="hero-meta">
+                <span><strong>{{ events().length }}</strong> events enabled</span>
+                <span><strong>{{ observations().length }}</strong> observations</span>
+                <span><strong>{{ observationTraceCount() }}</strong> traces</span>
+            </div>
+        </div>
+        <div class="consent-card">
+            <mat-slide-toggle [checked]="consent()" (change)="consentChange.emit($event.checked)">Enable observation</mat-slide-toggle>
+            <small>{{ consent() ? 'Hosts may record the selected events.' : 'Recording is paused; existing evidence stays readable.' }}</small>
+        </div>
+    </header>
+
+    <section class="panel events-panel" aria-labelledby="recorded-events-title">
+        <header class="panel-head">
+            <div><h3 id="recorded-events-title">Recorded events</h3><p>Each selected event becomes an append-only observation. ESO never executes anything.</p></div>
+            <span class="count">{{ events().length }} / {{ eventKinds.length }}</span>
+        </header>
+        <div class="event-grid" [class.disabled]="!consent()">
+            @for (event of eventKinds; track event.id) {
+                <mat-checkbox class="event-card" [checked]="events().includes(event.id)" [disabled]="!consent()" (change)="toggleEvent(event.id)">
+                    <span class="event-copy"><strong>{{ event.label }}</strong><small>{{ event.description }}</small></span>
+                </mat-checkbox>
+            }
+        </div>
+    </section>
+
+    <section class="observatory" aria-labelledby="observatory-title">
+        <header class="observatory-head">
+            <div><p class="eyebrow">Evidence plane</p><h2 id="observatory-title">Observatory</h2><p class="lede">Host-reported evidence only. ESO stores, scores and displays; it never executes.</p></div>
+            <button mat-stroked-button type="button" [disabled]="observationsLoading()" (click)="refreshObservations()">{{ observationsLoading() ? 'Refreshing…' : 'Refresh evidence' }}</button>
+        </header>
+
+        <div class="kpis">
+            <div class="kpi"><span>Observations</span><strong>{{ observations().length }}</strong><small>{{ observationTraceCount() }} traces</small></div>
+            <div class="kpi"><span>Hosts</span><strong>{{ observationHostCount() }}</strong><small>{{ observationWorkerCount() }} workers</small></div>
+            <div class="kpi"><span>Last evidence</span><strong>{{ lastObservationAt() || '—' }}</strong><small>host-reported</small></div>
+            <div class="kpi"><span>Gate</span><strong>unknown ≠ absent</strong><small>cannot-judge blocks</small></div>
+        </div>
+
+        <div class="observatory-grid">
+            <section class="panel judgment-panel" aria-label="Judgment sufficiency">
+                <header class="panel-head">
+                    <div><h3>Judgment / sufficiency</h3><p>Verdict evidence only. Host executes the gate; ESO computes and displays the verdict. unknown is not absent; cannot-judge never allows.</p></div>
+                    @if (judgmentResult(); as result) { <span class="tag" [class.muted]="result.decision === 'allow'">{{ result.verdict.level }}</span> }
+                </header>
+                <mat-form-field appearance="outline" class="full">
+                    <mat-label>Verdict input JSON</mat-label>
+                    <textarea matInput rows="7" [value]="judgmentInput()" (input)="judgmentInput.set($any($event.target).value)"></textarea>
+                </mat-form-field>
+                <div class="action-row">
+                    <button mat-flat-button color="primary" type="button" [disabled]="judgmentLoading()" (click)="runJudgment()">{{ judgmentLoading() ? 'Judging…' : 'Run verdict' }}</button>
+                    @if (judgmentResult(); as result) {
+                        <span class="result-summary">{{ result.verdict.level }} · basis {{ result.verdict.basis }} · mode {{ result.verdict.mode }} · decision {{ result.decision }}<br>{{ result.gaps.total_gaps || 0 }} gap(s) · wouldBlock {{ result.wouldBlock }}</span>
+                    }
+                </div>
+                @if (judgmentError(); as message) { <p class="form-error" role="alert">{{ message }}</p> }
+            </section>
+
+            <section class="panel jev-panel" aria-label="JEV integration">
+                <header class="panel-head">
+                    <div><h3>JEV integration</h3><p>Decision facade config only. ESO stores the policy; the host owns JEV execution and evidence.</p></div>
+                    <span class="tag" [class.muted]="jevMode() === 'off'">{{ jevMode() }}</span>
+                </header>
+                <div class="jev-grid">
+                    <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>JEV mode</mat-label>
+                        <mat-select [value]="jevMode()" (selectionChange)="jevModeChange.emit($event.value)">
+                            <mat-option value="off">Off — no JEV</mat-option>
+                            <mat-option value="shadow">Shadow — evaluate only</mat-option>
+                            <mat-option value="active">Active — decide within band</mat-option>
+                        </mat-select>
+                    </mat-form-field>
+                    <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Auto threshold</mat-label><input matInput type="number" min="0" max="1" step="0.01" [value]="jevAutoThreshold()" (input)="jevAutoThresholdChange.emit($any($event.target).value)" [disabled]="jevMode() === 'off'"></mat-form-field>
+                    <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Confirm threshold</mat-label><input matInput type="number" min="0" max="1" step="0.01" [value]="jevConfirmThreshold()" (input)="jevConfirmThresholdChange.emit($any($event.target).value)" [disabled]="jevMode() === 'off'"></mat-form-field>
+                </div>
+                <p class="note">{{ jevMode() !== 'off' && !consent() ? 'JEV shadow/active requires observation consent above.' : 'Threshold rule: auto ≥ confirm. Empty thresholds leave the host default.' }}</p>
+                <div class="jev-evaluate">
+                    <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Confidence (0–1)</mat-label><input matInput type="number" min="0" max="1" step="0.01" [value]="jevConfidence()" (input)="jevConfidenceChange.emit($any($event.target).value)"></mat-form-field>
+                    <button mat-stroked-button type="button" [disabled]="jevDecisionLoading()" (click)="evaluateJev()">{{ jevDecisionLoading() ? 'Evaluating…' : 'Evaluate decision' }}</button>
+                </div>
+                @if (jevDecision(); as decision) { <p class="result-summary">{{ decision.mode }} · {{ decision.band || '—' }} → {{ decision.decision }} · {{ decision.reason }}</p> }
+                @if (jevDecisionError(); as message) { <p class="form-error" role="alert">{{ message }}</p> }
+            </section>
+        </div>
+
+        <section class="panel timeline-panel" aria-label="Observation timeline">
+            <header class="panel-head">
+                <div><h3>Observation timeline</h3><p>Host-reported observations. ESO stores and displays them only.</p></div>
+                <button mat-stroked-button type="button" [disabled]="observationsLoading()" (click)="refreshObservations()">{{ observationsLoading() ? 'Refreshing…' : 'Refresh' }}</button>
+            </header>
+            @if (observationsError(); as message) { <p class="form-error" role="alert">{{ message }}</p> }
+            @if (observationsLoading() && observations().length === 0) {
+                <p class="loading-label" role="status">Loading observations…</p>
+            } @else if (observations().length === 0) {
+                <div class="empty-state"><strong>No observations yet</strong><span>Hosts post observations when an enabled event fires. Nothing is editable here.</span></div>
+            } @else {
+                <ol class="observation-list" role="list">
+                    @for (observation of observations(); track observation.observationId) {
+                        <li class="observation-row">
+                            <div class="observation-row-head">
+                                <span class="observation-event"><code>{{ observation.event }}</code></span>
+                                @if (observation.outcome) { <span class="badge">{{ observation.outcome }}</span> }
+                                <time class="observation-time" [attr.datetime]="observation.at">{{ observation.at }}</time>
+                            </div>
+                            <div class="observation-meta">
+                                <span><small>Worker</small>{{ observation.workerId || '—' }}</span>
+                                <span><small>Runtime</small>{{ observation.runtimeKey || '—' }}</span>
+                                <span><small>Host</small>{{ observation.hostId }}</span>
+                                <span><small>Trace</small><code>{{ observation.traceId }}</code></span>
+                                <span><small>Received</small>{{ observation.receivedAt }}</span>
+                            </div>
+                            <details class="observation-evidence"><summary>Evidence</summary><pre>{{ evidenceText(observation.evidence) }}</pre></details>
+                        </li>
+                    }
+                </ol>
+            }
+        </section>
+    </section>
+</div>

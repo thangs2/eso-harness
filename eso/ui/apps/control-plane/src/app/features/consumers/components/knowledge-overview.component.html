@@ -1,0 +1,84 @@
+<section class="knowledge-summary" aria-labelledby="knowledge-title">
+    <div class="summary-main">
+        <div class="summary-copy">
+            <p class="eyebrow">Knowledge &amp; artifact governance</p>
+            <h2 id="knowledge-title">Knowledge</h2>
+            <p class="summary-lede">Files are the source. The index and graph are derived. Providers are optional; read and index authority lives in <strong>Boundaries</strong>.</p>
+        </div>
+        <div class="summary-actions">
+            <button mat-stroked-button type="button" [disabled]="checking()" (click)="runCheck.emit()">{{ checking() ? 'Checking…' : 'Run check' }}</button>
+            <button mat-flat-button color="primary" type="button" [disabled]="indexing()" (click)="indexNow.emit()">{{ indexing() ? 'Indexing…' : 'Index now' }}</button>
+        </div>
+    </div>
+
+    <div class="summary-stats" aria-label="Knowledge counts">
+        <div class="summary-stat"><strong>{{ summary()?.docs || 0 }}</strong><span>Documents</span></div>
+        <div class="summary-stat"><strong>{{ summary()?.edges || 0 }}</strong><span>Graph edges</span></div>
+        <div class="summary-stat" [class.warn]="(summary()?.findings || 0) > 0"><strong>{{ summary()?.findings || 0 }}</strong><span>Open findings</span></div>
+        <div class="summary-stat"><strong>{{ embeddingStatus()?.embedded || 0 }}<small>/{{ embeddingStatus()?.chunks || 0 }}</small></strong><span>Embedded chunks</span></div>
+    </div>
+
+    <nav class="settings-tabs knowledge-tabs" role="tablist" aria-label="Knowledge sections">
+        @for (tab of tabs; track tab.id; let index = $index) {
+            <button type="button" role="tab" class="settings-tab" [class.active]="section() === tab.id" [attr.aria-selected]="section() === tab.id" (click)="sectionChange.emit(tab.id)">
+                <span class="settings-step-no">{{ index + 1 }}</span>
+                <span class="settings-tab-copy"><strong>{{ tab.label }}</strong><small>{{ tab.hint }}</small></span>
+            </button>
+        }
+    </nav>
+</section>
+
+@if (section() === 'overview') {
+    <section class="knowledge-overview">
+        <div class="knowledge-cards">
+            <button type="button" class="knowledge-card" (click)="sectionChange.emit('sources')">
+                <span class="eyebrow">Sources</span>
+                <strong>{{ providerRouteSummary() }}</strong>
+                <small>Files first; providers optional</small>
+            </button>
+            <button type="button" class="knowledge-card" (click)="sectionChange.emit('contract')">
+                <span class="eyebrow">Contract</span>
+                <strong>{{ sdlcEnabled() ? 'SDLC enforced' : 'Lightweight' }}</strong>
+                <small>{{ governanceCount() }} governance checks</small>
+            </button>
+            <button type="button" class="knowledge-card" (click)="sectionChange.emit('index')">
+                <span class="eyebrow">Index &amp; health</span>
+                <strong>{{ summary()?.docs || 0 }} docs · {{ summary()?.findings || 0 }} findings</strong>
+                <small>{{ embeddingStatus()?.embedded || 0 }}/{{ embeddingStatus()?.chunks || 0 }} chunks embedded</small>
+            </button>
+            <button type="button" class="knowledge-card" (click)="sectionChange.emit('manifest')">
+                <span class="eyebrow">Manifest</span>
+                <strong>{{ manifestEnabled() ? 'Emit enabled' : 'Manifest off' }}</strong>
+                <small>Machine-readable contract</small>
+            </button>
+        </div>
+
+        <div class="overview-grid">
+            <section class="overview-panel">
+                <header class="panel-head">
+                    <div><h3>Preflight</h3><p>Checks that must pass before the index is trusted.</p></div>
+                    @if (check(); as result) { <span class="status-pill" [class.warn]="result.status === 'FAIL'">{{ result.status }}</span> }
+                </header>
+                @if (check(); as result) {
+                    @for (item of result.checks.slice(0, 4); track item.id) {
+                        <div class="preflight-row"><span>{{ item.id }}</span><strong>{{ item.label }}</strong><span class="status-pill" [class.warn]="item.status === 'FAIL'">{{ item.status }}</span></div>
+                    }
+                } @else {
+                    <div class="preflight-row"><b>01</b><span>Links resolve</span><small>no dangling document reference</small></div>
+                    <div class="preflight-row"><b>02</b><span>Derived sources labelled</span><small>manifest and graph are not sources</small></div>
+                    <div class="preflight-row"><b>03</b><span>Provider boundaries respected</span><small>optional providers never become required</small></div>
+                }
+            </section>
+
+            <section class="overview-panel">
+                <header class="panel-head">
+                    <div><h3>Current source routing</h3><p>No provider means files are managed directly.</p></div>
+                    <button mat-button type="button" (click)="openPlugins.emit()">Providers</button>
+                </header>
+                <div class="routing-row"><span>Work management</span><strong>{{ providerRouting().work === 'md' ? '.md files' : providerRouting().work }}</strong></div>
+                <div class="routing-row"><span>Design management</span><strong>{{ providerRouting().design === 'md' ? '.md files' : providerRouting().design }}</strong></div>
+                <div class="routing-row"><span>Content management</span><strong>{{ providerRouting().content === 'md' ? '.md files' : providerRouting().content }}</strong></div>
+            </section>
+        </div>
+    </section>
+}

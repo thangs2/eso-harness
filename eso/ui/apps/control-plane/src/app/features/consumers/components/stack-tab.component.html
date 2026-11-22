@@ -1,0 +1,173 @@
+<section class="tab-panel" role="tabpanel">
+                    <div class="stack-summary">
+                        <div><span>Stack version</span><strong>v{{ vm().activeStackVersion() }} · {{ vm().stackStatus() }}</strong></div>
+                        <div><span>Layers</span><strong>{{ vm().enabledLayerCount() }} / {{ vm().stackLayers().length }} active</strong></div>
+                        <div><span>Host bindings</span><strong>{{ vm().hostProfiles().length }}</strong></div>
+                    </div>
+                    <div class="stack-version-bar">
+                        <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Version</mat-label>
+                            <mat-select [ngModel]="vm().activeStackVersion()" (ngModelChange)="vm().switchStackVersion($event)">
+                                @for (item of vm().stackVersions(); track item.version) { <mat-option [value]="item.version">v{{ item.version }} · {{ item.status }}</mat-option> }
+                            </mat-select>
+                        </mat-form-field>
+                        <span class="version-status" [class.draft]="vm().isStackEditable()">{{ vm().stackStatus() }}</span>
+                        <button mat-stroked-button type="button" (click)="vm().createStackVersion()">New version</button>
+                        @if (vm().isStackEditable()) { <button mat-flat-button color="primary" type="button" (click)="vm().publishStack()">Publish draft</button> }
+                        @if (vm().canReopenStack()) { <button mat-stroked-button type="button" (click)="vm().reopenStackVersion()">Reopen as draft</button> }
+                        @if (vm().stackStatus() === 'published') { <button mat-stroked-button color="warn" type="button" (click)="vm().retireStackVersion()">Retire version</button> }
+                        @if (vm().canDeleteStackVersion()) { <button mat-stroked-button color="warn" type="button" (click)="vm().askDeleteStackVersion()">Delete {{ vm().stackStatus() === 'draft' ? 'draft' : 'version' }}</button> }
+                    </div>
+                    @if (vm().deleteVersionConfirm()) {
+                        <div class="version-delete-confirm">
+                            <span>Delete <strong>v{{ vm().activeStackVersion() }}</strong>? This cannot be undone.</span>
+                            <div class="developer-actions">
+                                <button mat-stroked-button type="button" (click)="vm().cancelDeleteStackVersion()">Cancel</button>
+                                <button mat-flat-button color="warn" type="button" (click)="vm().deleteStackVersion()">Delete</button>
+                            </div>
+                        </div>
+                    }
+                    <p class="section-hint">{{ vm().isStackEditable() ? 'Draft version is editable. Publish to make it immutable and selectable by host bindings.' : 'Published version is immutable. Create a new version to change the stack.' }}</p>
+
+                    <div class="layer-groups">
+                        <section class="layer-group">
+                            <header class="group-head">
+                                <div><h2>Agent system</h2><p>Roles, rules, skills, and hooks installed into hosts.</p></div>
+                                <span class="group-count">{{ vm().agentLayers().length }} layers</span>
+                            </header>
+                            <div class="layer-columns"><span>Layer</span><span>Mechanism</span><span>Configuration</span><span>State</span></div>
+                            <div class="layer-list">
+                                @for (layer of vm().agentLayers(); track layer.id) {
+                                    <article class="layer-row" [class.layer-disabled]="!layer.enabled">
+                                        <div class="layer-ident"><span class="layer-no">{{ layer.n }}</span><div><strong>{{ layer.label }}</strong><small>{{ layer.description }}</small></div></div>
+                                        <div class="layer-cell" data-label="Mechanism"><span>{{ layer.id === 'multiAgent' ? 'Worker policy' : 'Files' }}</span></div>
+                                        <div class="layer-cell layer-config" data-label="Configuration">
+                                            @switch (layer.id) {
+                                                @case ('multiAgent') { <span>{{ vm().workers().length }} workers · {{ vm().workerRoleCount() }} roles</span> }
+                                                @case ('rules') { <span>{{ vm().ruleFiles().length }} rule{{ vm().ruleFiles().length === 1 ? '' : 's' }} · {{ vm().ruleMdcCount() }} .mdc · {{ vm().ruleMdCount() }} .md</span> }
+                                                @case ('skills') { <span>{{ vm().materialCounts().skills }} files · installed</span> }
+                                                @case ('hooks') { <span>{{ vm().materialCounts().hooks }} files · host hook plugin</span> }
+                                            }
+                                        </div>
+                                        <div class="layer-state" data-label="State"><mat-slide-toggle [ngModel]="layer.enabled" [disabled]="!vm().isStackEditable()" (ngModelChange)="vm().updateLayer(layer.id, 'enabled', $event)"></mat-slide-toggle></div>
+                                    </article>
+                                }
+                            </div>
+                        </section>
+
+                        <section class="layer-group knowledge-group">
+                            <header class="group-head">
+                                <div><h2>Knowledge &amp; context</h2><p>Capability policy for memory, code, documents, and topology. Host bindings resolve the concrete source.</p></div>
+                                <span class="group-count">{{ vm().knowledgeLayers().length }} layers</span>
+                            </header>
+                            <div class="knowledge-table">
+                                <div class="knowledge-header"><span>Layer</span><span>Policy</span><span>Resolution</span><span>State</span></div>
+                                @for (layer of vm().knowledgeLayers(); track layer.id) {
+                                    <div class="knowledge-row" [class.layer-disabled]="!layer.enabled">
+                                        <div class="knowledge-layer"><span class="layer-no">{{ layer.n }}</span><div><strong>{{ layer.label }}</strong><small>{{ layer.description }}</small></div></div>
+                                        <div class="knowledge-source">
+                                            <span class="cell-label knowledge-label">Policy</span>
+                                            @if (layer.id === 'memory' || layer.id === 'codeGraph') {
+                                                <div class="policy-stack">
+                                                    <mat-checkbox [checked]="!!layer.required" [disabled]="!layer.enabled || !vm().isStackEditable()" (change)="vm().updateLayer(layer.id, 'required', $event.checked)">Required</mat-checkbox>
+                                                    <div class="policy-sources">
+                                                        @for (source of vm().policySources; track source) {
+                                                            <button type="button" class="source-pill" [class.active]="(layer.allowedSources || []).includes(source)" [disabled]="!layer.enabled || !vm().isStackEditable()" (click)="vm().toggleAllowedSource(layer.id, source, !(layer.allowedSources || []).includes(source))">{{ source }}</button>
+                                                        }
+                                                    </div>
+                                                </div>
+                                            } @else if (layer.id === 'documentGraph') {
+                                                <span class="static-value">ESO-only · Postgres</span>
+                                            } @else {
+                                                <span class="muted">Deferred</span>
+                                            }
+                                        </div>
+                                        <div class="knowledge-provider">
+                                            <span class="cell-label knowledge-label">Resolution</span>
+                                            @if (layer.id === 'memory' || layer.id === 'codeGraph') {
+                                                <div class="resolution-note"><strong>Per host binding</strong><small>Source and provider are resolved for each host, not here.</small><span class="resolution-count">{{ vm().hostProfiles().length }} binding{{ vm().hostProfiles().length === 1 ? '' : 's' }}</span></div>
+                                            } @else if (layer.id === 'documentGraph') {
+                                                <div class="resolution-note"><strong>Postgres · graph schema</strong><small>ESO-owned engine, not host-specific.</small></div>
+                                            } @else {
+                                                <span class="muted">—</span>
+                                            }
+                                        </div>
+                                        <div class="knowledge-state">
+                                            <span class="cell-label knowledge-label">State</span>
+                                            <div class="state-control">
+                                                <span class="state-pill" [class.state-off]="!layer.enabled">{{ layer.deferred ? 'Deferred' : layer.enabled ? 'Active' : 'Off' }}</span>
+                                                <mat-slide-toggle [ngModel]="layer.enabled" [disabled]="!!layer.deferred || !vm().isStackEditable()" (ngModelChange)="vm().updateLayer(layer.id, 'enabled', $event)"></mat-slide-toggle>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </section>
+                    </div>
+
+                    <section class="rules-material">
+                    <header class="rules-material-head">
+                        <div><p class="eyebrow">Rules material</p><h3>Rules source · .mdc / .md</h3><p>Both are canonical under <code>agents/rules/</code>. <code>.mdc</code> is Cursor format; <code>.md</code> is Markdown format. Host trees are projections elsewhere.</p></div>
+                        <div class="rules-actions">
+                            <input #ruleFileInput type="file" accept=".mdc,.md" multiple hidden (change)="vm().onRuleFiles($event)">
+                            <input #ruleFolderInput type="file" accept=".mdc,.md" webkitdirectory directory multiple hidden (change)="vm().onRuleFiles($event)">
+                            <button mat-stroked-button type="button" [disabled]="vm().ruleImporting()" (click)="ruleFileInput.click()">{{ vm().ruleImporting() ? 'Reading…' : 'Import .mdc' }}</button>
+                            <button mat-stroked-button type="button" [disabled]="vm().ruleImporting()" (click)="ruleFolderInput.click()">Import folder</button>
+                        </div>
+                    </header>
+                    @if (vm().ruleImportPreview(); as preview) {
+                        <div class="rule-import-preview">
+                            <header><div><h4>Rule import preview</h4><p>{{ preview.candidates.length }} vm().rule(s) · {{ preview.skipped.length }} skipped</p></div><button mat-button type="button" (click)="vm().closeRuleImport()">Cancel</button></header>
+                            @if (preview.candidates.length > 0) {
+                                <div class="worker-table-wrap">
+                                    <table class="worker-table">
+                                        <thead><tr><th>Import</th><th>Source</th><th>Rule</th><th>Globs</th><th>Always</th><th>Action</th></tr></thead>
+                                        <tbody>
+                                            @for (candidate of preview.candidates; track candidate.sourceHash) {
+                                                <tr>
+                                                    <td><mat-checkbox [checked]="vm().ruleSelectedHashes().includes(candidate.sourceHash)" (change)="vm().toggleRuleImport(candidate.sourceHash, $event.checked)"></mat-checkbox></td>
+                                                    <td><code>{{ candidate.sourceFile }}</code><br><small>{{ candidate.sourceType }}</small>@if (candidate.warnings?.length) { <br><small class="import-warning">{{ candidate.warnings.join(' · ') }}</small> }</td>
+                                                    <td><strong>{{ candidate.rule.id }}</strong><br><small>{{ candidate.rule.description || 'no description' }}</small></td>
+                                                    <td><code>{{ candidate.rule.globs || '—' }}</code></td>
+                                                    <td>{{ candidate.rule.alwaysApply ? 'yes' : 'no' }}</td>
+                                                    <td>
+                                                        @if (candidate.conflict) {
+                                                            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="import-action-field"><mat-label>Conflict</mat-label>
+                                                                <mat-select [ngModel]="vm().ruleAction(candidate.sourceHash)" (ngModelChange)="vm().setRuleAction(candidate.sourceHash, $event)">
+                                                                    <mat-option value="skip">skip</mat-option>
+                                                                    <mat-option value="replace">replace</mat-option>
+                                                                    <mat-option value="copy">copy</mat-option>
+                                                                </mat-select>
+                                                            </mat-form-field>
+                                                        } @else { <span class="badge">import</span> }
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="import-actions"><button mat-flat-button color="primary" type="button" [disabled]="vm().importableRuleCount() === 0" (click)="vm().applyRuleImport()">Import {{ vm().importableRuleCount() }} selected</button></div>
+                            }
+                            @if (preview.skipped.length > 0) {
+                                <div class="import-skipped">
+                                    <h4>Skipped</h4>
+                                    @for (item of preview.skipped; track item.sourceFile + item.reason) { <div><code>{{ item.sourceFile }}</code><span>{{ item.reason }}</span></div> }
+                                </div>
+                            }
+                        </div>
+                    }
+                    @if (vm().ruleFiles().length === 0) {
+                        <p class="muted">No .mdc rules yet. Import a Cursor rule or folder.</p>
+                    } @else {
+                        <div class="worker-table-wrap">
+                            <table class="worker-table rules-table">
+                                <thead><tr><th>Rule</th><th>Description</th><th>Globs</th><th>Always apply</th><th></th></tr></thead>
+                                <tbody>
+                                    @for (rule of vm().ruleFiles(); track rule.id) {
+                                        <tr><td data-label="Rule"><strong>{{ rule.id }}</strong><br><code>{{ rule.sourceFile || 'agents/rules/' + rule.id + '.mdc' }}</code></td><td data-label="Description">{{ rule.description || '—' }}</td><td data-label="Globs"><code>{{ rule.globs || '—' }}</code></td><td data-label="Always apply">{{ rule.alwaysApply ? 'yes' : 'no' }}</td><td data-label="Action"><button mat-button type="button" (click)="vm().deleteRule(rule)">Remove</button></td></tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    </section>
+                </section>

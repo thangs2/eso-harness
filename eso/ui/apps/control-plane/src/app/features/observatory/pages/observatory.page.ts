@@ -5,8 +5,8 @@ import { MatSelectModule } from '@angular/material/select';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { CONTROL_PLANE_API_CLIENT } from '../../../core/tokens.js';
 import { RequestGridComponent } from '../components/request-grid.component.js';
-import { Office2d5dComponent, type OfficeWorker } from '../office/office-2d5d.component.js';
-import { WorkersFlowComponent } from '../office/workers-flow.component.js';
+import { Office2d5dComponent, type OfficeWorker } from '../components/office-2d5d.component.js';
+import { WorkersFlowComponent } from '../components/workers-flow.component.js';
 import type { ConsumerSummary, FlowDefinitionDto, ObservationDto } from '../../../../../../../libs/api-client/types.js';
 
 interface GraphNode {

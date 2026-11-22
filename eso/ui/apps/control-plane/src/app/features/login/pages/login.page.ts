@@ -5,8 +5,8 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
-import { AuthService } from '../../core/auth/auth.service.js';
-import { AppConfigService } from '../../core/config/app-config.service.js';
+import { AuthService } from '../../../core/auth/auth.service.js';
+import { AppConfigService } from '../../../core/config/app-config.service.js';
 
 @Component({
     selector: 'eso-login-page',

@@ -1,0 +1,278 @@
+<section class="tab-panel" role="tabpanel">
+                    <header class="tab-intro">
+                        <p class="eyebrow">Host bindings</p>
+                        <h2>Who uses which host runtime</h2>
+                        <p>A host binding connects one developer, one <strong>registered host runtime</strong>, and one published Stack version. It answers where the stack runs and how Memory and Code graph resolve on that host. ESO is optional: unbound tools keep working unchanged.</p>
+                        <p class="host-source-note">Hosts are registered in <button mat-button type="button" (click)="vm().openHosts()">Hosts</button>. This tab only assigns a registered host; it does not create a host.</p>
+                        <div class="actor-grid">
+                            <div><span>Who acts</span><strong>Operator / repository owner</strong></div>
+                            <div><span>Decision</span><strong>Developer × host runtime × Stack version</strong></div>
+                            <div><span>For whom</span><strong>Each developer using Cursor, AGY, DSH, Claude, Paseo, or Orca</strong></div>
+                            <div><span>Result</span><strong>ESO projects the Stack; the host owns its runtime</strong></div>
+                        </div>
+                    </header>
+
+                    <div class="hosts-summary">
+                        <div><span>Developers</span><strong>{{ vm().developers().length }}</strong></div>
+                        <div><span>Host bindings</span><strong>{{ vm().hostProfiles().length }}</strong></div>
+                        <div><span>Detected hosts</span><strong>{{ vm().unmanagedHosts().length }}</strong></div>
+                    </div>
+
+                    <section class="hosts-section">
+                        <header class="hosts-section-head"><div><h3>Active bindings</h3><p class="muted">Developer → host runtime × pinned Stack version.</p></div><div class="developer-actions"><button mat-stroked-button type="button" (click)="vm().openBulkUpgrade()">Bulk upgrade</button><button mat-flat-button color="primary" type="button" [disabled]="vm().activeHosts().length === 0" (click)="vm().startNewBinding()">New host binding</button></div></header>
+                        @if (vm().bulkUpgradeOpen()) {
+                            <div class="bulk-upgrade-panel">
+                                <mat-form-field appearance="outline"><mat-label>Target Stack version</mat-label>
+                                    <mat-select [ngModel]="vm().bulkUpgradeTarget()" (ngModelChange)="vm().bulkUpgradeTarget.set($event)">
+                                        @for (item of vm().publishedStackVersions(); track item.version) { <mat-option [value]="item.version">v{{ item.version }} · {{ item.status }}</mat-option> }
+                                    </mat-select>
+                                </mat-form-field>
+                                <span class="muted">{{ vm().affectedBindings() }} vm().binding(s) will move to the target version.</span>
+                                <div class="developer-actions"><button mat-stroked-button type="button" (click)="vm().closeBulkUpgrade()">Cancel</button><button mat-flat-button color="primary" type="button" [disabled]="!vm().bulkUpgradeTarget() || vm().affectedBindings() === 0" (click)="vm().applyBulkUpgrade()">Upgrade bindings</button></div>
+                            </div>
+                        }
+                        @if (vm().developers().length === 0) {
+                            <div class="empty-state"><h3>No host bindings yet</h3><p class="muted">Nothing is required. Add a developer only when ESO should project a Stack into that host.</p></div>
+                        } @else {
+                            <div class="developer-groups">
+                                @for (developer of vm().developers(); track developer) {
+                                    <article class="developer-card">
+                                        <header class="developer-head">
+                                            <div><h3>{{ developer }}</h3><span>{{ vm().hostProfileCount(developer) }}</span></div>
+                                            <div class="developer-actions">
+                                                <button mat-stroked-button type="button" [disabled]="vm().activeHosts().length === 0" (click)="vm().startAddHost(developer)">Add host binding</button>
+                                                <button mat-stroked-button color="warn" type="button" (click)="vm().askRemoveDeveloper(developer)">Remove developer</button>
+                                            </div>
+                                        </header>
+                                        @if (vm().removingDeveloper() === developer) {
+                                            <div class="remove-confirm" role="alert">
+                                                <span>Remove <strong>{{ developer }}</strong> and {{ vm().hostProfileCount(developer) }}?</span>
+                                                <div class="remove-confirm-actions">
+                                                    <button mat-stroked-button type="button" (click)="vm().cancelRemoveDeveloper()">Cancel</button>
+                                                    <button mat-flat-button color="warn" type="button" (click)="vm().removeDeveloper(developer)">Remove</button>
+                                                </div>
+                                            </div>
+                                        }
+                                        @if (vm().managedProfilesFor(developer).length > 0) {
+                                            <div class="host-table-wrap">
+                                                <table class="host-table">
+                                                    <thead><tr><th>Host</th><th>Stack</th><th>Sources</th><th>Resolution</th><th class="actions-col">Actions</th></tr></thead>
+                                                    <tbody>
+                                                        @for (profile of vm().managedProfilesFor(developer); track profile.id) {
+                                                            <tr class="host-row" [class.host-unavailable]="!vm().hostAvailable(profile.hostId)">
+                                                                <td><div class="host-name"><strong>{{ vm().hostLabel(profile.hostId) }}</strong><small>{{ vm().hostAvailable(profile.hostId) ? vm().hostHealth(profile.hostId) : 'host unavailable' }}</small></div></td>
+                                                                <td>v{{ profile.stackVersion }}@if (profile.flowId) { <small class="flow-pin">flow {{ profile.flowId }} · v{{ profile.flowVersion || 1 }}</small> }</td>
+                                                                <td class="host-sources">{{ vm().hostSourcesSummary(profile) }}</td>
+                                                                <td class="host-overrides">{{ vm().resolutionSummary(profile) }}</td>
+                                                                <td><div class="host-row-actions">
+                                                                    <button mat-stroked-button type="button" (click)="vm().toggleProfile(profile.id)">{{ vm().expandedProfile() === profile.id ? 'Hide' : 'View' }}</button>
+                                                                    <button mat-stroked-button type="button" (click)="vm().startEditHost(profile)">Edit</button>
+                                                                    <button mat-stroked-button color="warn" type="button" (click)="vm().removeHostProfile(profile.id)">Remove</button>
+                                                                </div></td>
+                                                            </tr>
+                                                            @if (vm().expandedProfile() === profile.id) {
+                                                                <tr class="effective-row">
+                                                                    <td colspan="5">
+                                                                        <div class="effective-profile">
+                                                                            <header><strong>Effective binding</strong><span>Stack v{{ profile.stackVersion }} + host resolution</span></header>
+                                                                            <div class="effective-grid">
+                                                                                @for (layer of vm().effectiveLayers(profile); track layer.id) {
+                                                                                    <div class="effective-item">
+                                                                                        <span>{{ layer.label }}</span>
+                                                                                        <strong>{{ layer.value }}</strong>
+                                                                                        <em [class.overridden]="layer.scope === 'override'">{{ layer.scope }}</em>
+                                                                                    </div>
+                                                                                }
+                                                                            </div>
+                                                                        </div>
+                                                                    </td>
+                                                                </tr>
+                                                            }
+                                                        }
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        }
+                                    </article>
+                                }
+                            </div>
+                        }
+                                        @if (vm().addingHostFor()) {
+                                            <div class="host-add-panel">
+                                                <div class="host-add-heading">{{ vm().editingProfile() ? 'Edit host binding' : 'New host binding' }}</div>
+                                                @if (vm().activeHosts().length === 0) {
+                                                    <div class="host-add-blocked" role="alert">
+                                                        <span>No active host runtime. Register one in Hosts before creating a binding.</span>
+                                                        <button mat-stroked-button type="button" (click)="vm().openHosts()">Open Hosts</button>
+                                                    </div>
+                                                }
+                                                <div class="host-add-row">
+                                                    <mat-form-field appearance="outline"><mat-label>Developer / user</mat-label>
+                                                        <input matInput [ngModel]="vm().bindingDeveloper()" [disabled]="vm().addingHostFor() !== '__new' || !!vm().editingProfile()" (ngModelChange)="vm().bindingDeveloper.set($event)" placeholder="dev1">
+                                                    </mat-form-field>
+                                                    <mat-form-field appearance="outline"><mat-label>Registered host</mat-label>
+                                                        <mat-select [ngModel]="vm().newHostId()" [disabled]="!!vm().editingProfile()" (ngModelChange)="vm().changeHost($event)">
+                                                            @for (host of vm().activeHosts(); track host.hostId) { <mat-option [value]="host.hostId">{{ host.hostId }} · {{ vm().hostTypeLabel(host.hostType) }} · {{ host.label || 'no label' }}</mat-option> }
+                                                        </mat-select>
+                                                        <mat-hint>Only active registered hosts are assignable. Bindings target hostId.</mat-hint>
+                                                    </mat-form-field>
+                                                    <mat-form-field appearance="outline"><mat-label>Stack version</mat-label>
+                                                        <mat-select [ngModel]="vm().newStackVersion()" (ngModelChange)="vm().newStackVersion.set($event)">
+                                                            @for (item of vm().publishedStackVersions(); track item.version) { <mat-option [value]="item.version">v{{ item.version }} · {{ item.status }}</mat-option> }
+                                                        </mat-select>
+                                                        <mat-hint>Binding pins this version.</mat-hint>
+                                                    </mat-form-field>
+                                                    <mat-form-field appearance="outline"><mat-label>Flow</mat-label>
+                                                        <mat-select [ngModel]="vm().newFlowId()" (ngModelChange)="vm().changeFlow($event)">
+                                                            <mat-option value="">No flow</mat-option>
+                                                            @for (flow of vm().flowSummaries(); track flow.id) { <mat-option [value]="flow.id">{{ flow.name }} · {{ flow.id }}</mat-option> }
+                                                        </mat-select>
+                                                        <mat-hint>Optional flow pin.</mat-hint>
+                                                    </mat-form-field>
+                                                    @if (vm().newFlowId()) {
+                                                        <mat-form-field appearance="outline"><mat-label>Flow version</mat-label>
+                                                            <mat-select [ngModel]="vm().newFlowVersion()" (ngModelChange)="vm().newFlowVersion.set($event)">
+                                                                @for (version of vm().flowVersionOptions(); track version) { <mat-option [value]="version">v{{ version }}</mat-option> }
+                                                            </mat-select>
+                                                        </mat-form-field>
+                                                    }
+                                                    <div class="host-add-actions">
+                                                        <button mat-stroked-button type="button" (click)="vm().cancelAddHost()">Cancel</button>
+                                                        <button mat-flat-button color="primary" type="button" (click)="vm().saveHostBinding()">{{ vm().editingProfile() ? 'Save binding' : 'Add host binding' }}</button>
+                                                    </div>
+                                                </div>
+                                                <details class="profile-overrides">
+                                                    <summary>
+                                                        <div><strong>Capability resolution</strong><span>How this host resolves Stack policy</span></div>
+                                                        <span class="summary-action">Configure</span>
+                                                    </summary>
+                                                    <div class="overrides-body">
+                                                        <div class="resolution-toolbar">
+                                                            <p>Stack sets <strong>policy</strong>. This binding resolves <strong>source and provider</strong> for this host.</p>
+                                                            <button mat-stroked-button type="button" (click)="vm().useHostDefaults()">Use host defaults</button>
+                                                        </div>
+
+                                                        <section class="capability-group">
+                                                            <header class="capability-group-head">
+                                                                <div><h4>Memory context</h4><p>Session and long-term memory for this host.</p></div>
+                                                                <span class="scope-badge" [class.disabled]="!vm().isResolutionLayerEnabled('memory')">{{ vm().isResolutionLayerEnabled('memory') ? 'resolved' : 'disabled' }}</span>
+                                                            </header>
+                                                            @if (vm().isResolutionLayerEnabled('memory')) {
+                                                                <div class="resolution-control">
+                                                                    <span class="control-label">Source</span>
+                                                                    <mat-form-field appearance="outline"><mat-label>Memory source</mat-label>
+                                                                        <mat-select [ngModel]="vm().newMemorySource()" (ngModelChange)="vm().newMemorySource.set($event)">
+                                                                            @for (source of vm().sourceOptionsFor('memory'); track source) { <mat-option [value]="source">{{ source }}</mat-option> }
+                                                                        </mat-select>
+                                                                    </mat-form-field>
+                                                                    @if (vm().newMemorySource() === 'market') {
+                                                                        @if (vm().marketProviders('memory').length === 0) {
+                                                                            <span class="control-note">No provider configured in MCP.</span>
+                                                                        } @else {
+                                                                            <mat-form-field appearance="outline"><mat-label>Provider</mat-label>
+                                                                                <mat-select [ngModel]="vm().newMemoryProvider()" (ngModelChange)="vm().newMemoryProvider.set($event)">
+                                                                                    @for (provider of vm().marketProviders('memory'); track provider.id) { <mat-option [value]="provider.id">{{ provider.label }}</mat-option> }
+                                                                                </mat-select>
+                                                                            </mat-form-field>
+                                                                        }
+                                                                    } @else {
+                                                                        <span class="control-note">Uses the host or ESO-native implementation.</span>
+                                                                    }
+                                                                </div>
+                                                            } @else {
+                                                                <div class="group-disabled">Memory is disabled by Stack v{{ vm().newStackVersion() }}.</div>
+                                                            }
+                                                        </section>
+
+                                                        <section class="capability-group">
+                                                            <header class="capability-group-head">
+                                                                <div><h4>Graph context</h4><p>Code relationships and document structure.</p></div>
+                                                                <span class="scope-badge" [class.disabled]="!vm().isResolutionLayerEnabled('codeGraph')">{{ vm().isResolutionLayerEnabled('codeGraph') ? 'resolved' : 'disabled' }}</span>
+                                                            </header>
+                                                            @if (vm().isResolutionLayerEnabled('codeGraph')) {
+                                                                <div class="resolution-control">
+                                                                    <span class="control-label">Code graph</span>
+                                                                    <mat-form-field appearance="outline"><mat-label>Code graph source</mat-label>
+                                                                        <mat-select [ngModel]="vm().newCodeGraphSource()" (ngModelChange)="vm().newCodeGraphSource.set($event)">
+                                                                            @for (source of vm().sourceOptionsFor('codeGraph'); track source) { <mat-option [value]="source">{{ source }}</mat-option> }
+                                                                        </mat-select>
+                                                                    </mat-form-field>
+                                                                    @if (vm().newCodeGraphSource() === 'market') {
+                                                                        @if (vm().marketProviders('codeGraph').length === 0) {
+                                                                            <span class="control-note">No provider configured in MCP.</span>
+                                                                        } @else {
+                                                                            <mat-form-field appearance="outline"><mat-label>Provider</mat-label>
+                                                                                <mat-select [ngModel]="vm().newCodeGraphProvider()" (ngModelChange)="vm().newCodeGraphProvider.set($event)">
+                                                                                    @for (provider of vm().marketProviders('codeGraph'); track provider.id) { <mat-option [value]="provider.id">{{ provider.label }}</mat-option> }
+                                                                                </mat-select>
+                                                                            </mat-form-field>
+                                                                        }
+                                                                    } @else {
+                                                                        <span class="control-note">Uses the ESO-native graph.</span>
+                                                                    }
+                                                                </div>
+                                                            } @else {
+                                                                <div class="group-disabled">Code graph is disabled by Stack v{{ vm().newStackVersion() }}.</div>
+                                                            }
+                                                            <div class="capability-list">
+                                                                @for (capability of vm().graphCapabilities(); track capability.id) {
+                                                                    <div class="capability-row"><span>{{ capability.label }}</span><strong>{{ capability.value }}</strong><em>stack</em></div>
+                                                                }
+                                                            </div>
+                                                        </section>
+
+                                                        <section class="capability-group">
+                                                            <header class="capability-group-head">
+                                                                <div><h4>Agent system</h4><p>Inherited from Stack v{{ vm().newStackVersion() }}.</p></div>
+                                                                <span class="scope-badge muted-badge">stack</span>
+                                                            </header>
+                                                            <div class="capability-list">
+                                                                @for (capability of vm().agentCapabilities(); track capability.id) {
+                                                                    <div class="capability-row"><span>{{ capability.label }}</span><strong>{{ capability.value }}</strong><em>stack</em></div>
+                                                                }
+                                                            </div>
+                                                        </section>
+
+                                                        <section class="capability-group">
+                                                            <header class="capability-group-head">
+                                                                <div><h4>Material</h4><p>Files projected to this host.</p></div>
+                                                                <span class="scope-badge muted-badge">stack</span>
+                                                            </header>
+                                                            <div class="capability-row"><span>Material install</span><strong>rules · skills · hooks</strong><em>stack</em></div>
+                                                        </section>
+
+                                                        <section class="capability-group">
+                                                            <header class="capability-group-head">
+                                                                <div><h4>Host binding</h4><p>Host-owned configuration surface.</p></div>
+                                                                <span class="scope-badge muted-badge">read-only</span>
+                                                            </header>
+                                                            <div class="mcp-binding"><span>MCP config</span><code>{{ vm().mcpSourceForHost(vm().newHostId()) }}</code></div>
+                                                        </section>
+                                                    </div>                                                            </details>
+                                            </div>
+                                        }
+
+                    </section>
+
+                    <section class="hosts-section">
+                        <header class="hosts-section-head"><div><h3>Detected host runtimes</h3><p class="muted">Markers exist in the repository, but no binding has been created. Detection is optional.</p></div></header>
+                        @if (vm().unmanagedHosts().length > 0) {
+                            <div class="detected-grid">
+                                @for (host of vm().unmanagedHosts(); track host.hostId) {
+                                    <article class="detected-card">
+                                        <div><strong>{{ host.label }}</strong><code>{{ host.markers.join(', ') }}</code></div>
+                                        <button mat-stroked-button type="button" (click)="vm().manageDetectedHost(host.hostId)">{{ vm().hostAvailable(host.hostId) ? 'Bind with ESO' : 'Register in Hosts' }}</button>
+                                    </article>
+                                }
+                            </div>
+                        } @else {
+                            <p class="muted">No unmanaged host detected.</p>
+                        }
+                    </section>
+
+                    <section class="hosts-section unmanaged-note">
+                        <h3>Unmanaged tools</h3>
+                        <p class="muted">Tools without an ESO adapter are not affected. No host binding, no marker, no registration is required; the tool keeps working as-is.</p>
+                    </section>
+
+                </section>

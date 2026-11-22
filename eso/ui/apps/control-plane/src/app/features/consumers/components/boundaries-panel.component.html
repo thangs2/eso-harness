@@ -1,0 +1,104 @@
+<section class="boundaries-panel">
+    <header class="boundary-hero">
+        <div class="hero-copy">
+            <p class="eyebrow">Boundaries</p>
+            <div class="title-row">
+                <h2>Read, write &amp; index policy</h2>
+                <span class="count">{{ policyCount() }}</span>
+            </div>
+            <p class="lede">Default deny outside the repo root. Gated writes and external reads need an operator grant. Host hooks enforce; ESO publishes policy and records observations.</p>
+            <div class="hero-meta">
+                <span><strong>{{ policyCount() }}</strong> {{ policyCount() === 1 ? 'policy' : 'policies' }}</span>
+                <span><strong>{{ grantCount() }}</strong> active {{ grantCount() === 1 ? 'grant' : 'grants' }}</span>
+                <span><strong>{{ enforcementForm.controls.enforcement.value }}</strong> enforcement</span>
+            </div>
+        </div>
+        <div class="hero-actions">
+            <button mat-flat-button color="primary" type="button" [disabled]="saving() || loading()" (click)="save()">{{ saving() ? 'Saving…' : 'Save boundaries' }}</button>
+        </div>
+    </header>
+
+    @if (error(); as message) { <p class="form-error" role="alert">{{ message }}</p> }
+    @if (notice(); as message) { <p class="saved-banner" role="status">{{ message }}</p> }
+    @if (loading()) { <p class="loading-label" role="status">Loading boundaries…</p> }
+
+    <div class="boundary-toolbar">
+        <section class="enforcement-card">
+            <span class="field-label">Enforcement</span>
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Mode</mat-label>
+                <mat-select [formControl]="enforcementForm.controls.enforcement">
+                    <mat-option value="audit">Audit only — allow and record</mat-option>
+                    <mat-option value="enforce">Enforce — host hook denies</mat-option>
+                </mat-select>
+            </mat-form-field>
+            <small>{{ enforcementForm.controls.enforcement.value === 'enforce' ? 'Denied paths are blocked before the host acts.' : 'Denied paths are recorded but not blocked.' }}</small>
+        </section>
+        <div class="toolbar-actions">
+            <button mat-stroked-button type="button" (click)="addPolicy()">Add policy</button>
+        </div>
+    </div>
+
+    <section class="policy-panel" aria-labelledby="path-policies-title">
+        <header class="section-head">
+            <div><h3 id="path-policies-title">Path policies</h3><p>Deny wins over allow. A gated write needs a matching grant.</p></div>
+            <span class="count">{{ policyCount() }}</span>
+        </header>
+
+        @if (policyForm.length === 0) {
+            <div class="empty-state"><strong>No path policy</strong><span>Default policy applies: deny outside the repo root.</span><button mat-stroked-button type="button" (click)="addPolicy()">Add first policy</button></div>
+        } @else {
+            <div class="policy-head" aria-hidden="true"><span>Path</span><span>Type</span><span>Read</span><span>Write</span><span>Index</span><span></span></div>
+            <div class="policy-list">
+                @for (policy of policyForm.controls; track policy; let i = $index) {
+                    <article class="policy-row">
+                        <mat-form-field appearance="outline" subscriptSizing="dynamic" density="-2" class="path-field"><input matInput [formControl]="policy.controls.path" placeholder="Path or glob" aria-label="Path"></mat-form-field>
+                        <mat-form-field appearance="outline" subscriptSizing="dynamic" density="-2">
+                            <mat-select [formControl]="policy.controls.pathType" aria-label="Path type"><mat-option value="file">file</mat-option><mat-option value="directory">directory</mat-option><mat-option value="glob">glob</mat-option></mat-select>
+                        </mat-form-field>
+                        <mat-form-field appearance="outline" subscriptSizing="dynamic" density="-2">
+                            <mat-select [formControl]="policy.controls.read" aria-label="Read policy"><mat-option value="allow">allow</mat-option><mat-option value="deny">deny</mat-option></mat-select>
+                        </mat-form-field>
+                        <mat-form-field appearance="outline" subscriptSizing="dynamic" density="-2">
+                            <mat-select [formControl]="policy.controls.write" aria-label="Write policy"><mat-option value="bypass">bypass</mat-option><mat-option value="gated">gated</mat-option><mat-option value="warn">warn</mat-option><mat-option value="deny">deny</mat-option></mat-select>
+                        </mat-form-field>
+                        <div class="index-cell"><mat-checkbox [formControl]="policy.controls.index">Index</mat-checkbox></div>
+                        <button mat-button color="warn" type="button" [attr.aria-label]="'Remove policy ' + (policy.controls.path.value || i + 1)" (click)="removePolicy(i)">Remove</button>
+                    </article>
+                }
+            </div>
+        }
+    </section>
+
+    <section class="grants-panel" aria-labelledby="grants-title">
+        <header class="section-head">
+            <div><h3 id="grants-title">Grants</h3><p>Write grants are single-use and expire. Read grants can be once or always.</p></div>
+            <span class="count">{{ grantCount() }}</span>
+        </header>
+
+        <form [formGroup]="grantForm" class="grant-create">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Target prefix</mat-label><input matInput formControlName="target" placeholder="data-lake/**"></mat-form-field>
+            <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Kind</mat-label>
+                <mat-select formControlName="kind"><mat-option value="write">write</mat-option><mat-option value="read">read</mat-option></mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Mode</mat-label>
+                <mat-select formControlName="mode"><mat-option value="once">once</mat-option><mat-option value="always">always (read only)</mat-option></mat-select>
+            </mat-form-field>
+            <button mat-stroked-button type="button" [disabled]="!grantForm.controls.target.value.trim()" (click)="createGrant()">Create grant</button>
+        </form>
+
+        @if (grants().length === 0) {
+            <p class="empty-grants">No active grants.</p>
+        } @else {
+            <div class="grant-list">
+                @for (grant of grants(); track grant.grantId) {
+                    <article class="grant-row">
+                        <span class="grant-kind" [class.read]="grant.kind === 'read'">{{ grant.kind }}</span>
+                        <div class="grant-target"><code>{{ grant.targetPrefix }}</code><small>{{ grant.mode }}{{ grant.expiresAt ? ' · expires ' + grant.expiresAt : '' }}</small></div>
+                        <button mat-button color="warn" type="button" (click)="revoke(grant.grantId)">Revoke</button>
+                    </article>
+                }
+            </div>
+        }
+    </section>
+</section>

@@ -1,0 +1,206 @@
+<div class="settings-page">
+            <header class="page-header">
+                <div>
+                    <p class="eyebrow">Consumer settings</p>
+                    <h1>{{ name() || route.snapshot.paramMap.get('id') }}</h1>
+                    <p class="subtitle">Define the canonical stack; bind host runtimes to developers and published stack versions.</p>
+                </div>
+                <mat-form-field appearance="outline" subscriptSizing="dynamic" density="-4" class="settings-consumer-picker">
+                    <mat-label>Switch consumer</mat-label>
+                    <mat-select [value]="consumerId" (selectionChange)="switchConsumer($event.value)" aria-label="Switch consumer">
+                        @for (consumer of consumers(); track consumer.id) {
+                            <mat-option [value]="consumer.id">{{ consumer.name || consumer.id }}</mat-option>
+                        }
+                    </mat-select>
+                </mat-form-field>
+            </header>
+
+
+            @if (error(); as message) { <p class="form-error" role="alert">{{ message }}</p> }
+            @if (saved()) { <p class="saved-banner" role="status">Settings saved.</p> }
+
+            @if (legacyNotice(); as notice) { <p class="saved-banner" role="status">{{ notice }}</p> }
+            @if (legacyError(); as legacyMessage) { <p class="form-error" role="alert">{{ legacyMessage }}</p> }
+            @if (migrationNotice(); as migrationMessage) { <p class="saved-banner" role="status">{{ migrationMessage }}</p> }
+            @if (migrationError(); as migrationErrorMessage) { <p class="form-error" role="alert">{{ migrationErrorMessage }}</p> }
+            @if (migrationActionable()) {
+                <section class="migration-panel" aria-label="Harness migration pipeline">
+                    <div class="migration-copy">
+                        <p class="eyebrow">Migration pipeline</p>
+                        <h2>Legacy host assets detected</h2>
+                        <p class="section-hint">Preview maps legacy rules, skills, agents, and hooks into ESO canonical <code>agents/</code>. Existing ESO files are never overwritten; conflicts are reported.</p>
+                        @if (migrationPreview(); as preview) {
+                            <div class="migration-metrics">
+                                <div><span>Rules</span><strong>{{ preview.totals.rules.new }} new · {{ preview.totals.rules.same }} same · {{ preview.totals.rules.conflict }} conflict</strong></div>
+                                <div><span>Skills</span><strong>{{ preview.totals.skills.new }} new · {{ preview.totals.skills.same }} same · {{ preview.totals.skills.conflict }} conflict</strong></div>
+                                <div><span>Agents</span><strong>{{ preview.totals.agents.new }} new · {{ preview.totals.agents.same }} same · {{ preview.totals.agents.conflict }} conflict</strong></div>
+                                <div><span>Hooks</span><strong>{{ preview.totals.hooks.new }} new · {{ preview.totals.hooks.same }} same · {{ preview.totals.hooks.conflict }} conflict</strong></div>
+                            </div>
+                            <code class="plan-hash">plan {{ preview.planHash.slice(0, 16) }}</code>
+                            @if (migrationConflictCount() > 0) {
+                                <p class="migration-conflict-note" role="status">{{ migrationConflictCount() }} conflict(s) cannot be migrated automatically. Apply will skip them; resolve canonical vs legacy first.</p>
+                            }
+                        }
+                    </div>
+                    @if (migrationConflicts().length > 0) {
+                        <div class="conflict-list">
+                            @for (entry of migrationConflicts(); track entry.id) {
+                                <article class="conflict-row">
+                                    <div class="conflict-copy">
+                                        <code>{{ entry.target }}</code>
+                                        <span>source: {{ entry.source }}</span>
+                                        <small>{{ entry.reason }}</small>
+                                    </div>
+                                    <div class="conflict-actions">
+                                        <button mat-stroked-button type="button" (click)="resolveMigrationConflict(entry.id, 'keep-eso')">Keep ESO</button>
+                                        <button mat-flat-button color="primary" type="button" (click)="resolveMigrationConflict(entry.id, 'adopt-legacy')">Adopt legacy</button>
+                                    </div>
+                                </article>
+                            }
+                        </div>
+                    }
+                    <div class="migration-actions">
+                        <button mat-stroked-button type="button" [disabled]="migrationLoading() || migrationApplying()" (click)="previewHarnessMigration()">{{ migrationLoading() ? 'Previewing…' : 'Refresh preview' }}</button>
+                        <button mat-flat-button color="primary" type="button" [disabled]="migrationApplying() || migrationNewCount() === 0 || migrationConflictCount() > 0" (click)="applyHarnessMigration()">{{ migrationApplying() ? 'Migrating…' : (migrationConflictCount() > 0 ? 'Resolve conflicts first' : (migrationNewCount() > 0 ? 'Migrate ' + migrationNewCount() + ' new' : 'No new files to migrate')) }}</button>
+                    </div>
+                </section>
+            }
+
+            @if (finishPrompt()) {
+                <section class="legacy-panel" aria-label="Finish migration prompt">
+                    <div class="legacy-copy">
+                        <p class="eyebrow">Finish · migration required</p>
+                        <h2>Legacy harness detected</h2>
+                        <p class="section-hint">This consumer still has legacy rules/skills/agents/hooks. Migrate them to ESO before finishing? <strong>No</strong> keeps the settings save but does not provision the consumer.</p>
+                    </div>
+                    <div class="legacy-actions">
+                        <button mat-stroked-button type="button" [disabled]="finishing()" (click)="finishWithoutMigration()">No, save only</button>
+                        <button mat-flat-button color="primary" type="button" [disabled]="finishing()" (click)="finishWithMigration()">{{ finishing() ? 'Migrating…' : 'Yes, migrate & finish' }}</button>
+                    </div>
+                </section>
+            }
+            @if (legacyHarness()?.detected) {
+                <details class="legacy-panel legacy-collapsible" aria-label="Legacy harness archive">
+                    <summary class="legacy-summary">
+                        <span class="eyebrow">Legacy harness</span>
+                        <strong>Old harness state detected</strong>
+                        <span class="summary-action">Review</span>
+                    </summary>
+                    <div class="legacy-copy">
+                        <p class="section-hint">ESO can move known v1 harness state into this repo's <code>archive/</code> folder. Active host hooks and canonical ESO material are left untouched.</p>
+                        <ul class="legacy-list">
+                            @for (entry of legacyHarness()?.entries; track entry.path) {
+                                <li><code>{{ entry.path }}</code><span>{{ entry.kind }} · {{ entry.bytes }} bytes</span></li>
+                            }
+                        </ul>
+                        <p class="legacy-target">Archive target: <code>{{ legacyHarness()?.archivePath }}</code></p>
+                    </div>
+                    <div class="legacy-actions">
+                        <button mat-stroked-button type="button" [disabled]="legacyLoading() || legacyArchiving() || migrationLoading()" (click)="refreshLegacyHarness()">{{ legacyLoading() ? 'Scanning…' : 'Re-scan' }}</button>
+                        @if (legacyArchiveConfirm()) {
+                            <button mat-stroked-button type="button" [disabled]="legacyArchiving()" (click)="legacyArchiveConfirm.set(false)">Cancel</button>
+                            <button mat-flat-button color="warn" type="button" [disabled]="legacyArchiving()" (click)="archiveLegacyHarness()">{{ legacyArchiving() ? 'Archiving…' : 'Archive now' }}</button>
+                        } @else {
+                            <button mat-flat-button color="primary" type="button" [disabled]="legacyArchiving()" (click)="legacyArchiveConfirm.set(true)">Archive legacy</button>
+                        }
+                    </div>
+                </details>
+            }
+
+            @if (loading()) {
+                <section class="panel settings-loading"><p class="loading-label">Loading settings…</p></section>
+            } @else {
+                <nav class="settings-tabs" role="tablist" aria-label="Consumer settings sections">
+                    @for (tab of tabs; track tab.id) {
+                        <button type="button" role="tab" class="settings-tab" [class.active]="activeTab() === tab.id" [attr.aria-selected]="activeTab() === tab.id" [title]="tab.label + ' — ' + tab.hint" (click)="selectTab(tab.id)">
+                            <span class="settings-step-no">{{ tab.n }}</span>
+                            <span class="settings-tab-copy"><strong>{{ tab.label }}</strong><small>{{ tab.hint }}</small></span>
+                        </button>
+                    }
+                </nav>
+
+                <div class="settings-tab-content">
+                    @switch (activeTab()) {
+                        @case ('profile') {
+                            <eso-profile-panel
+                                [value]="{ name: name(), owner: owner(), locale: locale(), tags: tags(), description: description() }"
+                                (valueChange)="applyProfile($event)"
+                            />
+                        }
+
+                        @case ('stack') {
+                            <eso-stack-tab [vm]="vm" />
+                        }
+
+                        @case ('hosts') {
+                            <eso-hosts-tab [vm]="vm" />
+                        }
+
+                        @case ('workers') {
+                            <section class="tab-panel workers-page" role="tabpanel">
+                                <eso-worker-overview
+                                    [workerCount]="workers().length"
+                                    [gateCount]="gateCount()"
+                                    [peerCount]="peerCount()"
+                                    [placementCount]="workerPlacementCount()"
+                                    [hostCoverage]="workerHostCoverage()"
+                                    [flow]="defaultFlow()"
+                                    (openFlows)="openFlows()"
+                                    (openDiagram)="openDiagram.set('workers')"
+                                />
+
+                                <eso-workers-settings
+                                    [consumerId]="consumerId"
+                                    [hostProfiles]="hostProfiles()"
+                                    [hostRuntimes]="hostRuntimes()"
+                                    (workersChange)="workers.set($event)"
+                                />
+                            </section>
+                        }
+
+                        @case ('knowledge') {
+                            <eso-knowledge-tab [vm]="vm" />
+                        }
+
+                        @case ('boundaries') {
+                            <eso-boundaries-panel [consumerId]="consumerId" />
+                        }
+
+                        @case ('observation') {
+                            <section class="tab-panel" role="tabpanel">
+                                <eso-observation-panel
+                                    [consumerId]="consumerId"
+                                    [consent]="consent()"
+                                    [events]="events()"
+                                    [jevMode]="jevMode()"
+                                    [jevAutoThreshold]="jevAutoThreshold()"
+                                    [jevConfirmThreshold]="jevConfirmThreshold()"
+                                    [jevConfidence]="jevConfidence()"
+                                    (consentChange)="consent.set($event)"
+                                    (eventsChange)="events.set($event)"
+                                    (jevModeChange)="jevMode.set($event)"
+                                    (jevAutoThresholdChange)="jevAutoThreshold.set($event)"
+                                    (jevConfirmThresholdChange)="jevConfirmThreshold.set($event)"
+                                    (jevConfidenceChange)="jevConfidence.set($event)"
+                                />
+                            </section>
+                        }
+                    }
+                </div>
+
+                <footer class="settings-actions">
+                    <button mat-stroked-button type="button" (click)="back()">Back</button>
+                    <div class="settings-footer-right">
+                        <span class="dirty-state" role="status" aria-live="polite" [class.dirty-state-on]="dirty() || workerImportDirty() || workerDirty()">
+                            {{ dirty() || workerImportDirty() || workerDirty() ? 'Unsaved changes' : 'All changes saved' }}
+                        </span>
+                        <button mat-stroked-button type="button" [disabled]="saving() || (!dirty() && !workerImportDirty() && !workerDirty()) || (activeTab() === 'workers' && ((workersSettings()?.validationErrors().length ?? 0) > 0))" (click)="save()">Save changes</button>
+                        @if (activeTab() === lastTab) {
+                            <button mat-flat-button color="primary" type="button" [disabled]="saving()" (click)="finish()">{{ saving() ? 'Saving…' : 'Finish' }}</button>
+                        } @else {
+                            <button mat-stroked-button type="button" (click)="nextTab()">Next →</button>
+                        }
+                    </div>
+                </footer>
+            }
+        </div>

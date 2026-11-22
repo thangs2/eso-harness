@@ -1,0 +1,14 @@
+<section class="profile-panel" aria-label="Consumer profile">
+    <header class="panel-head">
+        <div><h3>Profile</h3><p>Display and classification metadata for this consumer.</p></div>
+    </header>
+    <form [formGroup]="form" class="profile-form">
+        <div class="form-grid">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Consumer name</mat-label><input matInput formControlName="name"></mat-form-field>
+            <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Owner / team</mat-label><input matInput formControlName="owner" placeholder="finance-platform"></mat-form-field>
+            <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Locale</mat-label><input matInput formControlName="locale" placeholder="vi-VN"></mat-form-field>
+            <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Tags</mat-label><input matInput formControlName="tags" placeholder="finance, accounting"></mat-form-field>
+        </div>
+        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="full-width"><mat-label>Description</mat-label><textarea matInput rows="3" formControlName="description"></textarea></mat-form-field>
+    </form>
+</section>

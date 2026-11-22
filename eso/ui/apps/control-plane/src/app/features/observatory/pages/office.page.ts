@@ -3,7 +3,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { CONTROL_PLANE_API_CLIENT } from '../../../core/tokens.js';
 import type { ConsumerSummary, ObservationDto } from '../../../../../../../libs/api-client/types.js';
-import { OfficeScene, type OfficeStatus, type OfficeWorker } from '../office/office-scene.js';
+import { OfficeScene, type OfficeStatus, type OfficeWorker } from '../components/office-scene.js';
 
 interface WorkerDef {
     id: string;
