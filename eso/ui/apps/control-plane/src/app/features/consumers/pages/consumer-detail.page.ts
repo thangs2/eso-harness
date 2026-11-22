@@ -68,7 +68,7 @@ import type { ConsumerProfile } from '../../../../../../../libs/api-client/types
                 </section>
             </div>
         } @else if (error(); as message) {
-            <p class="form-error" role="alert">{{ message }}</p>
+            <p class="form-error" role="alert">@if (errorCode()) { <strong>{{ errorCode() }}</strong> — }{{ message }}</p>
         } @else {
             <section class="panel"><p class="loading-label">Loading consumer…</p></section>
         }
@@ -82,6 +82,7 @@ export class ConsumerDetailPage implements OnInit {
     private readonly route = inject(ActivatedRoute);
     readonly profile = signal<ConsumerProfile | null>(null);
     readonly error = signal<string | null>(null);
+    readonly errorCode = signal('');
     readonly created = signal(false);
 
     ngOnInit(): void {
@@ -90,7 +91,11 @@ export class ConsumerDetailPage implements OnInit {
         this.service
             .get(id)
             .then((profile) => this.profile.set(profile))
-            .catch((err) => this.error.set(err?.detail || 'Unable to load consumer'));
+            .catch((err) => {
+                const status = (err as { status?: number })?.status;
+                this.errorCode.set(status === 404 ? 'DETAIL_NOT_FOUND' : status === 401 || status === 403 ? 'DETAIL_DENIED' : 'DETAIL_UPSTREAM_FAILED');
+                this.error.set((err as { detail?: string; message?: string })?.detail || (err as Error)?.message || 'Unable to load consumer');
+            });
     }
 
     enabled(map: Record<string, unknown>): string {
