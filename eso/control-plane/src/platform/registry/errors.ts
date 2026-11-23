@@ -31,9 +31,30 @@ export const ERROR_STATUS: Readonly<Record<string, number>> = {
     HOST_RUNTIME_INVALID: 422,
     HOST_RUNTIME_NOT_FOUND: 404,
     HOST_TOKEN_NOT_FOUND: 404,
+    NOT_FOUND: 404,
+    DOC_CONTRACT_VIOLATION: 409,
     WORKER_NOT_FOUND: 404,
     WORKER_PLACEMENT_INVALID: 422,
     OBSERVATION_INVALID: 422,
+    // F-28 evidence ingest (AC-36)
+    INVALID_EVENT: 400,
+    UNKNOWN_SCHEMA: 400,
+    PAYLOAD_TOO_LARGE: 413,
+    // F-29 harness adapter packaging (AC-37)
+    UNSUPPORTED_HOST: 422,
+    MISSING_MANIFEST: 422,
+    VERSION_MISMATCH: 409,
+    CORE_IMPORTS_HOST_SDK: 422,
+    // F-12/F-16 human approval (AC-20, AC-24)
+    NEEDS_APPROVAL: 409,
+    FORBIDDEN_ACTOR: 403,
+    UNKNOWN_ACTOR: 403,
+    // F-30 host capability probe (AC-38) / F-33 host sync (AC-41)
+    PROBE_BLOCKED: 403,
+    CANONICAL_MISSING: 422,
+    HOST_UNSUPPORTED: 422,
+    PROJECTION_CONFLICT: 409,
+    SYNC_FAILED: 500,
 };
 
 export const ERROR_MESSAGE: Readonly<Record<string, string>> = {
@@ -61,9 +82,26 @@ export const ERROR_MESSAGE: Readonly<Record<string, string>> = {
     HOST_RUNTIME_INVALID: 'Host runtime registration is invalid',
     HOST_RUNTIME_NOT_FOUND: 'Host runtime not found',
     HOST_TOKEN_NOT_FOUND: 'Host token not found',
+    NOT_FOUND: 'Record not found',
+    DOC_CONTRACT_VIOLATION: 'Derived content contradicts its source',
     WORKER_NOT_FOUND: 'Worker not found',
     WORKER_PLACEMENT_INVALID: 'Worker host placement is invalid',
     OBSERVATION_INVALID: 'Observation is invalid',
+    INVALID_EVENT: 'Evidence event is invalid',
+    UNKNOWN_SCHEMA: 'Event schema is not registered',
+    PAYLOAD_TOO_LARGE: 'Batch or payload exceeds the ingest limit',
+    UNSUPPORTED_HOST: 'Host is not in the adapter catalog',
+    MISSING_MANIFEST: 'Adapter manifest, component or entrypoint is missing',
+    VERSION_MISMATCH: 'Manifest version does not match protocol/core',
+    CORE_IMPORTS_HOST_SDK: 'Harness core must not import a host SDK or adapter',
+    NEEDS_APPROVAL: 'Human approval is required for this action',
+    FORBIDDEN_ACTOR: 'Actor is not allowed to perform this action',
+    UNKNOWN_ACTOR: 'Actor identity is unknown',
+    PROBE_BLOCKED: 'Host probe is blocked by policy',
+    CANONICAL_MISSING: 'Canonical harness is missing',
+    HOST_UNSUPPORTED: 'Host is not supported',
+    PROJECTION_CONFLICT: 'Projection merge is not safe',
+    SYNC_FAILED: 'Could not write host projection',
 };
 
 export class PlatformError extends Error {

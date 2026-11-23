@@ -27,6 +27,7 @@ import { KnowledgeMappingService } from '../../modules/knowledge/knowledge-mappi
 import { KnowledgeMappingCheckService } from '../../modules/knowledge/knowledge-mapping-check.service.js';
 import { LearningService } from '../../modules/learning/learning.service.js';
 import { EvidenceScoreService } from '../../modules/evidence-score/evidence-score.service.js';
+import { EvidenceLedgerService } from '../../modules/evidence-ledger/evidence-ledger.service.js';
 import { ParityService } from '../../modules/parity/parity.service.js';
 import { TeamObservatoryService } from '../../modules/observatory/team-observatory.service.js';
 import { ProfileService } from '../../modules/profiles/profile.service.js';
@@ -43,6 +44,8 @@ import { KnowledgeCheckService } from '../../modules/knowledge/knowledge-check.s
 import { KnowledgeRetrievalService } from '../../modules/knowledge/knowledge-retrieval.service.js';
 import { LocalEmbeddingService } from '../../modules/knowledge/local-embedding.service.js';
 import { KnowledgeEvalService } from '../../modules/knowledge/knowledge-eval.service.js';
+import { InventoryService } from '../../modules/inventory/inventory.service.js';
+import { SufficiencyService } from '../../modules/sufficiency/sufficiency.service.js';
 import { WorkerPolicyService } from '../../modules/workers/worker-policy.service.js';
 import { WorkerImportService } from '../../modules/workers/worker-import.service.js';
 import { RuleFileService } from '../../modules/rules/rule-file.service.js';
@@ -133,6 +136,8 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
     const knowledgeEmbedding = new LocalEmbeddingService(store);
     const knowledgeRetrieval = new KnowledgeRetrievalService(store, knowledgeEmbedding);
     const knowledgeEval = new KnowledgeEvalService(knowledgeRetrieval);
+    const inventory = new InventoryService(store);
+    const sufficiency = new SufficiencyService(store, inventory);
     const workerPolicy = new WorkerPolicyService(store);
     const workerImport = new WorkerImportService(workerFiles);
     const ruleFiles = new RuleFileService(store);
@@ -439,6 +444,24 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
         return parity.compare((request.params as any).id, request.body ?? {});
     });
 
+    const evidenceLedger = new EvidenceLedgerService();
+
+    app.post('/api/v1/consumers/:id/evidence', { preHandler: requireAuth }, async (request, reply) => {
+        return reply.code(201).send(evidenceLedger.append((request.params as any).id, request.body ?? {}));
+    });
+
+    app.get('/api/v1/consumers/:id/evidence/:evidenceId', { preHandler: requireAuth }, async (request) => {
+        return evidenceLedger.get((request.params as any).id, (request.params as any).evidenceId);
+    });
+
+    app.put('/api/v1/consumers/:id/evidence/:evidenceId', { preHandler: requireAuth }, async (_request, reply) => {
+        return reply.code(405).send({ code: 'METHOD_NOT_ALLOWED', message: 'evidence ledger is append-only' });
+    });
+
+    app.delete('/api/v1/consumers/:id/evidence/:evidenceId', { preHandler: requireAuth }, async (_request, reply) => {
+        return reply.code(405).send({ code: 'METHOD_NOT_ALLOWED', message: 'evidence ledger is append-only' });
+    });
+
     app.post('/api/v1/consumers/:id/evidence-score', { preHandler: requireAuth }, async (request) => {
         return evidenceScore.score((request.params as any).id, request.body ?? {});
     });
@@ -603,6 +626,26 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
 
     app.get('/api/v1/consumers/:id/knowledge/coverage', { preHandler: requireAuth }, async (request) => {
         return store.knowledgeCoverage((request.params as any).id);
+    });
+
+    // F-14/US-22 + F-15/US-23 — inventory artifact and content sufficiency (read-only).
+    // `kinds` overrides `.harness/knowledge-template.json` for ad-hoc checks.
+    const templateKinds = (value: unknown): string[] | undefined => {
+        if (typeof value !== 'string' || !value.trim()) return undefined;
+        const kinds = value.split(',').map((kind) => kind.trim()).filter(Boolean);
+        return kinds.length > 0 ? kinds : undefined;
+    };
+
+    app.get('/api/v1/consumers/:id/knowledge/inventory', { preHandler: requireAuth }, async (request) => {
+        const q = request.query as any;
+        const kinds = templateKinds(q?.kinds);
+        return inventory.inventory((request.params as any).id, kinds ? { template: kinds } : undefined);
+    });
+
+    app.get('/api/v1/consumers/:id/knowledge/sufficiency', { preHandler: requireAuth }, async (request) => {
+        const q = request.query as any;
+        const kinds = templateKinds(q?.kinds);
+        return sufficiency.check((request.params as any).id, kinds ? { template: kinds } : undefined);
     });
 
     app.post('/api/v1/consumers/:id/knowledge/check', { preHandler: requireAuth }, async (request) => {

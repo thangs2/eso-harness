@@ -121,7 +121,7 @@ export function evaluateRoleSufficiency({
     evidence = [],
 } = {}) {
     if (!role || !Array.isArray(role.bar)) {
-        return { level: 'unknown', deficits: [] };
+        return { level: 'unknown', code: 'UNKNOWN_ACTOR', reason: 'role has no bar/identity', deficits: [] };
     }
 
     const deficits = [];

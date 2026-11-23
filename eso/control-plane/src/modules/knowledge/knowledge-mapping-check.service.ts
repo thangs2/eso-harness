@@ -68,6 +68,7 @@ export class KnowledgeMappingCheckService {
             const aiBody = bodyOf(doc.path);
             const humanBody = bodyOf(human.path);
             if (humanBody.length >= COPY_MIN_CHARS && aiBody.includes(humanBody)) {
+                findings.push({ code: 'DOC_CONTRACT_VIOLATION', severity: 'error', path: doc.path, detail: `body duplicates ${human.path} (copied_body)` });
                 findings.push({ code: 'COPIED_BODY', severity: 'error', path: doc.path, detail: `body duplicates ${human.path}` });
             }
             if (doc.freshness === 'stale') {

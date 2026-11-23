@@ -13,6 +13,7 @@ export const BRD_ERROR_CODES: ReadonlySet<string> = new Set([
     'STALE_VERSION',
     'CONSUMER_NOT_FOUND',
     'DATABASE_UNAVAILABLE',
+    'NOT_FOUND',
     'OBSERVATION_INVALID',
     'EDGES_MOVED_TO_FLOW',
     'WORKER_PLACEMENT_INVALID',
@@ -43,6 +44,18 @@ export const BRD_ERROR_CODES: ReadonlySet<string> = new Set([
     'SCOPE_VIOLATION',
     'NEAR_DUPLICATE',
     'DOC_CONTRACT_VIOLATION',
+    'INVALID_EVENT',
+    'UNKNOWN_SCHEMA',
+    'PAYLOAD_TOO_LARGE',
+    'UNSUPPORTED_HOST',
+    'MISSING_MANIFEST',
+    'VERSION_MISMATCH',
+    'CORE_IMPORTS_HOST_SDK',
+    'PROBE_BLOCKED',
+    'CANONICAL_MISSING',
+    'HOST_UNSUPPORTED',
+    'PROJECTION_CONFLICT',
+    'SYNC_FAILED',
 ]);
 
 export interface ErrorBody {

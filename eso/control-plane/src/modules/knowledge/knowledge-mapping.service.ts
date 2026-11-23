@@ -73,8 +73,10 @@ export class KnowledgeMappingService {
             const currentHash = sha(text);
             const indexedHash = indexed.get(path) ?? null;
             const freshness = !indexedHash ? 'unindexed' : indexedHash === currentHash ? 'fresh' : 'stale';
+            const freshnessStatus = freshness === 'fresh' ? 'current' : freshness === 'stale' ? 'stale' : 'unknown';
             return {
                 path,
+                status: freshnessStatus,
                 representation,
                 humanSot: header.human_sot || null,
                 sourceOfTruth: header.source_of_truth || null,

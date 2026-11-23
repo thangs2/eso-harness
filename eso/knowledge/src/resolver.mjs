@@ -398,6 +398,7 @@ export function explainKnowledgeResolution({ project, declarations = [], targetI
   }
 
   return {
+    status: resolved.length ? 'matched' : 'no-match',
     resolved,
     total_candidates: declarations.length,
     unmatched_count: unmatched.length,
