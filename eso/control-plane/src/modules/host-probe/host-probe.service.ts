@@ -115,6 +115,45 @@ export class HostProbeService {
         this.now = options.now ?? (() => new Date());
     }
 
+
+    /**
+     * CR-012 — validate a card produced by the host-side probe runner.
+     * This never runs a probe and never spawns a host process (ESO sidecar invariant).
+     * Rules: evidence-backed measurements only; L4 needs cross-session evidence;
+     * a blocked card may not publish levels.
+     */
+    assess(input: unknown): HostCapabilityCard {
+        const card = input as Partial<HostCapabilityCard> | null;
+        if (!card || typeof card !== 'object') throw new PlatformError('INVALID_STATE', 'capability card must be an object');
+        if (card.schemaVersion !== 1) throw new PlatformError('INVALID_STATE', 'schemaVersion 1 is required');
+        const hostId = String(card.host?.id || '').trim();
+        const hostVersion = String(card.host?.version || '').trim();
+        if (!hostId || !hostVersion) throw new PlatformError('HOST_UNSUPPORTED', 'host id and version are required');
+        if (!card.probedAt || Number.isNaN(Date.parse(String(card.probedAt)))) throw new PlatformError('INVALID_STATE', 'probedAt must be an ISO timestamp');
+        const dimensions = Array.isArray(card.dimensions) ? card.dimensions : [];
+        const seen = new Set<string>();
+        for (const dimension of dimensions) {
+            if (!DIMENSION_ORDER.includes(dimension.dimension as any)) throw new PlatformError('INVALID_STATE', `unknown dimension ${String(dimension.dimension)}`);
+            if (seen.has(dimension.dimension)) throw new PlatformError('INVALID_STATE', `duplicate dimension ${dimension.dimension}`);
+            seen.add(dimension.dimension);
+            if ((dimension.status === 'measured' || dimension.status === 'partial') && (!Array.isArray(dimension.evidence) || dimension.evidence.length === 0)) {
+                throw new PlatformError('INVALID_STATE', `dimension ${dimension.dimension} claims ${dimension.status} without evidence`);
+            }
+        }
+        const levels = card.levels;
+        if (!levels || !levels.chain) throw new PlatformError('INVALID_STATE', 'levels.chain is required');
+        const evidence = Array.isArray(card.evidence) ? card.evidence : [];
+        const blocked = card.reason === 'PROBE_BLOCKED' || card.publishLevels === false;
+        if (blocked) {
+            if (card.publishLevels !== false) throw new PlatformError('INVALID_STATE', 'a blocked probe must set publishLevels=false');
+            if (levels.overall !== 'unknown') throw new PlatformError('INVALID_STATE', 'a blocked probe may not publish a level');
+        } else if (levels.overall === 'L4') {
+            const crossSession = evidence.some((item) => String(item?.kind || '').includes('cross-session'));
+            if (!crossSession) throw new PlatformError('INVALID_STATE', 'L4 requires cross-session retrieval evidence');
+        }
+        return card as HostCapabilityCard;
+    }
+
     /**
      * Run the 6 dimensions sequentially (deterministic order), derive levels, write the card.
      * A blocked probe still writes a card so the limitation is auditable.

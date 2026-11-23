@@ -35,6 +35,7 @@ import { HarnessPackagingService } from '../../modules/harness-packaging/harness
 import { SelfUpgradeService } from '../../modules/self-upgrade/self-upgrade.service.js';
 import { ArchQueryService } from '../../modules/arch-query/arch-query.service.js';
 import { HostSyncService } from '../../modules/host-sync/host-sync.service.js';
+import { HostProbeService } from '../../modules/host-probe/host-probe.service.js';
 import { ParityService } from '../../modules/parity/parity.service.js';
 import { TeamObservatoryService } from '../../modules/observatory/team-observatory.service.js';
 import { ProfileService } from '../../modules/profiles/profile.service.js';
@@ -461,6 +462,35 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
     const selfUpgradeService = new SelfUpgradeService(process.cwd());
     const archQueryService = new ArchQueryService(process.cwd());
     const hostSyncService = new HostSyncService();
+    const hostProbeService = new HostProbeService();
+    const capabilityCards = new Map<string, any>();
+
+    app.post('/api/v1/consumers/:id/hosts/:hostId/capability', { preHandler: requireAuth }, async (request, reply) => {
+        const consumerId = String((request.params as any).id);
+        const hostId = String((request.params as any).hostId);
+        const body = (request.body ?? {}) as any;
+        const card = hostProbeService.assess({ ...body, host: { ...(body.host || {}), id: hostId } });
+        capabilityCards.set(`${consumerId}::${hostId}`, card);
+        const consumer = await store.getConsumer(consumerId).catch(() => null);
+        if (consumer?.root) {
+            try {
+                const { mkdirSync, writeFileSync } = await import('node:fs');
+                const { join } = await import('node:path');
+                mkdirSync(join(consumer.root, '.harness'), { recursive: true });
+                writeFileSync(join(consumer.root, '.harness', 'host-capability.json'), JSON.stringify(card, null, 2));
+            } catch {
+                // best effort: the card is still served from memory
+            }
+        }
+        return reply.code(200).send(card);
+    });
+
+    app.get('/api/v1/consumers/:id/hosts/:hostId/capability', { preHandler: requireAuth }, async (request, reply) => {
+        const key = `${String((request.params as any).id)}::${String((request.params as any).hostId)}`;
+        const card = capabilityCards.get(key);
+        if (!card) return reply.code(404).send({ code: 'NOT_FOUND', message: 'capability card not found' });
+        return card;
+    });
 
     app.post('/api/v1/consumers/:id/memory/facts', { preHandler: requireAuth }, async (request, reply) => {
         return reply.code(201).send(await memoryService.propose((request.params as any).id, (request.body ?? {}) as any, (request as any).actor));

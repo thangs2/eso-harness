@@ -76,6 +76,41 @@ describe('HTTP contract — CR-010/011 routes', () => {
         assert.equal((await res.json()).status, 'proposed');
     });
 
+    test('AC-38 — capability card hợp lệ 200; L4 thiếu cross-session bị từ chối', async () => {
+        const { call } = await fixture();
+        const baseCard = {
+            schemaVersion: 1,
+            host: { id: 'h1', version: '1.0.0' },
+            probedAt: new Date().toISOString(),
+            status: 'measured',
+            publishLevels: true,
+            levels: { overall: 'L1', chain: { observe: 'L1', inject: 'unknown', memoryRead: 'unknown', memoryWrite: 'unknown' } },
+            dimensions: [
+                { dimension: 'observe', status: 'measured', evidence: [{ kind: 'session-event', summary: 'turn captured' }] },
+            ],
+            events: [],
+            evidence: [{ kind: 'session-event', summary: 'turn captured' }],
+            limitations: [],
+        };
+        const ok = await call('/api/v1/consumers/c-http/hosts/h1/capability', { method: 'POST', body: JSON.stringify(baseCard) });
+        assert.equal(ok.status, 200);
+
+        const l4 = await call('/api/v1/consumers/c-http/hosts/h2/capability', {
+            method: 'POST',
+            body: JSON.stringify({ ...baseCard, host: { id: 'h2', version: '1.0.0' }, levels: { ...baseCard.levels, overall: 'L4' } }),
+        });
+        assert.equal(l4.status, 409);
+
+        const blocked = await call('/api/v1/consumers/c-http/hosts/h3/capability', {
+            method: 'POST',
+            body: JSON.stringify({ ...baseCard, host: { id: 'h3', version: '1.0.0' }, publishLevels: true, reason: 'PROBE_BLOCKED' }),
+        });
+        assert.equal(blocked.status, 409);
+
+        const missing = await call('/api/v1/consumers/c-http/hosts/none/capability');
+        assert.equal(missing.status, 404);
+    });
+
     test('self-upgrade list + arch ask reachable', async () => {
         const { call } = await fixture();
         const list = await call('/api/v1/self-upgrade/proposals');
