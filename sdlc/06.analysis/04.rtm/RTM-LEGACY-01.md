@@ -9,7 +9,7 @@ type: traceability-matrix
 
 # RTM-LEGACY-01 — backlog AC chưa có RTM (đo 2026-11-23)
 
-> **Đây là nợ, không phải hoàn thành.** 112 `AC` legacy chưa từng có dòng RTM. File này ghi nhận trung thực:
+> **Đây là nợ, không phải hoàn thành.** 112 `AC` legacy chưa từng có dòng RTM (batch 1: 7 AC đã đóng 2026-11-23). File này ghi nhận trung thực:
 > `SCN` map được (nếu có) · endpoint **chưa xác định** (`—`) · test **MISSING** nghĩa là chưa có test chạy được.
 > Mục tiêu: mỗi dòng được thay bằng RTM thật của năng lực tương ứng khi làm tới.
 
@@ -21,13 +21,13 @@ type: traceability-matrix
 | `AC-01-4` | `SCN-01-4` | — | `qc/eso-auth.test.mjs` ||
 | `AC-03-1` | `SCN-03-1` | — | `eso/control-plane/test/consumer.test.ts` |
 | `AC-03-2` | `SCN-03-2` | — | `eso/control-plane/test/consumer.test.ts` |
-| `AC-03-3` | `SCN-03-3` | — | MISSING |
+| `AC-03-3` | `SCN-03-3` | — | `eso/control-plane/test/ac-legacy-batch1.test.ts` |
 | `AC-07-1` | `SCN-07-1` | — | `eso/control-plane/test/lifecycle.test.ts` |
-| `AC-07-2` | `SCN-07-2` | — | MISSING |
-| `AC-07-3` | `SCN-07-3` | — | MISSING |
+| `AC-07-2` | `SCN-07-2` | — | `eso/control-plane/test/ac-legacy-batch1.test.ts` |
+| `AC-07-3` | `SCN-07-3` | — | `eso/control-plane/test/ac-legacy-batch1.test.ts` |
 | `AC-08-1` | `SCN-08-1` | — | `eso/control-plane/test/lifecycle.test.ts` |
-| `AC-08-2` | `SCN-08-2` | — | MISSING |
-| `AC-08-3` | `SCN-08-3` | — | MISSING |
+| `AC-08-2` | `SCN-08-2` | — | `eso/control-plane/test/ac-legacy-batch1.test.ts` |
+| `AC-08-3` | `SCN-08-3` | — | `eso/control-plane/test/ac-legacy-batch1.test.ts` |
 | `AC-09-1` | `SCN-09-1` | — | `eso/control-plane/test/lifecycle.test.ts` |
 | `AC-09-2` | `SCN-09-2` | — | `eso/control-plane/test/purge.test.ts` |
 | `AC-09-3` | `SCN-09-3` | — | `eso/control-plane/test/purge.test.ts` |
@@ -50,8 +50,8 @@ type: traceability-matrix
 | `AC-15-2` | `SCN-15-2` | — | MISSING |
 | `AC-15-3` | `SCN-15-3` | — | MISSING |
 | `AC-16-1` | `SCN-16-1` | — | `eso/control-plane/test/errors.test.ts` |
-| `AC-16-2` | `SCN-16-2` | — | MISSING |
-| `AC-16-3` | `SCN-16-3` | — | MISSING |
+| `AC-16-2` | `SCN-16-2` | — | `eso/control-plane/test/ac-legacy-batch1.test.ts` |
+| `AC-16-3` | `SCN-16-3` | — | `eso/control-plane/test/ac-legacy-batch1.test.ts` |
 | `AC-17-1` | `SCN-17-1` | — | MISSING |
 | `AC-17-2` | `SCN-17-2` | — | MISSING |
 | `AC-17-3` | `SCN-17-3` | — | MISSING |
