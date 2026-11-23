@@ -82,8 +82,9 @@ export class WorkOverviewPage implements OnInit {
 
     onWhyTriggered(turnId: string): void {
         this.store.selectTurn(turnId);
+        // /diagnosis was removed (CR-008): a "why" drill-down now lands on the observatory timeline.
         if (this.router) {
-            void this.router.navigate(['/diagnosis', turnId]);
+            void this.router.navigate(['/observatory'], { queryParams: { trace: turnId } });
         }
     }
 }

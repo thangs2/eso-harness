@@ -11,8 +11,8 @@ type: traceability-matrix
 
 | AC | SCN | page | trạng thái code |
 |---|---|---|---|
-| `AC-34-1` | `SCN-34-1` | 4 page | `qc/eso-surfaces.test.mjs` — 3 placeholder + 1 stub (as-is) |
-| `AC-34-2` | `SCN-34-2` | 4 page | `qc/eso-surfaces.test.mjs` ✓ |
+| `AC-34-1` | `SCN-34-1` | 1 page (declaration) | `qc/eso-surfaces.test.mjs` — CR-008: 3 stub xoá, test giữ guard route/nav |
+| `AC-34-2` | `SCN-34-2` | 1 page (declaration) | `qc/eso-surfaces.test.mjs` ✓ |
 | `AC-34-3` | `SCN-34-3` | review | **không tự động hoá** (review người) |
 
 ## Coverage

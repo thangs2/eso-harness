@@ -66,20 +66,8 @@ export const APP_ROUTES: Routes = [
         pathMatch: 'full',
     },
     {
-        path: 'diagnosis',
-        loadChildren: () => import('./features/diagnosis/diagnosis.routes.js').then((m) => m.DIAGNOSIS_ROUTES),
-    },
-    {
         path: 'declaration',
         loadChildren: () => import('./features/declaration/declaration.routes.js').then((m) => m.DECLARATION_ROUTES),
-    },
-    {
-        path: 'risk',
-        loadChildren: () => import('./features/risk/risk.routes.js').then((m) => m.RISK_ROUTES),
-    },
-    {
-        path: 'audit',
-        loadChildren: () => import('./features/audit/audit.routes.js').then((m) => m.AUDIT_ROUTES),
     },
     {
         path: 'onboarding',

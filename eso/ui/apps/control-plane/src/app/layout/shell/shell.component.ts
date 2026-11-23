@@ -14,10 +14,7 @@ const PAGE_LABELS: Record<string, string> = {
     architecture: 'Architecture',
     learning: 'Learning',
     work: 'Work',
-    diagnosis: 'Diagnosis',
     declaration: 'Declaration',
-    risk: 'Risk',
-    audit: 'Audit',
     hosts: 'Hosts',
     plugins_registry: 'Registry',
 };
@@ -80,7 +77,6 @@ const PAGE_LABELS: Record<string, string> = {
                             <a routerLink="/observatory" class="side-link" [class.active]="onObservatory()">Observatory</a>
                             <a routerLink="/events" class="side-link" [class.active]="onEvents()">Event stream</a>
                             <a routerLink="/office" class="side-link" [class.active]="onOffice()">Office 3D</a>
-                            <a routerLink="/diagnosis" routerLinkActive="active" class="side-link">Diagnosis</a>
 
                             @if (consumerId(); as id) {
                                 <p class="side-group side-group-consumer">Consumer <span>{{ id }}</span></p>
@@ -96,8 +92,6 @@ const PAGE_LABELS: Record<string, string> = {
 
                             <p class="side-group">Governance</p>
                             <a routerLink="/declaration" routerLinkActive="active" class="side-link">Declaration</a>
-                            <a routerLink="/risk" routerLinkActive="active" class="side-link">Risk</a>
-                            <a routerLink="/audit" routerLinkActive="active" class="side-link">Audit</a>
 
                             <p class="side-group">System</p>
                             <a routerLink="/hosts" routerLinkActive="active" class="side-link">Hosts</a>
@@ -244,10 +238,7 @@ export class ShellComponent {
             { label: 'Observatory', path: '/observatory', group: 'Operate' },
             { label: 'Event stream', path: '/events', group: 'Operate' },
             { label: 'Office 3D', path: '/office', group: 'Operate' },
-            { label: 'Diagnosis', path: '/diagnosis', group: 'Operate' },
             { label: 'Declaration', path: '/declaration', group: 'Governance' },
-            { label: 'Risk', path: '/risk', group: 'Governance' },
-            { label: 'Audit', path: '/audit', group: 'Governance' },
             { label: 'Hosts', path: '/hosts', group: 'System' },
             { label: 'Registry', path: '/plugins', group: 'System' },
         ];
