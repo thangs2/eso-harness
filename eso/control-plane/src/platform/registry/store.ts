@@ -927,7 +927,7 @@ export class BunSqlPlatformStore implements PlatformStore {
 
     async createSchema(consumerId: string): Promise<string> {
         const schema = schemaNameFor(consumerId);
-        await this.sql.unsafe(`CREATE SCHEMA ${quoteSchema(schema)}`);
+        await this.sql.unsafe(`CREATE SCHEMA IF NOT EXISTS ${quoteSchema(schema)}`);
         await this.ensureKnowledgeSchema(consumerId);
         return schema;
     }

@@ -64,7 +64,7 @@ interface WorkerLane {
             <div class="stream-toolbar">
                 <span class="stream-count">{{ filtered().length }} events · {{ traceCount() }} traces</span>
                 <div class="quick-filters">
-                    <button type="button" class="chip" [class.on]="eventFilter() === 'all'" (click)="eventFilter.set('all')">All</button>
+                    <button type="button" class="chip" [class.on]="eventFilter() === 'all' && !outcomeFilter()" (click)="resetFilters()">All</button>
                     <button type="button" class="chip" [class.on]="eventFilter() === 'prompt.submitted'" (click)="eventFilter.set('prompt.submitted')">Requests</button>
                     <button type="button" class="chip" [class.on]="outcomeFilter() === 'FAIL'" (click)="outcomeFilter.set('FAIL')">Failures</button>
                 </div>
@@ -168,7 +168,7 @@ interface WorkerLane {
                                 </dl>
                             </section>
                         }
-                        <details open>
+                        <details>
                             <summary>Evidence</summary>
                             <pre>{{ evidenceText(event.evidence) }}</pre>
                         </details>
@@ -510,9 +510,21 @@ export class EventStreamPage implements OnInit, OnDestroy {
         return item === undefined || item === null || item === '' ? '—' : String(item);
     }
 
+    resetFilters(): void {
+        this.eventFilter.set('all');
+        this.outcomeFilter.set('');
+    }
+
     evidenceText(value: unknown): string {
         try {
-            return JSON.stringify(value, null, 2);
+            const source = (value && typeof value === 'object' ? { ...(value as Record<string, unknown>) } : value) as any;
+            if (source && typeof source === 'object') {
+                // BUG-31: prompt text is not stored; never re-expose it through the evidence panel.
+                for (const key of ['userQuery', 'prompt', 'requestBody']) {
+                    if (key in source) source[key] = '[redacted]';
+                }
+            }
+            return JSON.stringify(source, null, 2);
         } catch {
             return String(value);
         }

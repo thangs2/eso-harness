@@ -444,7 +444,7 @@ export class RequestDetailPage implements OnInit {
     ];
     readonly flowExpanded = signal(true);
     readonly eventQuery = signal('');
-    readonly requestId = decodeURIComponent(this.route.snapshot.paramMap.get('requestId') || '');
+    readonly requestId = signal(decodeURIComponent(this.route.snapshot.paramMap.get('requestId') || ''));
 
     readonly prompt = computed<ObservationDto | null>(() => {
         const d = this.detail();
@@ -548,6 +548,19 @@ export class RequestDetailPage implements OnInit {
     readonly fileCount = computed(() => this.detail()?.telemetry.files.length ?? 0);
 
     ngOnInit(): void {
+        // BUG-30: the id must be observed, not frozen at first render.
+        this.route.paramMap.subscribe((params) => {
+            const next = decodeURIComponent(params.get('requestId') || '');
+            if (next === this.requestId()) return;
+            this.requestId.set(next);
+            void this.load();
+        });
+        this.route.queryParamMap.subscribe((query) => {
+            const next = query.get('consumer') || 'fineso';
+            if (next === this.consumerId()) return;
+            this.consumerId.set(next);
+            void this.load();
+        });
         void this.load();
     }
 
@@ -556,7 +569,7 @@ export class RequestDetailPage implements OnInit {
         const query = this.route.snapshot.queryParamMap;
         this.consumerId.set(query.get('consumer') || 'fineso');
         try {
-            this.detail.set(await this.api.getRequestDetail(this.consumerId(), this.requestId));
+            this.detail.set(await this.api.getRequestDetail(this.consumerId(), this.requestId()));
         } catch (error) {
             this.error.set((error as { detail?: string; message?: string })?.detail || (error as Error)?.message || 'Unable to load request');
         } finally {

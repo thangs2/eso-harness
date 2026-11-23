@@ -112,7 +112,7 @@ export class BoundaryPolicyService {
         return {
             consumerId: consumer.id,
             policies: explicit ?? DEFAULT_POLICIES.map((policy) => ({ ...policy })),
-            grants: readGrants(consumer.root).filter((grant) => !grant.revokedAt),
+            grants: readGrants(consumer.root).filter((grant) => !grant.revokedAt && (!grant.expiresAt || Date.parse(grant.expiresAt) > Date.now())),
             defaults: explicit === null,
             enforcement: profile.settings?.boundaries?.enforcement === 'enforce' ? 'enforce' : 'audit',
         };
