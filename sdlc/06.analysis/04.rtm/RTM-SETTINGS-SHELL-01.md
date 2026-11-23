@@ -11,15 +11,15 @@ type: traceability-matrix
 
 | AC | SCN | endpoint | tầng | test |
 |---|---|---|---|---|
-| `AC-55-1` | `SCN-55-1` | `GET /consumers/{id}` | UI | MISSING |
-| `AC-55-2` | `SCN-55-2` · `03` | — | UI (dirty) | MISSING |
-| `AC-55-3` | `SCN-55-4` | — | UI (validate workers) | MISSING |
-| `AC-55-4` | `SCN-55-5` | migration preview | UI | MISSING |
-| `AC-55-5` | `SCN-55-6` | legacy archive | UI | MISSING |
+| `AC-55-1` | `SCN-55-1` | `GET /consumers/{id}` | UI | `qc/eso-settings-shell.test.mjs` |
+| `AC-55-2` | `SCN-55-2` · `03` | — | UI (dirty) | `qc/eso-settings-shell.test.mjs` |
+| `AC-55-3` | `SCN-55-4` | — | UI (validate workers) | `qc/eso-settings-shell.test.mjs` |
+| `AC-55-4` | `SCN-55-5` | migration preview | UI | `qc/eso-settings-shell.test.mjs` |
+| `AC-55-5` | `SCN-55-6` | legacy archive | UI | `qc/eso-settings-shell.test.mjs` |
 
 ## Coverage
 
 | | |
 |---|---|
 | `AC` có ≥1 `SCN` | **5/5** |
-| `AC` có test chạy được | **0/5** — `OPEN-SETTINGS-SHELL-TEST` |
+| `AC` có test chạy được | **5/5** — source-invariant |

@@ -20,4 +20,4 @@ type: traceability-matrix
 | | |
 |---|---|
 | `AC` có ≥1 `SCN` | **3/3** |
-| `AC` có test chạy được | **3/3** |
+| `AC` có test chạy được | **0/3** — file tồn tại nhưng `node --test` **fail** (`Cannot find module .../client.js`); xem [`12.test-runnability`](../../02.governance/02.records/12.test-runnability.md) |

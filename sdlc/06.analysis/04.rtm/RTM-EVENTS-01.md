@@ -11,16 +11,16 @@ type: traceability-matrix
 
 | AC | SCN | endpoint | bảng | test |
 |---|---|---|---|---|
-| `AC-53-1` | `SCN-53-1` · `02` | `GET /consumers` · `GET .../observations?limit=500` | `platform.consumer` · `knowledge_observation` | MISSING |
-| `AC-53-2` | `SCN-53-3…05` | client filter | — | MISSING |
-| `AC-53-3` | `SCN-53-6` · `07` | `GET .../observations` | `knowledge_observation` | MISSING |
-| `AC-53-4` | `SCN-53-8` | — | — | MISSING |
-| `AC-53-5` | `SCN-53-9` | `GET .../observations/stream` (SSE) | `knowledge_observation` | MISSING |
-| `AC-53-6` | `SCN-53-10` | — | — | MISSING |
+| `AC-53-1` | `SCN-53-1` · `02` | `GET /consumers` · `GET .../observations?limit=500` | `knowledge_observation` | `qc/eso-events-ui.test.mjs` (source-invariant) |
+| `AC-53-2` | `SCN-53-3…05` | client filter | — | `qc/eso-events-ui.test.mjs` |
+| `AC-53-3` | `SCN-53-6` · `07` | `GET .../observations` | `knowledge_observation` | `qc/eso-events-ui.test.mjs` |
+| `AC-53-4` | `SCN-53-8` | — | — | `qc/eso-events-ui.test.mjs` |
+| `AC-53-5` | `SCN-53-9` | `GET .../observations/stream` (SSE) | `knowledge_observation` | `qc/eso-events-ui.test.mjs` |
+| `AC-53-6` | `SCN-53-10` | — | — | `qc/eso-events-ui.test.mjs` |
 
 ## Coverage
 
 | | |
 |---|---|
 | `AC` có ≥1 `SCN` | **6/6** |
-| `AC` có test chạy được | **0/6** — `OPEN-EVENTS-UI-TEST` |
+| `AC` có test chạy được | **6/6** — source-invariant (`node --test` xanh) |
