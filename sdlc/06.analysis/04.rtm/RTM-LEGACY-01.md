@@ -20,7 +20,7 @@ type: traceability-matrix
 | `AC-01-3` | `SCN-01-3` | — | MISSING |
 | `AC-01-4` | `SCN-01-4` | — | MISSING |
 | `AC-03-1` | `SCN-03-1` | — | `eso/control-plane/test/consumer.test.ts` |
-| `AC-03-2` | `SCN-03-2` | — | MISSING |
+| `AC-03-2` | `SCN-03-2` | — | `eso/control-plane/test/consumer.test.ts` |
 | `AC-03-3` | `SCN-03-3` | — | MISSING |
 | `AC-07-1` | `SCN-07-1` | — | `eso/control-plane/test/lifecycle.test.ts` |
 | `AC-07-2` | `SCN-07-2` | — | MISSING |
@@ -29,8 +29,8 @@ type: traceability-matrix
 | `AC-08-2` | `SCN-08-2` | — | MISSING |
 | `AC-08-3` | `SCN-08-3` | — | MISSING |
 | `AC-09-1` | `SCN-09-1` | — | `eso/control-plane/test/lifecycle.test.ts` |
-| `AC-09-2` | `SCN-09-2` | — | MISSING |
-| `AC-09-3` | `SCN-09-3` | — | MISSING |
+| `AC-09-2` | `SCN-09-2` | — | `eso/control-plane/test/purge.test.ts` |
+| `AC-09-3` | `SCN-09-3` | — | `eso/control-plane/test/purge.test.ts` |
 | `AC-10-1` | `SCN-10-1` | — | `eso/control-plane/test/profile.test.ts` |
 | `AC-10-2` | `SCN-10-2` | — | MISSING |
 | `AC-10-3` | `SCN-10-3` | — | MISSING |
@@ -122,8 +122,8 @@ type: traceability-matrix
 | `AC-39-2` | `SCN-39-2` | — | MISSING |
 | `AC-39-3` | `SCN-39-3` | — | MISSING |
 | `AC-40-1` | `SCN-40-1` | — | `eso/control-plane/test/provisioning-schema.test.ts` |
-| `AC-40-2` | `SCN-40-2` | — | MISSING |
-| `AC-40-3` | `SCN-40-3` | — | MISSING |
+| `AC-40-2` | `SCN-40-2` | — | `eso/control-plane/test/provisioning-state.test.ts` |
+| `AC-40-3` | `SCN-40-3` | — | `eso/control-plane/test/provisioning-api.test.ts` |
 | `AC-41-1` | `SCN-41-1` | — | MISSING |
 | `AC-41-2` | `SCN-41-2` | — | MISSING |
 | `AC-41-3` | `SCN-41-3` | — | MISSING |
