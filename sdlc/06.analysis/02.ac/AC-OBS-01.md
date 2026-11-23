@@ -15,10 +15,10 @@ type: acceptance-criteria
 
 | AC | Loại | Given (trước) | When (hành động) | Then (mong đợi) | Sau (postcondition) | Test chứng minh | Không kiểm |
 |---|---|---|---|---|---|---|---|
-| `AC-OBS-01-01` | happy | 2 consumer tồn tại; URL không có `?consumer` | mở `/observatory` | hiện consumer **đầu tiên**; URL được ghi `?consumer=<id>` | URL khớp consumer đang hiện; không có request ghi | qc/eso-observatory-context.test.mjs *(planned)* + manual | không kiểm thứ tự sắp xếp của danh sách consumer |
+| `AC-OBS-01-01` | happy | 2 consumer tồn tại; URL không có `?consumer` | mở `/observatory` | hiện consumer **đầu tiên**; URL **không** bị ghi (chỉ ghi khi đổi select) | URL khớp consumer đang hiện; không có request ghi | qc/eso-observatory-context.test.mjs *(planned)* + manual | không kiểm thứ tự sắp xếp của danh sách consumer |
 | `AC-OBS-01-02` | failure | URL có `?consumer=khong-ton-tai` | mở trang | hiện lỗi `OBS_CONSUMER_UNKNOWN` (mã + message); **không** tự đổi sang consumer khác | URL giữ nguyên id sai; không tải dữ liệu consumer khác | qc/eso-observatory-context.test.mjs *(planned)* | không kiểm id sai định dạng (thuộc API) |
 | `AC-OBS-01-03` | happy · edge · failure | 500 observation có 3 trace, 7 `prompt.submitted`, 2 `FAIL`, 1 `BLOCKED`; (a) 0 observation; (b) endpoint lỗi 500 | tải trang ở 3 tình huống | 500/3/**7**/3 + Last `at` lớn nhất, nhãn nêu nguồn; (a) 5 KPI = 0 **kèm empty state**; (b) `OBS_UPSTREAM_FAILED`, **không** hiện 0 | lỗi không bị nuốt thành empty; KPI không đổi khi hover/scroll | qc/eso-observatory-kpi.test.mjs *(planned)* | không kiểm lệch múi giờ của `at` · retry policy |
-| `AC-OBS-01-04` | happy · edge | consumer có flow default (3 worker) + 1 flow draft; (a) chưa có flow published | tải trang | chỉ vẽ flow default (3 node), 2 view dùng **cùng** node/cạnh; (a) `OBS_FLOW_MISSING` (empty), phần còn lại vẫn tải | không có node của flow draft | qc/eso-observatory-graph.test.mjs *(planned)* | không kiểm vị trí pixel · flow published nhưng 0 node |
+| `AC-OBS-01-04` | happy · edge | consumer có flow default (3 worker) + 1 flow draft; (a) chưa có flow published | tải trang | flow default nếu có, ngược lại published mới nhất, ngược lại `flows[0]`; 2 view dùng **cùng** node/cạnh; (a) text `No published flow for this consumer.` (không phát mãy), phần còn lại vẫn tải | không có node của flow draft | qc/eso-observatory-graph.test.mjs *(planned)* | không kiểm vị trí pixel · flow published nhưng 0 node |
 | `AC-OBS-01-05` | happy · edge · failure | trace `T1` có 4 event; có trace khác chứa chuỗi "deploy" | (1) nhập đúng `T1`; (2) nhập "deploy"; (3) nhập "zzz"; (4) nhập rỗng | (1) phát 4 event; (2) khớp trace đầu tiên chứa chuỗi; (3) `OBS_TRACE_NOT_MATCHED`; (4) `OBS_QUERY_EMPTY` | phát xong tự dừng; `Stop` dừng ngay | qc/eso-observatory-pulse.test.mjs *(planned)* | không kiểm tốc độ thực tế (450 ms) |
 | `AC-OBS-01-06` | happy · edge | 120 request, 3 host, 40 prompt con | lọc theo host + bật `Failures only` + sang trang 2 + expand 1 trace | đúng tập lọc; trang 2 hiện dòng 51–100; expand hiện prompt con `source ≠ agent` | bộ lọc giữ khi đổi trang | qc/eso-observatory-grid.test.mjs *(planned)* | không kiểm nội dung prompt body (bị cấm hiện) |
 | `AC-OBS-01-07` | failure · rbac | (a) API trả 500; (b) phiên hết hạn (401); (c) consumer bị từ chối (403) | tải trang | (a) `OBS_UPSTREAM_FAILED`; (b) (c) `OBS_DENIED` — luôn **mã + message** | không màn trắng, không lỗi thô | qc/eso-observatory-errors.test.mjs *(planned)* | không kiểm nội dung message của server |
@@ -28,10 +28,10 @@ type: acceptance-criteria
 
 ## 2. Postconditions
 
-- `AC-OBS-01-01` → URL mang `?consumer=`; không có write.
+- `AC-OBS-01-01` → consumer đầu tiên được nạp; URL **không** đổi khi mở trang.
 - `AC-OBS-01-02` → URL giữ id sai; không có dữ liệu của consumer khác được nạp.
 - `AC-OBS-01-03` → không có state KPI bị ghi đè bởi lần tải lỗi.
-- `AC-OBS-01-04` → graph phản ánh **đúng** flow đã publish; không có node "mồ côi".
+- `AC-OBS-01-04` → graph dùng flow đã chọn theo thứ tự default → published mới nhất → `flows[0]`; flow rỗng render text (không mã).
 - `AC-OBS-01-05` → timer bị clear; không có interval sống sau khi rời trang.
 - `AC-OBS-01-06` → bộ lọc + vị trí trang không mất khi expand.
 - `AC-OBS-01-07` → mọi lỗi đi qua một đường hiển thị duy nhất có mã.
@@ -46,7 +46,7 @@ type: acceptance-criteria
 | L3 UI | 8 AC ở trên, cùng network log cho `AC-OBS-01-08` |
 | L4 smoke | mở `/observatory` trên consumer thật, chụp 6 trạng thái (⑦ §11) |
 
-**Chưa có test nào** — 6 file dự kiến nằm trong `qc/` (⑥ sẽ tạo; X10 chặn tới khi có).
+**Chưa có test nào** — **7** file dự kiến trong `qc/` (đều **chưa tồn tại**; reverify 2026-11-23 xác nhận): `context`, `kpi`, `graph`, `pulse`, `grid`, `errors`, `readonly`.
 
 ## 4. AC này **không** kiểm
 
