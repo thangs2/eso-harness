@@ -1,0 +1,25 @@
+---
+sot_doc_version: "0.1.0"
+source_of_truth: "sdlc/06.analysis/03.scn/SCN-55.md"
+status: DRAFT
+phase: 1
+id: RTM-SETTINGS-SHELL-01
+type: traceability-matrix
+---
+
+# RTM-SETTINGS-SHELL-01 — shell `settings`
+
+| AC | SCN | endpoint | tầng | test |
+|---|---|---|---|---|
+| `AC-55-1` | `SCN-55-1` | `GET /consumers/{id}` | UI | MISSING |
+| `AC-55-2` | `SCN-55-2` · `03` | — | UI (dirty) | MISSING |
+| `AC-55-3` | `SCN-55-4` | — | UI (validate workers) | MISSING |
+| `AC-55-4` | `SCN-55-5` | migration preview | UI | MISSING |
+| `AC-55-5` | `SCN-55-6` | legacy archive | UI | MISSING |
+
+## Coverage
+
+| | |
+|---|---|
+| `AC` có ≥1 `SCN` | **5/5** |
+| `AC` có test chạy được | **0/5** — `OPEN-SETTINGS-SHELL-TEST` |
