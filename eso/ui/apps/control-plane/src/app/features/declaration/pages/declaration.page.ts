@@ -1,6 +1,6 @@
 import { Component, ChangeDetectionStrategy, signal, computed, inject } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
-import { CONTROL_PLANE_API_CLIENT } from '../../../../core/tokens.js';
+import { CONTROL_PLANE_API_CLIENT } from '../../../core/tokens.js';
 import { StateFrameComponent } from '../../../shared/state-frame/state-frame.component.js';
 import type { DeclarationPreview } from '../models/declaration.model.js';
 
@@ -75,7 +75,7 @@ export class DeclarationPage {
         if (!this.api) { this.error.set('API client unavailable'); return; }
         try {
             const preview = await this.api.previewConfig(this.consumerId);
-            this.preview.set(preview);
+            this.preview.set({ hash: preview.hash, items: [], impactSummary: preview.impactSummary || 'No impact warnings' });
         } catch (error) {
             this.error.set((error as Error)?.message || 'Unable to preview configuration');
         }

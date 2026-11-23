@@ -126,7 +126,7 @@ export class ControlPlaneApiClient {
             throw new Error(`Preview failed with status ${res.status}`);
         }
         const body = await res.json() as { hash: string; config: Record<string, unknown> };
-        return { hash: body.hash, items: [], impactSummary: 'No impact warnings' } as ConfigPreviewDto;
+        return { hash: body.hash, config: body.config, impactSummary: 'No impact warnings' };
     }
 
     async saveConfig(consumerId: string, config: Record<string, unknown>, hash: string): Promise<{ success: boolean; hash: string }> {
