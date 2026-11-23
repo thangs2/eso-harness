@@ -40,9 +40,9 @@ type: traceability-matrix
 | `AC-12-1` | `SCN-12-1` | — | `eso/control-plane/test/isolation.test.ts` |
 | `AC-12-2` | `SCN-12-2` | — | MISSING |
 | `AC-12-3` | `SCN-12-3` | — | MISSING |
-| `AC-13-1` | `SCN-13-1` | — | `eso/control-plane/test/isolation.test.ts` |
-| `AC-13-2` | `SCN-13-2` | — | MISSING |
-| `AC-13-3` | `SCN-13-3` | — | MISSING |
+| `AC-13-1` | `SCN-13-1` | — | `eso/control-plane/test/isolation-ac13.test.ts` |
+| `AC-13-2` | `SCN-13-2` | — | `eso/control-plane/test/isolation-ac13.test.ts` |
+| `AC-13-3` | `SCN-13-3` | — | `eso/control-plane/test/isolation-ac13.test.ts` |
 | `AC-14-1` | `SCN-14-1` | — | `eso/control-plane/test/event-read.test.ts` |
 | `AC-14-2` | `SCN-14-2` | — | `eso/control-plane/test/audit-write.test.ts` |
 | `AC-14-3` | `SCN-14-3` | — | `eso/control-plane/test/event-read.test.ts` |
