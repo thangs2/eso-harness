@@ -53,17 +53,22 @@ const x11 = () => {
     const cited = [];
     const dead = [];
     const tombstoned = [];
+    // Dòng mô tả một đường dẫn ĐÃ MẤT (audit finding, lịch sử xoá) không phải claim "đang tồn tại".
+    const ABSENT = /không tồn tại|đã (bị )?xoá|bị xoá|deleted|removed|missing|không còn|không có file|revert/i;
     const token = /`((?:eso|sdlc|agents|scripts|tools|qc|host-runtime|deploy)\/[^`\s]+\.[a-z0-9]+)`/g;
-    for (const file of walk(SDLC)) {
-        const text = readFileSync(file, 'utf8');
-        for (const m of text.matchAll(token)) {
-            const path = m[1];
-            if (path.includes('<') || path.includes('>') || path.includes('*') || path.includes('..')) continue;
-            cited.push(path);
-            if (existsSync(join(ROOT, path))) continue;
-            const tomb = TOMBSTONES.find((t) => path === t.prefix.replace(/\/$/, '') || path.startsWith(t.prefix));
-            if (tomb) { tombstoned.push({ path, why: tomb.why }); continue; }
-            dead.push({ file: relative(ROOT, file), path });
+    for (const file of walk(SDLC).filter((f) => f.endsWith('.md'))) {
+        const lines = readFileSync(file, 'utf8').split('\n');
+        for (const line of lines) {
+            for (const m of line.matchAll(token)) {
+                const path = m[1];
+                if (path.includes('<') || path.includes('>') || path.includes('*') || path.includes('..')) continue;
+                cited.push(path);
+                if (existsSync(join(ROOT, path))) continue;
+                const tomb = TOMBSTONES.find((t) => path === t.prefix.replace(/\/$/, '') || path.startsWith(t.prefix));
+                if (tomb) { tombstoned.push({ path, why: tomb.why }); continue; }
+                if (ABSENT.test(line)) { tombstoned.push({ path, why: 'dòng mô tả path đã mất' }); continue; }
+                dead.push({ file: relative(ROOT, file), path });
+            }
         }
     }
     const byPrefix = new Map();
