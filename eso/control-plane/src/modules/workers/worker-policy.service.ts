@@ -2,12 +2,25 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 
 import { assertConsumerId, type PlatformStore } from '../../platform/registry/store.js';
+import { executeFileWrite } from '../scope/domain/scope.js';
 import type { EvidenceRequirement } from './worker-file.service.js';
 
 const VERBS = new Set(['read', 'write', 'append', 'approve', 'configure', 'handoff']);
 
 function patterns(scope: string): string[] {
     return scope.split(/[,;\n]/).map((item) => item.trim()).filter(Boolean);
+}
+
+/**
+ * P6 — translate worker scope entries into the domain guard's glob language.
+ * A bare directory entry (`src`) means the whole subtree, exactly like `matchesScope` above.
+ */
+function scopeGlobs(scope: string): string[] {
+    return patterns(scope).map((pattern) => {
+        const clean = pattern.replace(/\\/g, '/').replace(/^\.\//, '').replace(/^\/+|\/+$/g, '');
+        if (!clean) return '**';
+        return clean.includes('*') ? clean : `${clean}/**`;
+    });
 }
 
 function matchesScope(pattern: string, target: string): boolean {
@@ -155,13 +168,46 @@ export class WorkerPolicyService {
             return denied;
         }
         const check = await this.check(id, workerId, { verb: 'write', path: target, evidence: action.evidence });
+
+        // P6 — the domain scope guard runs before any byte hits disk, so a refusal leaves the
+        // filesystem untouched. Same rule set as POST /consumers/:id/scope/check.
+        let refusal: { code: string; message: string } | null = null;
+        if (check.decision === 'ALLOW') {
+            const worker = await this.store.knowledgeWorker(id, workerId);
+            try {
+                executeFileWrite({
+                    allowedFiles: scopeGlobs(String(worker?.scope || '')),
+                    targetPath: rel,
+                    content: String(action.content ?? ''),
+                    writeFileFn: (path: string, content: string) => {
+                        const absolute = resolve(root, path);
+                        mkdirSync(dirname(absolute), { recursive: true });
+                        writeFileSync(absolute, content, 'utf8');
+                    },
+                });
+            } catch (error) {
+                refusal = {
+                    code: String((error as any)?.code || 'WORKER_WRITE_FAILED'),
+                    message: String((error as Error)?.message || error),
+                };
+            }
+        }
+
+        const reasons = refusal ? [...check.reasons, refusal.code] : check.reasons;
+        const decision = refusal ? 'DENY' : check.decision;
         await this.store.recordWorkerEvent(id, {
             workerId, event: 'write', verb: 'write', path: rel,
-            decision: check.decision, reasons: check.reasons, evidence: check.action?.evidence || [],
+            decision, reasons, evidence: check.action?.evidence || [],
         });
-        if (check.decision !== 'ALLOW') return { ...check, target: rel };
-        mkdirSync(dirname(target), { recursive: true });
-        writeFileSync(target, String(action.content ?? ''), 'utf8');
+        if (decision !== 'ALLOW') {
+            return {
+                ...check,
+                decision,
+                reasons,
+                target: rel,
+                ...(refusal ? { code: refusal.code, detail: refusal.message } : {}),
+            };
+        }
         return { ...check, target: rel, written: true };
     }
 

@@ -6,6 +6,7 @@
  */
 import { judgeSufficiency } from '../../../../core/src/judge.mjs';
 import { formatGapReport } from '../../../../core/src/gaps.mjs';
+import { evaluateRoleSufficiency } from '../../../../iam/src/role.mjs';
 
 import { fail } from '../../platform/registry/errors.js';
 import { assertConsumerId, type PlatformStore } from '../../platform/registry/store.js';
@@ -16,6 +17,10 @@ export interface VerdictRequest {
     answers?: unknown[] | Record<string, unknown>;
     host?: Record<string, unknown>;
     actor?: Record<string, unknown>;
+    /** Optional role definition (name + bar). `request.actor.role` wins when both are present. */
+    role?: Record<string, unknown>;
+    /** Evidence used to decide role sufficiency. Defaults to actor.evidence / []. */
+    roleEvidence?: unknown[];
     flowId?: string;
     workerId?: string;
     intent?: string;
@@ -30,6 +35,8 @@ export interface VerdictResponse {
     intent: string | null;
     enforcement: 'shadow' | 'enforce';
     actor: Record<string, unknown>;
+    /** Per-actor sufficiency (P4/P6). Present when a role or an explicit actor is supplied. */
+    role_sufficiency: Record<string, any> | null;
     verdict: Record<string, any>;
     gaps: Record<string, any>;
     wouldBlock: boolean;
@@ -60,6 +67,77 @@ function gapsFor(verdict: any): Record<string, any> {
     }
 }
 
+/** P6 — resolve a usable role definition from the request/actor. */
+function roleDefinition(request: VerdictRequest, actor: Record<string, any>): Record<string, any> | null {
+    const candidates = [request.role, (request.actor as any)?.role, actor.role];
+    for (const candidate of candidates) {
+        if (candidate && typeof candidate === 'object' && Array.isArray((candidate as any).bar)) {
+            return candidate as Record<string, any>;
+        }
+    }
+    return null;
+}
+
+/** P6 — a role named without a bar (bare string / `{name}`) has identity but sufficiency cannot be judged. */
+function roleName(request: VerdictRequest, actor: Record<string, any>): string | null {
+    const candidates = [request.role, (request.actor as any)?.role, actor.role];
+    for (const candidate of candidates) {
+        if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
+        if (candidate && typeof candidate === 'object' && typeof (candidate as any).name === 'string' && (candidate as any).name.trim()) {
+            return String((candidate as any).name).trim();
+        }
+    }
+    return null;
+}
+
+function roleEvidenceFor(request: VerdictRequest, actor: Record<string, any>): unknown[] {
+    if (Array.isArray(request.roleEvidence)) return request.roleEvidence;
+    if (Array.isArray((request.actor as any)?.evidence)) return (request.actor as any).evidence;
+    if (Array.isArray(actor.evidence)) return actor.evidence;
+    return [];
+}
+
+const LEVEL_RANK: Record<string, number> = {
+    'cannot-judge': 0,
+    insufficient: 1,
+    partial: 2,
+    unsurfaced: 3,
+    sufficient: 4,
+};
+
+/**
+ * P4/P6 — role evidence that is not SUFFICIENT must never leave a `sufficient` verdict standing.
+ * The gap entry names the role deficits so the caller sees what is missing, not just "blocked".
+ */
+function applyRoleDowngrade(verdict: Record<string, any>, roleSufficiency: Record<string, any>, identity: string | null): void {
+    const deficits: any[] = Array.isArray(roleSufficiency.deficits) ? roleSufficiency.deficits : [];
+    const unknownActor = roleSufficiency.code === 'UNKNOWN_ACTOR';
+    const targetLevel = unknownActor ? 'cannot-judge' : 'insufficient';
+
+    if ((LEVEL_RANK[verdict.level] ?? 0) > (LEVEL_RANK[targetLevel] ?? 0)) verdict.level = targetLevel;
+    if (verdict.mode === 'permitted' || verdict.mode === 'do') verdict.mode = 'ask';
+    verdict.cannot_judge_reason = verdict.cannot_judge_reason ?? (unknownActor ? 'unknown_actor' : 'role_insufficient');
+    verdict.assurance = 'DEGRADED';
+
+    const deficitSummary = deficits
+        .map((deficit) => `${deficit.evidence_kind}:${deficit.reason}`)
+        .join(', ');
+
+    verdict.gaps = Array.isArray(verdict.gaps) ? verdict.gaps : [];
+    verdict.gaps.push({
+        what: `role:${roleSufficiency.role || identity || 'unknown'}`,
+        source: 'bar',
+        exists: unknownActor ? 'unknown' : 'absent',
+        where_hint: unknownActor ? 'actor không khai role/bar nên không chấm được per-actor' : `role bar thiếu: ${deficitSummary || 'không rõ'}`,
+        min_basis: deficits[0]?.required_basis ?? 'declared',
+        actual_basis: deficits[0]?.actual_basis ?? 'none',
+        dangling_source: false,
+        code: unknownActor ? 'UNKNOWN_ACTOR' : 'ROLE_INSUFFICIENT',
+        role: roleSufficiency.role ?? identity ?? null,
+        deficits,
+    });
+}
+
 export class JudgmentService {
     constructor(private readonly store: PlatformStore) {}
 
@@ -87,6 +165,21 @@ export class JudgmentService {
             fail('INVALID_STATE', error instanceof Error ? error.message : String(error));
         }
 
+        // P4/P6 — per-actor sufficiency. A role (or an explicitly declared actor) makes the verdict
+        // actor-scoped; roles that cannot prove their bar never leave `sufficient` standing.
+        const role = roleDefinition(request, actor);
+        const identity = role ? null : roleName(request, actor);
+        const actorDeclared = Boolean(request.actor && typeof request.actor === 'object');
+        let roleSufficiency: Record<string, any> | null = null;
+        if (role || identity || actorDeclared) {
+            roleSufficiency = evaluateRoleSufficiency({
+                role: role ?? (identity ? { name: identity } : undefined),
+                evidence: roleEvidenceFor(request, actor),
+            });
+            verdict.role_sufficiency = roleSufficiency;
+            if (roleSufficiency.level !== 'SUFFICIENT') applyRoleDowngrade(verdict, roleSufficiency, identity);
+        }
+
         // AC P2-5: cannot-judge never becomes allow/permitted.
         if (verdict.level === 'cannot-judge' && verdict.mode === 'permitted') verdict.mode = 'block';
         if (verdict.level === 'cannot-judge') verdict.mode = 'block';
@@ -100,6 +193,7 @@ export class JudgmentService {
             intent: request.intent ?? null,
             enforcement,
             actor,
+            role_sufficiency: roleSufficiency,
             verdict,
             gaps: gapsFor(verdict),
             wouldBlock,

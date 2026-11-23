@@ -59,6 +59,7 @@ import { InventoryService } from '../../modules/inventory/inventory.service.js';
 import { SufficiencyService } from '../../modules/sufficiency/sufficiency.service.js';
 import { WorkerPolicyService } from '../../modules/workers/worker-policy.service.js';
 import { WorkerImportService } from '../../modules/workers/worker-import.service.js';
+import { ScopeService } from '../../modules/scope/scope.service.js';
 import { RuleFileService } from '../../modules/rules/rule-file.service.js';
 import { FlowFileService } from '../../modules/flows/flow-file.service.js';
 import { FlowProposalService } from '../../modules/flows/flow-proposal.service.js';
@@ -151,6 +152,7 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
     const sufficiency = new SufficiencyService(store, inventory);
     const workerPolicy = new WorkerPolicyService(store);
     const workerImport = new WorkerImportService(workerFiles);
+    const scope = new ScopeService(store);
     const ruleFiles = new RuleFileService(store);
     const flowFiles = new FlowFileService(store, workerFiles);
     const flowProposal = new FlowProposalService(store, workerFiles, flowFiles);
@@ -728,6 +730,16 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
         return judgment.evaluate((request.params as any).id, (request.body as any) ?? {}, (request as any).actor);
     });
 
+    // P6 — per-actor file-write scope. Same domain guard the worker write path enforces.
+    app.post('/api/v1/consumers/:id/scope/check', { preHandler: requireAuth }, async (request) => {
+        const body = (request.body || {}) as any;
+        return scope.check((request.params as any).id, {
+            allowedFiles: body.allowedFiles,
+            target: body.target,
+            emptyScope: body.emptyScope === true,
+        });
+    });
+
     app.get('/api/v1/consumers/:id/boundaries', { preHandler: requireAuth }, async (request) => {
         return boundaries.get((request.params as any).id);
     });
@@ -813,6 +825,9 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
             limit: body.limit,
             graphDepth: body.graphDepth,
             weights: body.weights,
+            tier: body.tier,
+            budgetTokens: body.budgetTokens,
+            context: body.context,
         });
     });
 
@@ -822,6 +837,9 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
             type: q?.type,
             status: q?.status,
             limit: Number(q?.limit) || 20,
+            tier: q?.tier,
+            budgetTokens: q?.budgetTokens,
+            context: q?.context ? (() => { try { return JSON.parse(String(q.context)); } catch { return undefined; } })() : undefined,
         });
     });
 
