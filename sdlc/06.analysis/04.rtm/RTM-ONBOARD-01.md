@@ -11,13 +11,13 @@ type: traceability-matrix
 
 | AC | SCN | endpoint | bảng | test |
 |---|---|---|---|---|
-| `AC-39-1` | `SCN-39-1` | `GET /consumers` | `platform.consumer` | `eso/ui/test/onboarding.test.mjs:16` |
-| `AC-39-2` | `SCN-39-2` | `GET /consumers` | — | `:75` |
-| `AC-39-3` | `SCN-39-3` | `POST .../provision` | `platform.consumer` | `:111` |
+| `AC-39-1` | `SCN-39-1` | `GET /consumers` | `platform.consumer` | `qc/eso-onboarding-ui.test.mjs` (source-invariant; file `eso/ui/test/onboarding.test.mjs` **fail** — xem `12.test-runnability`) |
+| `AC-39-2` | `SCN-39-2` | `GET /consumers` | — | `qc/eso-onboarding-ui.test.mjs` |
+| `AC-39-3` | `SCN-39-3` | `POST .../provision` | `platform.consumer` | `qc/eso-onboarding-ui.test.mjs` |
 
 ## Coverage
 
 | | |
 |---|---|
 | `AC` có ≥1 `SCN` | **3/3** |
-| `AC` có test chạy được | **0/3** — file tồn tại nhưng `node --test` **fail** (`Cannot find module .../client.js`); xem [`12.test-runnability`](../../02.governance/02.records/12.test-runnability.md) |
+| `AC` có test chạy được | **3/3** — bằng source-invariant mới; file UI cũ vẫn fail (đã ghi nhận) |

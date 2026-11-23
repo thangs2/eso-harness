@@ -28,3 +28,9 @@ test('AC-54-5 · 3 model tier + reported by host', () => {
     assert.match(PAGE, /MODEL_TIERS[^=]*=\s*\[[^\]]*fast[^\]]*balanced[^\]]*reasoning/);
     assert.match(PAGE, /Models are reported by the host runtime/);
 });
+
+test('AC-54-6 · lỗi load/save/heartbeat hiện message (kể cả response thiếu)', () => {
+    assert.match(PAGE, /Could not load hosts/);
+    assert.match(PAGE, /Could not record heartbeat/);
+    assert.match(PAGE, /Heartbeat response missing for/);
+});

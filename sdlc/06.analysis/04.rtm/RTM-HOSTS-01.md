@@ -16,11 +16,11 @@ type: traceability-matrix
 | `AC-54-3` | `SCN-54-4` | `PUT /hosts/{hostId}` · `PUT /hosts/{hostId}/runtimes/{runtimeId}` | `platform.host_runtime` | `qc/eso-hosts-ui.test.mjs` |
 | `AC-54-4` | `SCN-54-5` | `POST /hosts/{hostId}/runtimes/{runtimeId}/heartbeat` | `platform.host_runtime` | `qc/eso-hosts-ui.test.mjs` |
 | `AC-54-5` | `SCN-54-6` | — (dữ liệu runtime) | — | `qc/eso-hosts-ui.test.mjs` |
-| `AC-54-6` | `SCN-54-7` | — | — | MISSING |
+| `AC-54-6` | `SCN-54-7` | — | — | `qc/eso-hosts-ui.test.mjs` |
 
 ## Coverage
 
 | | |
 |---|---|
 | `AC` có ≥1 `SCN` | **6/6** |
-| `AC` có test chạy được | **5/6** — AC-54-6 còn MISSING |
+| `AC` có test chạy được | **6/6** — source-invariant |

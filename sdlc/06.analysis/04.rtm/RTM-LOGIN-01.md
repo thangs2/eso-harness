@@ -12,13 +12,13 @@ type: traceability-matrix
 | AC | SCN | endpoint | bảng | test |
 |---|---|---|---|---|
 | `AC-01-1` | `SCN-01-1` | `GET /auth/me` | — | `eso/control-plane/test/auth.test.ts` (API only) |
-| `AC-01-2` | `SCN-01-2` | — | — | **MISSING** (UI) |
-| `AC-01-3` | `SCN-01-3` | — | — | **MISSING** (UI) |
-| `AC-01-4` | `SCN-01-4` | — | — | **MISSING** (UI) |
+| `AC-01-2` | `SCN-01-2` | — | — | `qc/eso-auth.test.mjs` (source-invariant, API auth) |
+| `AC-01-3` | `SCN-01-3` | — | — | `qc/eso-auth.test.mjs` (source-invariant, API auth) |
+| `AC-01-4` | `SCN-01-4` | — | — | `qc/eso-auth.test.mjs` (source-invariant, API auth) |
 
 ## Coverage
 
 | | |
 |---|---|
 | `AC` có ≥1 `SCN` | **4/4** |
-| `AC` có test chạy được | **1/4** — test hiện có chỉ chạm `AuthService`, không chạm `login.page.ts`; `OPEN-LOGIN-UI-TEST` |
+| `AC` có test chạy được | **4/4** — `qc/eso-auth.test.mjs` (API semantics); bề mặt UI vẫn chưa có test riêng (`OPEN-LOGIN-UI-TEST`) |
