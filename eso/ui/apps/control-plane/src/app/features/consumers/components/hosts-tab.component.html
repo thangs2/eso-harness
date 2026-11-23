@@ -27,7 +27,7 @@
                                         @for (item of vm().publishedStackVersions(); track item.version) { <mat-option [value]="item.version">v{{ item.version }} · {{ item.status }}</mat-option> }
                                     </mat-select>
                                 </mat-form-field>
-                                <span class="muted">{{ vm().affectedBindings() }} vm().binding(s) will move to the target version.</span>
+                                <span class="muted">{{ vm().affectedBindings() }} binding{{ vm().affectedBindings() === 1 ? '' : 's' }} will move to the target version.</span>
                                 <div class="developer-actions"><button mat-stroked-button type="button" (click)="vm().closeBulkUpgrade()">Cancel</button><button mat-flat-button color="primary" type="button" [disabled]="!vm().bulkUpgradeTarget() || vm().affectedBindings() === 0" (click)="vm().applyBulkUpgrade()">Upgrade bindings</button></div>
                             </div>
                         }

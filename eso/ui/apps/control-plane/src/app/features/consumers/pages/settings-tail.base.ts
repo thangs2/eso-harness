@@ -345,7 +345,8 @@ protected hydrate(profile: ConsumerProfile): void {
         this.manifestFacets.set(Array.isArray(knowledge.manifest?.facets) ? knowledge.manifest.facets : this.manifestFacetOptions);
         this.manifestRelations.set(Array.isArray(knowledge.manifest?.relations) ? knowledge.manifest.relations : this.manifestRelationOptions);
         this.manifestChecks.set(Array.isArray(knowledge.manifest?.checks) ? knowledge.manifest.checks : this.manifestCheckOptions);
-        this.consent.set(prof.observation?.consent ?? true);
+        // BUG-35: no explicit consent field ⇒ OFF (was true = collect before opt-in)
+        this.consent.set(prof.observation?.consent ?? false);
         this.events.set(prof.observation?.events || ['prompt.submitted', 'turn.completed', 'tool.called']);
         const remoteVersions = this.remoteStackVersions();
         const savedVersions = remoteVersions.length > 0 ? remoteVersions : (Array.isArray(harness.stack?.versions) ? harness.stack.versions : []);

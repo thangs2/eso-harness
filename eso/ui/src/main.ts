@@ -8,11 +8,15 @@ import { ControlPlaneApiClient } from '../libs/api-client/client.js';
 
 const API_BASE = 'http://127.0.0.1:8787';
 
+/** Dev-only conveniences (prefilled operator credentials) are gated on the actual host, not a build constant. */
+const isLocalHost = (): boolean =>
+    typeof location !== 'undefined' && (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+
 bootstrapApplication(ShellComponent, {
     providers: [
         provideRouter(APP_ROUTES),
         provideAnimationsAsync(),
-        { provide: APP_CONFIG, useValue: { apiBaseUrl: API_BASE, environment: 'development' } },
+        { provide: APP_CONFIG, useValue: { apiBaseUrl: API_BASE, environment: isLocalHost() ? 'development' : 'production' } },
         {
             provide: CONTROL_PLANE_API_CLIENT,
             useFactory: () =>

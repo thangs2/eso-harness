@@ -116,7 +116,7 @@
                     </header>
                     @if (vm().ruleImportPreview(); as preview) {
                         <div class="rule-import-preview">
-                            <header><div><h4>Rule import preview</h4><p>{{ preview.candidates.length }} vm().rule(s) · {{ preview.skipped.length }} skipped</p></div><button mat-button type="button" (click)="vm().closeRuleImport()">Cancel</button></header>
+                            <header><div><h4>Rule import preview</h4><p>{{ preview.candidates.length }} rule{{ preview.candidates.length === 1 ? '' : 's' }} · {{ preview.skipped.length }} skipped</p></div><button mat-button type="button" (click)="vm().closeRuleImport()">Cancel</button></header>
                             @if (preview.candidates.length > 0) {
                                 <div class="worker-table-wrap">
                                     <table class="worker-table">
