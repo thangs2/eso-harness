@@ -28,6 +28,13 @@ import { KnowledgeMappingCheckService } from '../../modules/knowledge/knowledge-
 import { LearningService } from '../../modules/learning/learning.service.js';
 import { EvidenceScoreService } from '../../modules/evidence-score/evidence-score.service.js';
 import { EvidenceLedgerService } from '../../modules/evidence-ledger/evidence-ledger.service.js';
+import { InMemoryMemoryFactStore, MemoryService } from '../../modules/memory/memory.service.js';
+import { InMemoryTransferStore, TransferService } from '../../modules/transfer/transfer.service.js';
+import { EvidenceIngestService } from '../../modules/ingest/ingest.service.js';
+import { HarnessPackagingService } from '../../modules/harness-packaging/harness-packaging.service.js';
+import { SelfUpgradeService } from '../../modules/self-upgrade/self-upgrade.service.js';
+import { ArchQueryService } from '../../modules/arch-query/arch-query.service.js';
+import { HostSyncService } from '../../modules/host-sync/host-sync.service.js';
 import { ParityService } from '../../modules/parity/parity.service.js';
 import { TeamObservatoryService } from '../../modules/observatory/team-observatory.service.js';
 import { ProfileService } from '../../modules/profiles/profile.service.js';
@@ -445,6 +452,80 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
     });
 
     const evidenceLedger = new EvidenceLedgerService();
+
+
+    const memoryService = new MemoryService(new InMemoryMemoryFactStore());
+    const transferService = new TransferService(new InMemoryTransferStore());
+    const ingestService = new EvidenceIngestService();
+    const packagingService = new HarnessPackagingService(process.cwd());
+    const selfUpgradeService = new SelfUpgradeService(process.cwd());
+    const archQueryService = new ArchQueryService(process.cwd());
+    const hostSyncService = new HostSyncService();
+
+    app.post('/api/v1/consumers/:id/memory/facts', { preHandler: requireAuth }, async (request, reply) => {
+        return reply.code(201).send(await memoryService.propose((request.params as any).id, (request.body ?? {}) as any, (request as any).actor));
+    });
+    app.get('/api/v1/consumers/:id/memory/facts', { preHandler: requireAuth }, async (request) => {
+        return memoryService.list((request.params as any).id, (request.query as any) || {});
+    });
+    app.get('/api/v1/consumers/:id/memory/read', { preHandler: requireAuth }, async (request) => {
+        return memoryService.read((request.params as any).id, (request.query as any) || {});
+    });
+    app.get('/api/v1/consumers/:id/memory/facts/:factId', { preHandler: requireAuth }, async (request) => {
+        return memoryService.get((request.params as any).id, (request.params as any).factId);
+    });
+    app.post('/api/v1/consumers/:id/memory/facts/:factId/approve', { preHandler: requireAuth }, async (request) => {
+        return memoryService.approve((request.params as any).id, (request.params as any).factId, (request as any).actor);
+    });
+    app.post('/api/v1/consumers/:id/memory/facts/:factId/reject', { preHandler: requireAuth }, async (request) => {
+        return memoryService.reject((request.params as any).id, (request.params as any).factId, (request as any).actor, (request.body as any)?.reason);
+    });
+
+    app.post('/api/v1/consumers/:id/transfers', { preHandler: requireAuth }, async (request, reply) => {
+        return reply.code(201).send(await transferService.propose((request.params as any).id, (request.body ?? {}) as any, (request as any).actor));
+    });
+    app.get('/api/v1/consumers/:id/transfers', { preHandler: requireAuth }, async (request) => {
+        return transferService.list((request.params as any).id, (request.query as any) || {});
+    });
+    app.get('/api/v1/consumers/:id/transfers/entries', { preHandler: requireAuth }, async (request) => {
+        return transferService.entries((request.params as any).id, (request.query as any) || {});
+    });
+    app.post('/api/v1/consumers/:id/transfers/:proposalId/approve', { preHandler: requireAuth }, async (request) => {
+        return transferService.approve((request.params as any).id, (request.params as any).proposalId, (request as any).actor);
+    });
+
+    app.post('/api/v1/consumers/:id/ingest/events', { preHandler: requireAuth }, async (request, reply) => {
+        return reply.code(202).send(await ingestService.ingest((request.params as any).id, request.body ?? {}));
+    });
+    app.get('/api/v1/consumers/:id/ingest/events', { preHandler: requireAuth }, async (request) => {
+        return ingestService.records((request.params as any).id);
+    });
+
+    app.get('/api/v1/packaging/report', { preHandler: requireAuth }, async () => {
+        return packagingService.inspect();
+    });
+
+    app.get('/api/v1/self-upgrade/proposals', { preHandler: requireAuth }, async () => {
+        return selfUpgradeService.list();
+    });
+    app.post('/api/v1/self-upgrade/proposals', { preHandler: requireAuth }, async (request, reply) => {
+        return reply.code(201).send(selfUpgradeService.propose((request.body ?? {}) as any, (request as any).actor));
+    });
+    app.post('/api/v1/self-upgrade/proposals/:proposalId/approve', { preHandler: requireAuth }, async (request) => {
+        return selfUpgradeService.approve((request.params as any).proposalId, (request as any).actor);
+    });
+    app.post('/api/v1/self-upgrade/proposals/:proposalId/apply', { preHandler: requireAuth }, async (request) => {
+        return selfUpgradeService.apply((request.params as any).proposalId, (request as any).actor, (request.body as any) || undefined);
+    });
+
+    app.post('/api/v1/arch/ask', { preHandler: requireAuth }, async (request) => {
+        const answer = archQueryService.ask((request.body ?? {}) as any);
+        return archQueryService.assertContract(answer);
+    });
+
+    app.post('/api/v1/consumers/:id/hosts/sync', { preHandler: requireAuth }, async (request) => {
+        return hostSyncService.sync((request.body ?? {}) as any);
+    });
 
     app.post('/api/v1/consumers/:id/evidence', { preHandler: requireAuth }, async (request, reply) => {
         return reply.code(201).send(evidenceLedger.append((request.params as any).id, request.body ?? {}));

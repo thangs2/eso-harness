@@ -264,11 +264,17 @@ describe('AC legacy batch 3', () => {
         assert.equal(audit[0].branch, 'none');
     });
 
-    test.skip('SCN-30-3 · AC-30-3 — capability lạ ⇒ UNKNOWN_CAPABILITY', () => {
-        // BLOCKED: UNKNOWN_CAPABILITY is registered but never raised. `electCapabilityProvider`
-        // only rejects an empty capabilityKind (eso/adapters/src/election.mjs:34); an unknown kind
-        // falls through to a `none` election (:102-119), not a coded error. Registration only:
-        // eso/control-plane/src/common/errors/envelope.ts:42.
+    test('SCN-30-3 · AC-30-3 — capability lạ ⇒ UNKNOWN_CAPABILITY', async () => {
+        await assert.rejects(
+            electCapabilityProvider({
+                project: 'batch3-unknown-kind',
+                turnId: 'turn-b3-30-3',
+                capabilityKind: 'teleport',
+                host: 'cursor',
+                branches: {},
+            }),
+            (error: any) => error.code === 'UNKNOWN_CAPABILITY',
+        );
     });
 
     // ---------------------------------------------------------------------

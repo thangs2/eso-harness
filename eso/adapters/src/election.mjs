@@ -1,3 +1,4 @@
+import { assertCapabilityKind } from './capabilities.mjs';
 /**
  * @mu/eso-adapters — Capability Provider Election & Host Adaptation
  *
@@ -32,6 +33,7 @@ export async function electCapabilityProvider({
     if (!project) throw new Error('Project is required');
     if (!turnId) throw new Error('turnId is required');
     if (!capabilityKind) throw new Error('capabilityKind is required');
+    assertCapabilityKind(capabilityKind);
 
     // AC-HOST-01-08: Host not declared in matrix
     if (!KNOWN_HOSTS.includes(host)) {
