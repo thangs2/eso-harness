@@ -1,5 +1,5 @@
 ---
-sot_doc_version: "0.1.0"
+sot_doc_version: "1.0.0"
 source_of_truth: "sdlc/06.analysis/01.us/US-OBS-01.md"
 status: DRAFT
 phase: 1

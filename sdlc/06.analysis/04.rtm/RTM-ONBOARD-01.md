@@ -1,5 +1,5 @@
 ---
-sot_doc_version: "0.1.0"
+sot_doc_version: "1.0.0"
 source_of_truth: "sdlc/06.analysis/03.scn/SCN-39.md"
 status: DRAFT
 phase: 1
