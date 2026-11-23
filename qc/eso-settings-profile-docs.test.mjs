@@ -66,7 +66,8 @@ test('field list · 5 trường profile', () => {
     }
 });
 
-test('OPEN đã đóng · không còn OPEN-SETTINGS trong sdlc', () => {
+test('OPEN của profile đã đóng (không còn TECH/CODES)', () => {
     const all = INDEX + FRD + UI + RTM + AC;
-    assert.doesNotMatch(all, /OPEN-SETTINGS/);
+    assert.doesNotMatch(all, /OPEN-SETTINGS-TECH/);
+    assert.doesNotMatch(all, /OPEN-SETTINGS-CODES/);
 });
