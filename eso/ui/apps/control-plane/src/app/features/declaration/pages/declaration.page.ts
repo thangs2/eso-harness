@@ -1,4 +1,6 @@
-import { Component, ChangeDetectionStrategy, signal, computed } from '@angular/core';
+import { Component, ChangeDetectionStrategy, signal, computed, inject } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
+import { CONTROL_PLANE_API_CLIENT } from '../../../../core/tokens.js';
 import { StateFrameComponent } from '../../../shared/state-frame/state-frame.component.js';
 import type { DeclarationPreview } from '../models/declaration.model.js';
 
@@ -40,6 +42,10 @@ import type { DeclarationPreview } from '../models/declaration.model.js';
                     </section>
                 }
 
+                @if (error()) {
+                    <p class="form-error" role="alert">{{ error() }}</p>
+                }
+
                 @if (conflictError()) {
                     <div class="conflict-alert" role="alert">
                         <p>Version conflict (409): the configuration was changed by another session. Reload the preview.</p>
@@ -51,26 +57,48 @@ import type { DeclarationPreview } from '../models/declaration.model.js';
     `,
 })
 export class DeclarationPage {
+    private readonly api = inject(CONTROL_PLANE_API_CLIENT, { optional: true });
+    private readonly route = inject(ActivatedRoute);
+    private readonly consumerId = this.route.snapshot.queryParamMap.get('consumer') || 'fineso';
+
     readonly preview = signal<DeclarationPreview | null>(null);
     readonly isSaving = signal<boolean>(false);
     readonly conflictError = signal<boolean>(false);
+    readonly error = signal<string>('');
 
     readonly hasPreview = computed(() => this.preview() !== null);
     readonly canSave = computed(() => this.hasPreview() && !this.isSaving());
 
-    generatePreview(): void {
+    async generatePreview(): Promise<void> {
         this.conflictError.set(false);
-        this.preview.set({
-            hash: `cfg-${Date.now()}`,
-            items: [],
-            impactSummary: 'Project impact: Safe',
-        });
+        this.error.set('');
+        if (!this.api) { this.error.set('API client unavailable'); return; }
+        try {
+            const preview = await this.api.previewConfig(this.consumerId);
+            this.preview.set(preview);
+        } catch (error) {
+            this.error.set((error as Error)?.message || 'Unable to preview configuration');
+        }
     }
 
-    saveConfiguration(): void {
-        if (!this.canSave()) return;
+    async saveConfiguration(): Promise<void> {
+        const current = this.preview();
+        if (!this.canSave() || !current || !this.api) return;
         this.isSaving.set(true);
-        // Save logic with 409 handling
-        this.isSaving.set(false);
+        this.error.set('');
+        try {
+            const saved = await this.api.saveConfig(this.consumerId, {}, current.hash);
+            this.preview.set({ ...current, hash: saved.hash });
+        } catch (error) {
+            const message = (error as Error)?.message || 'Unable to save configuration';
+            if (message.includes('CONFIG_STALE_HASH')) {
+                this.conflictError.set(true);
+                this.preview.set(null);
+            } else {
+                this.error.set(message);
+            }
+        } finally {
+            this.isSaving.set(false);
+        }
     }
 }

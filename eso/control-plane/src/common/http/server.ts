@@ -37,6 +37,7 @@ import { SelfUpgradeService } from '../../modules/self-upgrade/self-upgrade.serv
 import { ArchQueryService } from '../../modules/arch-query/arch-query.service.js';
 import { HostSyncService } from '../../modules/host-sync/host-sync.service.js';
 import { HostProbeService } from '../../modules/host-probe/host-probe.service.js';
+import { ConsumerConfigService } from '../../modules/consumer-config/consumer-config.service.js';
 import { ParityService } from '../../modules/parity/parity.service.js';
 import { TeamObservatoryService } from '../../modules/observatory/team-observatory.service.js';
 import { ProfileService } from '../../modules/profiles/profile.service.js';
@@ -536,6 +537,15 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
     const hostSyncService = new HostSyncService();
     const hostProbeService = new HostProbeService();
     const capabilityCards = new Map<string, any>();
+    const consumerConfig = new ConsumerConfigService(store);
+
+    app.get('/api/v1/consumers/:id/config/preview', { preHandler: requireAuth }, async (request) => {
+        return consumerConfig.preview((request.params as any).id);
+    });
+
+    app.put('/api/v1/consumers/:id/config', { preHandler: requireAuth }, async (request) => {
+        return consumerConfig.save((request.params as any).id, (request.body ?? {}) as any);
+    });
 
     app.post('/api/v1/consumers/:id/hosts/:hostId/capability', { preHandler: requireAuth }, async (request, reply) => {
         const consumerId = String((request.params as any).id);

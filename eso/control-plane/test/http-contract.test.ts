@@ -111,6 +111,38 @@ describe('HTTP contract — CR-010/011 routes', () => {
         assert.equal(missing.status, 404);
     });
 
+    test('BUG-13 — config preview 200 + save stale 409 + save ok 200', async () => {
+        const { call } = await fixture();
+        // consumer must exist for config routes: register through the API with a temp root
+        const { mkdtempSync } = await import('node:fs');
+        const { tmpdir } = await import('node:os');
+        const { join } = await import('node:path');
+        const root = mkdtempSync(join(tmpdir(), 'eso-http-cfg-'));
+        const created = await call('/api/v1/consumers', {
+            method: 'POST',
+            body: JSON.stringify({ id: 'cfg-http', name: 'Cfg', root }),
+        });
+        assert.ok([201, 200].includes(created.status), `create consumer: ${created.status}`);
+
+        const preview = await call('/api/v1/consumers/cfg-http/config/preview');
+        assert.equal(preview.status, 200);
+        const body = await preview.json() as any;
+        assert.match(body.hash, /^[0-9a-f]{64}$/);
+
+        const stale = await call('/api/v1/consumers/cfg-http/config', {
+            method: 'PUT',
+            body: JSON.stringify({ hash: 'deadbeef' }),
+        });
+        assert.equal(stale.status, 409);
+
+        const ok = await call('/api/v1/consumers/cfg-http/config', {
+            method: 'PUT',
+            body: JSON.stringify({ hash: body.hash }),
+        });
+        assert.equal(ok.status, 200);
+        assert.equal((await ok.json()).ok, true);
+    });
+
     test('self-upgrade list + arch ask reachable', async () => {
         const { call } = await fixture();
         const list = await call('/api/v1/self-upgrade/proposals');

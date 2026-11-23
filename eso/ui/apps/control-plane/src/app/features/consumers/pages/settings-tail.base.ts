@@ -273,7 +273,10 @@ save(navigateAfter = false): void {
                 this.clearDraft();
                 this.hydrate(updated);
                 this.saved.set(true);
-                setTimeout(() => {
+                if (this.baselineTimer !== null) clearTimeout(this.baselineTimer);
+                this.baselineTimer = setTimeout(() => {
+                    this.baselineTimer = null;
+                    if (this.destroyed) return;
                     this.lastSaved.set(this.currentDraft());
                     this.lastDraftBaseline.set(JSON.stringify(this.draftSnapshot()));
                     this.baselineReady.set(true);
@@ -405,7 +408,10 @@ protected hydrate(profile: ConsumerProfile): void {
         this.plugins.set([...savedPlugins, ...discoveredProviders]);
         this.restoreDraft();
                 this.hydrated.set(true);
-        setTimeout(() => {
+        if (this.baselineTimer !== null) clearTimeout(this.baselineTimer);
+        this.baselineTimer = setTimeout(() => {
+            this.baselineTimer = null;
+            if (this.destroyed) return;
             this.lastSaved.set(this.currentDraft());
             this.lastDraftBaseline.set(JSON.stringify(this.draftSnapshot()));
             this.baselineReady.set(true);
@@ -419,6 +425,15 @@ protected hydrate(profile: ConsumerProfile): void {
     }
 
 private draftTimer: ReturnType<typeof setTimeout> | null = null;
+    private baselineTimer: ReturnType<typeof setTimeout> | null = null;
+    private destroyed = false;
+
+    /** BUG-43: no pending timer may write a signal/draft after the page is gone. */
+    ngOnDestroy(): void {
+        this.destroyed = true;
+        if (this.draftTimer !== null) { clearTimeout(this.draftTimer); this.draftTimer = null; }
+        if (this.baselineTimer !== null) { clearTimeout(this.baselineTimer); this.baselineTimer = null; }
+    }
 
 /** Snapshot of the last hydrated/saved form, so only real edits are persisted as a draft. */
 private readonly lastDraftBaseline = signal<string | null>(null);

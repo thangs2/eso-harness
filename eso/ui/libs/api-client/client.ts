@@ -116,8 +116,8 @@ export class ControlPlaneApiClient {
         return { html, status: res.status };
     }
 
-    async previewConfig(project: string): Promise<ConfigPreviewDto> {
-        const url = `${this.baseUrl}/api/config/preview?project=${encodeURIComponent(project)}`;
+    async previewConfig(consumerId: string): Promise<ConfigPreviewDto> {
+        const url = `${this.baseUrl}/api/v1/consumers/${encodeURIComponent(consumerId)}/config/preview`;
         const res = await fetch(url, {
             method: 'GET',
             headers: this.getHeaders(),
@@ -125,18 +125,19 @@ export class ControlPlaneApiClient {
         if (!res.ok) {
             throw new Error(`Preview failed with status ${res.status}`);
         }
-        return await res.json() as ConfigPreviewDto;
+        const body = await res.json() as { hash: string; config: Record<string, unknown> };
+        return { hash: body.hash, items: [], impactSummary: 'No impact warnings' } as ConfigPreviewDto;
     }
 
-    async saveConfig(project: string, config: Record<string, unknown>, hash: string): Promise<{ success: boolean; hash: string }> {
-        const url = `${this.baseUrl}/api/config/save`;
+    async saveConfig(consumerId: string, config: Record<string, unknown>, hash: string): Promise<{ success: boolean; hash: string }> {
+        const url = `${this.baseUrl}/api/v1/consumers/${encodeURIComponent(consumerId)}/config`;
         const res = await fetch(url, {
-            method: 'POST',
+            method: 'PUT',
             headers: {
                 ...this.getHeaders(),
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ project, config, hash }),
+            body: JSON.stringify({ hash, ...(Object.keys(config || {}).length ? { config } : {}) }),
         });
         if (!res.ok) {
             if (res.status === 409) {
