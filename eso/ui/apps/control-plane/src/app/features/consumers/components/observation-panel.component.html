@@ -37,7 +37,7 @@
         </header>
 
         <div class="kpis">
-            <div class="kpi"><span>Observations</span><strong>{{ observations().length }}</strong><small>{{ observationTraceCount() }} traces</small></div>
+            <div class="kpi"><span>Observations</span><strong>{{ observations().length }}</strong><small>{{ observationTraceCount() }} traces · latest {{ observationLimit }}</small></div>
             <div class="kpi"><span>Hosts</span><strong>{{ observationHostCount() }}</strong><small>{{ observationWorkerCount() }} workers</small></div>
             <div class="kpi"><span>Last evidence</span><strong>{{ lastObservationAt() || '—' }}</strong><small>host-reported</small></div>
             <div class="kpi"><span>Gate</span><strong>unknown ≠ absent</strong><small>cannot-judge blocks</small></div>
@@ -72,7 +72,7 @@
 
         <section class="panel timeline-panel" aria-label="Observation timeline">
             <header class="panel-head">
-                <div><h3>Observation timeline</h3><p>Host-reported observations. ESO stores and displays them only.</p></div>
+                <div><h3>Observation timeline</h3><p>Host-reported observations. ESO stores and displays them only. Newest {{ observationLimit }} rows only; older rows are not paginated.</p></div>
                 <button mat-stroked-button type="button" [disabled]="observationsLoading()" (click)="refreshObservations()">{{ observationsLoading() ? 'Refreshing…' : 'Refresh' }}</button>
             </header>
             @if (observationsError(); as message) { <p class="form-error" role="alert">{{ message }}</p> }

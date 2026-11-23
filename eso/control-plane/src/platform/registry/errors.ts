@@ -28,6 +28,9 @@ export const ERROR_STATUS: Readonly<Record<string, number>> = {
     WORKER_INVALID: 422,
     WORKER_WRITE_FAILED: 500,
     EDGES_MOVED_TO_FLOW: 422,
+    // BUG-39: flow publish/default failures must not return HTTP 200 {ok:false}.
+    FLOW_INVALID: 422,
+    FLOW_NO_DRAFT: 409,
     HOST_RUNTIME_INVALID: 422,
     HOST_RUNTIME_NOT_FOUND: 404,
     HOST_TOKEN_NOT_FOUND: 404,
@@ -79,6 +82,8 @@ export const ERROR_MESSAGE: Readonly<Record<string, string>> = {
     WORKER_INVALID: 'Worker definition is invalid',
     WORKER_WRITE_FAILED: 'Could not write worker files',
     EDGES_MOVED_TO_FLOW: 'Worker edges are defined by flows',
+    FLOW_INVALID: 'Flow definition is invalid',
+    FLOW_NO_DRAFT: 'Flow has no draft to publish',
     HOST_RUNTIME_INVALID: 'Host runtime registration is invalid',
     HOST_RUNTIME_NOT_FOUND: 'Host runtime not found',
     HOST_TOKEN_NOT_FOUND: 'Host token not found',

@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, effect, inject, input, signal } from '@angular/core';
 import { FormControl, FormGroup, NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -35,6 +36,7 @@ export class BoundariesPanelComponent {
 
     readonly loading = signal(true);
     readonly saving = signal(false);
+    readonly grantSaving = signal(false);
     readonly error = signal('');
     readonly notice = signal('');
     readonly grants = signal<BoundaryGrantDto[]>([]);
@@ -46,6 +48,7 @@ export class BoundariesPanelComponent {
         target: this.fb.control('', Validators.required),
         kind: this.fb.control<'read' | 'write'>('write'),
         mode: this.fb.control<'once' | 'always'>('once'),
+        ttlMinutes: this.fb.control(15),
     });
     readonly policyCount = signal(0);
     readonly grantCount = signal(0);
@@ -55,6 +58,24 @@ export class BoundariesPanelComponent {
             const consumerId = this.consumerId();
             if (consumerId) this.load(consumerId);
         });
+        // BUG-17: write grants cannot be `always` (server answers INVALID_STATE). Make the
+        // impossibility visible in the UI instead of silently rewriting the chosen mode.
+        this.grantForm.controls.kind.valueChanges.pipe(takeUntilDestroyed()).subscribe((kind) => {
+            if (kind === 'write' && this.grantForm.controls.mode.value === 'always') {
+                this.grantForm.controls.mode.setValue('once');
+            }
+        });
+        // BUG-18: `always` grants never expire, so the TTL field is irrelevant there.
+        this.grantForm.controls.mode.valueChanges.pipe(takeUntilDestroyed()).subscribe((mode) => {
+            const ttl = this.grantForm.controls.ttlMinutes;
+            if (mode === 'always') ttl.disable({ emitEvent: false });
+            else ttl.enable({ emitEvent: false });
+        });
+    }
+
+    /** Server caps grant TTL at 8h for write grants and 90d for read grants. */
+    grantTtlMaxMinutes(): number {
+        return this.grantForm.controls.kind.value === 'write' ? 8 * 60 : 90 * 24 * 60;
     }
 
     addPolicy(): void {
@@ -97,17 +118,33 @@ export class BoundariesPanelComponent {
     }
 
     createGrant(): void {
+        if (this.grantSaving()) return;
         const value = this.grantForm.getRawValue();
-        if (!value.target.trim()) return;
+        const target = value.target.trim();
+        if (!target) return;
         this.error.set('');
+        if (value.kind === 'write' && value.mode === 'always') {
+            this.error.set('Write grants are single-use; pick the read kind for an always grant.');
+            return;
+        }
+        const ttlMinutes = Number(value.ttlMinutes);
+        const maxTtlMinutes = this.grantTtlMaxMinutes();
+        if (value.mode === 'once' && (!Number.isFinite(ttlMinutes) || ttlMinutes < 1 || ttlMinutes > maxTtlMinutes)) {
+            this.error.set(`Grant expiry must be between 1 and ${maxTtlMinutes} minutes.`);
+            return;
+        }
+        this.grantSaving.set(true);
         this.service.createBoundaryGrant(this.consumerId(), {
             kind: value.kind,
-            targetPrefix: value.target.trim(),
-            mode: value.kind === 'write' ? 'once' : value.mode,
+            targetPrefix: target,
+            mode: value.mode,
+            // Server ignores TTL for `always`, but rejects a non-positive number outright.
+            ...(value.mode === 'once' ? { ttlMs: Math.round(ttlMinutes * 60_000) } : {}),
         }).then(() => {
             this.grantForm.controls.target.setValue('');
             this.load(this.consumerId());
-        }).catch((error) => this.error.set(this.message(error, 'Could not create grant')));
+        }).catch((error) => this.error.set(this.message(error, 'Could not create grant')))
+            .finally(() => this.grantSaving.set(false));
     }
 
     revoke(grantId: string): void {

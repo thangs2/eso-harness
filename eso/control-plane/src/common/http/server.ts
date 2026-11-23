@@ -9,6 +9,7 @@ import {
     BunSqlPlatformStore,
     PlatformError,
     RegistryService,
+    stackVersionsHash,
     type PlatformStore,
 } from '../../platform/registry/index.js';
 import { EventReader } from '../../platform/events/read/event-reader.js';
@@ -151,6 +152,22 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
     const ruleFiles = new RuleFileService(store);
     const flowFiles = new FlowFileService(store, workerFiles);
     const flowProposal = new FlowProposalService(store, workerFiles, flowFiles);
+    /**
+     * BUG-39: a flow write that returns `{ok:false}` is a failure, not a 200. Map the service reason
+     * to a coded error so the UI cannot silently treat publish/setDefault as successful.
+     */
+    const assertFlowOk = (result: any, action: string): void => {
+        if (result?.ok !== false) return;
+        if (result?.validation) {
+            const errors = Array.isArray(result.validation.errors) ? result.validation.errors : [];
+            throw new PlatformError('FLOW_INVALID', errors.length ? errors.join(', ') : `Flow ${action} validation failed`);
+        }
+        const reason = String(result?.reason || 'FLOW_INVALID');
+        if (reason === 'NO_DRAFT') throw new PlatformError('FLOW_NO_DRAFT', `No draft to ${action}`);
+        if (reason === 'VERSION_NOT_FOUND') throw new PlatformError('NOT_FOUND', 'Flow version not found');
+        if (reason === 'INVALID_DEFAULT') throw new PlatformError('FLOW_INVALID', 'flowId/version must identify a published version');
+        throw new PlatformError('FLOW_INVALID', `${action} failed: ${reason}`);
+    };
     const hostRuntime = new HostRuntimeService(store);
     const hostTokens = new HostTokenService(store);
     const configSnapshot = new ConfigSnapshotService(store, flowFiles, workerFiles, hostRuntime);
@@ -183,6 +200,22 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
         } catch (error) {
             await store.setStatus(id, 'error', new Date().toISOString());
             throw error;
+        }
+    };
+
+    /**
+     * BUG-38: `POST /consumers` must be all-or-nothing at the API. If provisioning fails after the
+     * registry row was created, compensate (drop the schema + remove the row/events) so a retry is
+     * not blocked by a 409 for a consumer that never became ready.
+     */
+    const provisionNewConsumer = async (id: string, body: any) => {
+        try {
+            return await provisionConsumer(id, body);
+        } catch (error) {
+            try { await store.dropSchema(id); } catch { /* best effort */ }
+            try { await store.removeConsumer(id); } catch { /* best effort */ }
+            if (error instanceof PlatformError) throw error;
+            throw new PlatformError('PROVISION_FAILED', String((error as Error)?.message || error));
         }
     };
 
@@ -265,9 +298,14 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
 
     app.get('/api/v1/consumers', { preHandler: requireAuth }, async (request) => {
         const q = request.query as any;
+        // BUG-45: bounded list; the store clamps to default 100 / max 500.
+        const limit = q.limit === undefined || q.limit === '' ? undefined : Number(q.limit);
+        const offset = q.offset === undefined || q.offset === '' ? undefined : Number(q.offset);
         return query.list({
             includeDeleted: q.include_deleted === 'true' || q.include_deleted === true,
             status: typeof q.status === 'string' && q.status ? q.status : null,
+            limit,
+            offset,
         });
     });
 
@@ -305,7 +343,7 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
             actor,
         });
         if (body?.profile?.canonical) {
-            await provisionConsumer(record.id, body);
+            await provisionNewConsumer(record.id, body);
             reply.code(201);
             return query.get(record.id);
         }
@@ -382,22 +420,50 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
         return reply.code(204).send();
     });
 
+    const stackVersionView = async (consumerId: string) => {
+        const consumer = await store.getConsumer(consumerId);
+        const versions = await store.listStackVersions(consumerId);
+        return {
+            consumerId,
+            // BUG-27: `version` + `versionsHash` are the optimistic tokens a client may send back
+            // as `baseVersion` on the next replace-all.
+            version: consumer?.version ?? null,
+            versionsHash: stackVersionsHash(versions),
+            versions,
+        };
+    };
+
     app.get('/api/v1/consumers/:id/stack-versions', { preHandler: requireAuth }, async (request) => {
         const id = (request.params as any).id;
         const consumer = await store.getConsumer(id);
         if (!consumer) {
-            throw new Error(`Consumer not found: ${id}`);
+            throw new PlatformError('CONSUMER_NOT_FOUND', `Consumer not found: ${id}`);
         }
-        return { consumerId: consumer.id, versions: await store.listStackVersions(consumer.id) };
+        return stackVersionView(consumer.id);
     });
 
     app.put('/api/v1/consumers/:id/stack-versions', { preHandler: requireAuth }, async (request) => {
         const id = (request.params as any).id;
         const consumer = await store.getConsumer(id);
         if (!consumer) {
-            throw new Error(`Consumer not found: ${id}`);
+            throw new PlatformError('CONSUMER_NOT_FOUND', `Consumer not found: ${id}`);
         }
         const body = request.body as any;
+        const baseVersion = body?.baseVersion;
+        if (baseVersion === undefined || baseVersion === null || baseVersion === '') {
+            throw new PlatformError('STALE_VERSION', 'baseVersion is required for a replace-all stack-version write');
+        }
+        const currentVersions = await store.listStackVersions(consumer.id);
+        const currentHash = stackVersionsHash(currentVersions);
+        const baseString = String(baseVersion);
+        const matchesConsumerVersion = /^\d+$/.test(baseString) && Number(baseString) === consumer.version;
+        const matchesVersionsHash = baseString === currentHash;
+        if (!matchesConsumerVersion && !matchesVersionsHash) {
+            throw new PlatformError(
+                'STALE_VERSION',
+                `baseVersion is stale: send consumer version ${consumer.version} or hash ${currentHash}`
+            );
+        }
         const versions = Array.isArray(body?.versions) ? body.versions : [];
         const now = new Date().toISOString();
         const normalized = versions.map((item: any) => ({
@@ -408,8 +474,14 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
             publishedAt: item?.publishedAt ?? (item?.status === 'published' ? now : null),
             createdAt: item?.createdAt ?? now,
         }));
-        await store.replaceStackVersions(consumer.id, normalized);
-        return { consumerId: consumer.id, versions: await store.listStackVersions(consumer.id) };
+        const applied = await store.replaceStackVersions(consumer.id, normalized, {
+            consumerVersion: consumer.version,
+            versionsHash: currentHash,
+        });
+        if (!applied) {
+            throw new PlatformError('STALE_VERSION', 'stack versions changed while this write was in flight');
+        }
+        return stackVersionView(consumer.id);
     });
 
     app.put('/api/v1/consumers/:id', { preHandler: requireAuth }, async (request) => {
@@ -944,7 +1016,9 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
 
     app.put('/api/v1/consumers/:id/flows/default', { preHandler: requireAuth }, async (request) => {
         const body = (request.body || {}) as any;
-        return flowFiles.setDefault((request.params as any).id, String(body.flowId || ''), Number(body.version) || 0);
+        const result = await flowFiles.setDefault((request.params as any).id, String(body.flowId || ''), Number(body.version) || 0);
+        assertFlowOk(result, 'set default');
+        return result;
     });
 
     app.get('/api/v1/consumers/:id/flows/:flowId', { preHandler: requireAuth }, async (request) => {
@@ -965,7 +1039,9 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
     });
 
     app.post('/api/v1/consumers/:id/flows/:flowId/publish', { preHandler: requireAuth }, async (request) => {
-        return flowFiles.publish((request.params as any).id, (request.params as any).flowId);
+        const result = await flowFiles.publish((request.params as any).id, (request.params as any).flowId);
+        assertFlowOk(result, 'publish');
+        return result;
     });
 
     app.get('/api/v1/consumers/:id/flows/:flowId/versions', { preHandler: requireAuth }, async (request) => {

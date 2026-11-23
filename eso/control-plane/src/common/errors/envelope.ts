@@ -16,6 +16,8 @@ export const BRD_ERROR_CODES: ReadonlySet<string> = new Set([
     'NOT_FOUND',
     'OBSERVATION_INVALID',
     'EDGES_MOVED_TO_FLOW',
+    'FLOW_INVALID',
+    'FLOW_NO_DRAFT',
     'WORKER_PLACEMENT_INVALID',
     'WORKER_NOT_FOUND',
     'HOST_TOKEN_NOT_FOUND',

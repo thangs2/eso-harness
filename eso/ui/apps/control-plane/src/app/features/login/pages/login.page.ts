@@ -60,8 +60,10 @@ export class LoginPage {
     async submit(): Promise<void> {
         this.error.set(null);
         this.loading.set(true);
-        const authorization = `Basic ${btoa(`${this.user}:${this.password}`)}`;
+        // BUG-10: encoding happens inside the try so a non-Latin-1 credential cannot throw
+        // past the finally and leave the button stuck on "Signing in…".
         try {
+            const authorization = `Basic ${this.encodeBasic(this.user, this.password)}`;
             const res = await fetch(`${this.config.apiBaseUrl()}/api/v1/auth/me`, {
                 headers: { Accept: 'application/json', Authorization: authorization },
             });
@@ -71,6 +73,8 @@ export class LoginPage {
                 return;
             }
             this.auth.setAuthorization(authorization);
+            // BUG-40: do not leave the password on screen after a successful sign in.
+            this.password = '';
             const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
             await this.router.navigateByUrl(returnUrl && /^\/(?!\/)/.test(returnUrl) ? returnUrl : '/consumers');
         } catch {
@@ -78,5 +82,13 @@ export class LoginPage {
         } finally {
             this.loading.set(false);
         }
+    }
+
+    /** UTF-8-safe Base64 for HTTP Basic (btoa alone throws above U+00FF). */
+    private encodeBasic(user: string, password: string): string {
+        const bytes = new TextEncoder().encode(`${user}:${password}`);
+        let binary = '';
+        for (const byte of bytes) binary += String.fromCharCode(byte);
+        return btoa(binary);
     }
 }

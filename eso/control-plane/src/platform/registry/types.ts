@@ -55,6 +55,25 @@ export interface CreateConsumerInput {
 export interface ListConsumersOptions {
     includeDeleted?: boolean;
     status?: ConsumerStatus | null;
+    /** BUG-45: bounded list. Defaults to 100, capped at 500. */
+    limit?: number;
+    offset?: number;
+}
+
+export const DEFAULT_LIST_LIMIT = 100;
+export const MAX_LIST_LIMIT = 500;
+
+/** Normalize a list window so no caller can ask for an unbounded consumer list. */
+export function normalizeListWindow(
+    options: Pick<ListConsumersOptions, 'limit' | 'offset'> = {}
+): { limit: number; offset: number } {
+    const rawLimit = Number(options.limit);
+    const limit = Number.isFinite(rawLimit) && rawLimit > 0
+        ? Math.min(Math.floor(rawLimit), MAX_LIST_LIMIT)
+        : DEFAULT_LIST_LIMIT;
+    const rawOffset = Number(options.offset);
+    const offset = Number.isFinite(rawOffset) && rawOffset > 0 ? Math.floor(rawOffset) : 0;
+    return { limit, offset };
 }
 
 export const CONSUMER_STATUSES: ReadonlySet<string> = new Set([

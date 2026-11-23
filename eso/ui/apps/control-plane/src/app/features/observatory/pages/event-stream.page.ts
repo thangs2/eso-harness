@@ -18,9 +18,9 @@ interface WorkerLane {
         <main class="stream-page">
             <header class="page-header">
                 <div>
-                    <p class="eyebrow">Observatory · {{ requestMode ? 'requests' : 'event stream' }}</p>
-                    <h1>{{ requestMode ? 'Prompt requests' : 'Event stream viewer' }}</h1>
-                    <p class="subtitle">{{ requestMode ? 'Request metadata by trace/worker. Prompt body is not stored.' : 'Event stream by trace/worker. Select an event to inspect request/evidence detail. ESO is read-only.' }}</p>
+                    <p class="eyebrow">Observatory · event stream</p>
+                    <h1>Event stream viewer</h1>
+                    <p class="subtitle">Event stream by trace/worker. Select an event to inspect request/evidence detail. ESO is read-only.</p>
                 </div>
                 <div class="header-actions">
                     <a mat-stroked-button routerLink="/observatory">Observatory</a>
@@ -62,7 +62,12 @@ interface WorkerLane {
             </section>
 
             <div class="stream-toolbar">
-                <span class="stream-count">{{ filtered().length }} events · {{ traceCount() }} traces</span>
+                <!-- BUG-22: with an error the loaded rows are stale/empty, so the counts must not claim "0". -->
+                @if (!error()) {
+                    <span class="stream-count">{{ filtered().length }} events · {{ traceCount() }} traces</span>
+                } @else {
+                    <span class="stream-count">counts unavailable</span>
+                }
                 <div class="quick-filters">
                     <button type="button" class="chip" [class.on]="eventFilter() === 'all' && !outcomeFilter()" (click)="resetFilters()">All</button>
                     <button type="button" class="chip" [class.on]="eventFilter() === 'prompt.submitted'" (click)="eventFilter.set('prompt.submitted')">Requests</button>
@@ -112,7 +117,15 @@ interface WorkerLane {
                         <section class="empty"><strong>No matching events</strong><span>Try another consumer, event or trace.</span></section>
                     } @else {
                         @for (event of pageItems(); track event.observationId) {
-                            <article class="event-row" [class.selected]="selectedObservation()?.observationId === event.observationId" (click)="selectObservation(event)">
+                            <article
+                                class="event-row"
+                                role="button"
+                                tabindex="0"
+                                [class.selected]="selectedObservation()?.observationId === event.observationId"
+                                (click)="selectObservation(event)"
+                                (keydown.enter)="selectObservation(event)"
+                                (keydown.space)="selectObservation(event); $event.preventDefault()"
+                            >
                                 <div class="event-head">
                                     <code>{{ event.event }}</code>
                                     @if (event.outcome) { <span class="badge">{{ event.outcome }}</span> }
@@ -212,6 +225,7 @@ interface WorkerLane {
         .event-list { display: grid; gap: var(--space-2); }
         .event-row { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); cursor: pointer; }
         .event-row.selected { border-color: var(--brand); background: color-mix(in srgb, var(--surface) 92%, var(--brand)); }
+        .event-row:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
         .event-head { display: flex; align-items: center; gap: var(--space-3); }
         .event-head code { color: var(--brand); font-weight: 650; }
         .event-head time { margin-left: auto; color: var(--muted); font-size: var(--text-xs); }
@@ -244,7 +258,6 @@ export class EventStreamPage implements OnInit, OnDestroy {
     private readonly router = inject(Router);
     private timer: ReturnType<typeof setInterval> | null = null;
     private streamAbort: AbortController | null = null;
-    readonly requestMode = this.route.snapshot.routeConfig?.path === 'requests';
 
     readonly consumers = signal<ConsumerSummary[]>([]);
     readonly consumerId = signal('');
@@ -269,12 +282,14 @@ export class EventStreamPage implements OnInit, OnDestroy {
         const event = this.eventFilter();
         const outcome = this.outcomeFilter();
         const worker = this.workerFilter().trim().toLowerCase();
-        const trace = this.traceFilter().trim().toLowerCase();
+        const trace = this.traceFilter().trim();
         const rows = this.observations().filter((item) => {
             if (event !== 'all' && item.event !== event) return false;
             if (outcome !== 'all' && item.outcome !== outcome) return false;
             if (worker && !(item.workerId || '').toLowerCase().includes(worker)) return false;
-            if (trace && !item.traceId.toLowerCase().includes(trace)) return false;
+            // BUG-23: list and timeline share one exact trace predicate; a substring match
+            // listed rows the timeline then called "not in this trace".
+            if (trace && !this.matchesTrace(item, trace)) return false;
             return true;
         });
         return [...rows].sort((left, right) => {
@@ -291,7 +306,7 @@ export class EventStreamPage implements OnInit, OnDestroy {
     readonly traceObservations = computed(() => {
         const trace = this.selectedTrace();
         if (!trace) return [];
-        return this.observations().filter((item) => item.traceId === trace).sort((left, right) => String(left.at).localeCompare(String(right.at)));
+        return this.observations().filter((item) => this.matchesTrace(item, trace)).sort((left, right) => String(left.at).localeCompare(String(right.at)));
     });
     readonly traceLanes = computed<WorkerLane[]>(() => {
         const lanes = new Map<string, ObservationDto[]>();
@@ -347,7 +362,6 @@ export class EventStreamPage implements OnInit, OnDestroy {
         if (trace) { this.selectedTrace.set(trace); this.traceFilter.set(trace); }
         const event = query.get('event');
         if (event) this.eventFilter.set(event);
-        if (this.route.snapshot.routeConfig?.path === 'requests') this.eventFilter.set('prompt.submitted');
         if (this.consumerId()) { await this.load(); this.startStream(); }
     }
 
@@ -428,6 +442,11 @@ export class EventStreamPage implements OnInit, OnDestroy {
         this.selectedTrace.set(value.trim());
     }
 
+    /** One exact trace predicate for both the list filter and the timeline (BUG-23). */
+    private matchesTrace(event: ObservationDto, trace: string): boolean {
+        return event.traceId === trace;
+    }
+
     async load(): Promise<void> {
         const id = this.consumerId();
         if (!id || !this.api) return;
@@ -449,7 +468,7 @@ export class EventStreamPage implements OnInit, OnDestroy {
                 const best = [...counts.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] || sorted[0]?.traceId;
                 if (best) {
                     this.selectedTrace.set(best);
-                    this.selectedObservation.set(sorted.find((event) => event.traceId === best) || sorted[0]);
+                    this.selectedObservation.set(sorted.find((event) => this.matchesTrace(event, best)) || sorted[0]);
                 }
             }
             if (!this.selectedObservation() && sorted[0]) this.selectedObservation.set(sorted[0]);

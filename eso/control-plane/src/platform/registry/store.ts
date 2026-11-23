@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -24,6 +25,7 @@ import type {
     ListConsumersOptions,
     StackVersionRecord,
 } from './types.js';
+import { normalizeListWindow } from './types.js';
 
 /**
  * PlatformDb contract (plane B §3 · plane D §1):
@@ -42,6 +44,8 @@ export interface PlatformStore {
     dropSchema(consumerId: string): Promise<void>;
     schemaExists(consumerId: string): Promise<boolean>;
     insertConsumer(record: ConsumerRecord): Promise<void>;
+    /** BUG-38: remove a half-created consumer after a provisioning failure so retry is possible. */
+    removeConsumer(id: string): Promise<void>;
     getConsumer(id: string): Promise<ConsumerRecord | null>;
     listConsumers(options?: ListConsumersOptions): Promise<ConsumerRecord[]>;
     updateConsumer(
@@ -53,7 +57,16 @@ export interface PlatformStore {
     appendEvent(event: ConsumerEvent): Promise<ConsumerEvent>;
     listEvents(consumerId: string, limit?: number): Promise<ConsumerEvent[]>;
     listStackVersions(consumerId: string): Promise<StackVersionRecord[]>;
-    replaceStackVersions(consumerId: string, versions: StackVersionRecord[]): Promise<void>;
+    /**
+     * BUG-27: replace-all with optimistic concurrency. When `expected` is supplied the write only
+     * lands if the consumer version and the current versions hash still match; a stale caller gets
+     * `false`. A successful conditional write bumps the consumer version.
+     */
+    replaceStackVersions(
+        consumerId: string,
+        versions: StackVersionRecord[],
+        expected?: { consumerVersion: number; versionsHash: string }
+    ): Promise<boolean>;
     listHosts(): Promise<any[]>;
     getHost(hostId: string): Promise<any>;
     upsertHost(host: any): Promise<any>;
@@ -147,6 +160,32 @@ function clone<T>(value: T): T {
 
 function rowNow(input?: string): string {
     return input ?? new Date().toISOString();
+}
+
+function canonicalJson(value: unknown): string {
+    if (value === null || typeof value !== 'object') return JSON.stringify(value);
+    if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+    const entries = Object.entries(value as Record<string, unknown>)
+        .filter(([, child]) => child !== undefined)
+        .sort(([a], [b]) => a.localeCompare(b));
+    return `{${entries.map(([key, child]) => `${JSON.stringify(key)}:${canonicalJson(child)}`).join(',')}}`;
+}
+
+/**
+ * BUG-27: deterministic hash of a consumer's stack-version set. Both the API (to hand out a
+ * `baseVersion` token) and the stores (to compare-and-swap) use this one function.
+ */
+export function stackVersionsHash(versions: StackVersionRecord[]): string {
+    const canonical = [...versions]
+        .sort((a, b) => a.version - b.version)
+        .map((version) => ({
+            version: Number(version.version),
+            status: version.status,
+            layers: version.layers ?? [],
+            publishedAt: version.publishedAt ?? null,
+            createdAt: version.createdAt ?? null,
+        }));
+    return createHash('sha256').update(canonicalJson(canonical)).digest('hex');
 }
 
 export class MemoryPlatformStore implements PlatformStore {
@@ -246,7 +285,13 @@ export class MemoryPlatformStore implements PlatformStore {
         return row ? clone(row) : null;
     }
 
+    async removeConsumer(id: string): Promise<void> {
+        this.consumers.delete(id);
+        this.events = this.events.filter((event) => event.consumerId !== id);
+    }
+
     async listConsumers(options: ListConsumersOptions = {}): Promise<ConsumerRecord[]> {
+        const { limit, offset } = normalizeListWindow(options);
         let rows = [...this.consumers.values()];
         if (options.status) rows = rows.filter((row) => row.status === options.status);
         if (!options.includeDeleted) {
@@ -254,6 +299,7 @@ export class MemoryPlatformStore implements PlatformStore {
         }
         return rows
             .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+            .slice(offset, offset + limit)
             .map((row) => clone(row));
     }
 
@@ -294,8 +340,24 @@ export class MemoryPlatformStore implements PlatformStore {
         return clone(this.stackVersions.get(consumerId) || []).sort((a, b) => b.version - a.version);
     }
 
-    async replaceStackVersions(consumerId: string, versions: StackVersionRecord[]): Promise<void> {
+    async replaceStackVersions(
+        consumerId: string,
+        versions: StackVersionRecord[],
+        expected?: { consumerVersion: number; versionsHash: string }
+    ): Promise<boolean> {
+        const consumer = this.consumers.get(consumerId);
+        if (expected && (!consumer || consumer.version !== expected.consumerVersion)) return false;
+        const current = this.stackVersions.get(consumerId) || [];
+        if (expected && stackVersionsHash(current) !== expected.versionsHash) return false;
         this.stackVersions.set(consumerId, clone(versions).sort((a, b) => a.version - b.version));
+        if (expected && consumer) {
+            this.consumers.set(consumerId, {
+                ...consumer,
+                version: consumer.version + 1,
+                updatedAt: rowNow(),
+            });
+        }
+        return true;
     }
 
     async listHosts(): Promise<any[]> {
@@ -991,7 +1053,15 @@ export class BunSqlPlatformStore implements PlatformStore {
         return rows.length ? mapConsumer(rows[0]) : null;
     }
 
+    async removeConsumer(id: string): Promise<void> {
+        await this.sql.begin(async (tx: any) => {
+            await tx.unsafe(`DELETE FROM platform.consumer_event WHERE consumer_id = $1`, [id]);
+            await tx.unsafe(`DELETE FROM platform.consumer WHERE id = $1`, [id]);
+        });
+    }
+
     async listConsumers(options: ListConsumersOptions = {}): Promise<ConsumerRecord[]> {
+        const { limit, offset } = normalizeListWindow(options);
         const where: string[] = [];
         const params: unknown[] = [];
         if (options.status) {
@@ -1002,8 +1072,12 @@ export class BunSqlPlatformStore implements PlatformStore {
             where.push(`status <> 'deleted'`, `status <> 'purged'`);
         }
         const clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+        params.push(limit);
+        const limitParam = `$${params.length}`;
+        params.push(offset);
+        const offsetParam = `$${params.length}`;
         const rows = await this.sql.unsafe(
-            `SELECT * FROM platform.consumer ${clause} ORDER BY updated_at DESC`,
+            `SELECT * FROM platform.consumer ${clause} ORDER BY updated_at DESC LIMIT ${limitParam} OFFSET ${offsetParam}`,
             params
         );
         return rows.map(mapConsumer);
@@ -1082,18 +1156,29 @@ export class BunSqlPlatformStore implements PlatformStore {
             `SELECT * FROM platform.harness_stack_version WHERE consumer_id = $1 ORDER BY version DESC`,
             [consumerId]
         );
-        return rows.map((row: any) => ({
-            consumerId: row.consumer_id,
-            version: Number(row.version),
-            status: row.status,
-            layers: typeof row.layers === 'string' ? JSON.parse(row.layers) : (row.layers || []),
-            publishedAt: row.published_at ? toIso(row.published_at) : null,
-            createdAt: toIso(row.created_at),
-        }));
+        return rows.map(mapStackVersion);
     }
 
-    async replaceStackVersions(consumerId: string, versions: StackVersionRecord[]): Promise<void> {
-        await this.sql.begin(async (tx: any) => {
+    async replaceStackVersions(
+        consumerId: string,
+        versions: StackVersionRecord[],
+        expected?: { consumerVersion: number; versionsHash: string }
+    ): Promise<boolean> {
+        return this.sql.begin(async (tx: any) => {
+            // Lock the consumer row so two tabs cannot both pass the version/hash check.
+            const consumerRows = await tx.unsafe(
+                `SELECT version FROM platform.consumer WHERE id = $1 FOR UPDATE`,
+                [consumerId]
+            );
+            const consumer = consumerRows[0];
+            const currentRows = await tx.unsafe(
+                `SELECT * FROM platform.harness_stack_version WHERE consumer_id = $1 ORDER BY version ASC`,
+                [consumerId]
+            );
+            if (expected) {
+                if (!consumer || Number(consumer.version) !== expected.consumerVersion) return false;
+                if (stackVersionsHash(currentRows.map(mapStackVersion)) !== expected.versionsHash) return false;
+            }
             await tx.unsafe(`DELETE FROM platform.harness_stack_version WHERE consumer_id = $1`, [consumerId]);
             for (const version of versions) {
                 await tx.unsafe(
@@ -1103,6 +1188,13 @@ export class BunSqlPlatformStore implements PlatformStore {
                     [consumerId, version.version, version.status, version.layers || [], version.publishedAt, version.createdAt]
                 );
             }
+            if (expected && consumer) {
+                await tx.unsafe(
+                    `UPDATE platform.consumer SET version = version + 1, updated_at = now() WHERE id = $1`,
+                    [consumerId]
+                );
+            }
+            return true;
         });
     }
 
@@ -1964,6 +2056,17 @@ function mapEvent(row: any): ConsumerEvent {
         actorLabel: row.actor_label ?? null,
         at: toIso(row.at),
         detail: typeof row.detail === 'string' ? JSON.parse(row.detail) : (row.detail || {}),
+    };
+}
+
+function mapStackVersion(row: any): StackVersionRecord {
+    return {
+        consumerId: row.consumer_id,
+        version: Number(row.version),
+        status: row.status,
+        layers: typeof row.layers === 'string' ? JSON.parse(row.layers) : (row.layers || []),
+        publishedAt: row.published_at ? toIso(row.published_at) : null,
+        createdAt: toIso(row.created_at),
     };
 }
 

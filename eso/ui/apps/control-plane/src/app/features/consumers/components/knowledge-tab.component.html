@@ -20,7 +20,7 @@
                     <section class="knowledge-index-panel" [class.zone-hidden]="vm().knowledgeSection() !== 'index'">
                         <div>
                             <span class="eyebrow">Knowledge index</span>
-                            <strong>{{ vm().knowledgeSummary()?.docs || 0 }} docs · {{ vm().knowledgeSummary()?.edges || 0 }} edges · {{ vm().knowledgeSummary()?.findings || 0 }} findings</strong>
+                            <strong>{{ vm().knowledgeSummary()?.docs || 0 }} docs · {{ vm().knowledgeSummary()?.edges || 0 }} edges@if (vm().knowledgeFindingsCount() > 0) { · {{ vm().knowledgeFindingsCount() }} findings }</strong>
                             <small>{{ vm().knowledgeSummary()?.manifest ? 'Manifest v' + vm().knowledgeSummary()?.manifest?.manifest_version + ' · source ' + (vm().knowledgeSummary()?.manifest?.build_id || 'not indexed') : 'No index run yet. Index files to build manifest + graph.' }}</small>
                             <small>{{ vm().knowledgeEmbeddingStatus()?.model || 'BAAI/bge-m3' }} · {{ vm().knowledgeEmbeddingStatus()?.embedded || 0 }}/{{ vm().knowledgeEmbeddingStatus()?.chunks || 0 }} chunks embedded</small>
                         </div>
@@ -39,7 +39,7 @@
 
                     <section class="knowledge-index-detail" [class.zone-hidden]="vm().knowledgeSection() !== 'index'">
                         <header class="knowledge-detail-head">
-                            <div><h3>Indexed documents · {{ vm().knowledgeDocs().length }}</h3><p>Read from Postgres. Content remains in files. All rows shown.</p></div>
+                            <div><h3>Indexed documents · {{ vm().knowledgeDocs().length }}</h3><p>Read from Postgres. Content remains in files. Showing up to {{ vm().knowledgeDocsLimit }} rows; refine with search.</p></div>
                             <div class="knowledge-search">
                                 <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Search indexed docs</mat-label><input matInput [ngModel]="vm().knowledgeQuery()" (ngModelChange)="vm().knowledgeQuery.set($event)" (keyup.enter)="vm().searchKnowledge()" placeholder="requirement, manifest…"></mat-form-field>
                                 <button mat-stroked-button type="button" (click)="vm().searchKnowledge()">Search</button>

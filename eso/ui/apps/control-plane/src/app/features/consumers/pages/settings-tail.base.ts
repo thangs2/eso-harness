@@ -269,9 +269,16 @@ save(navigateAfter = false): void {
             .then(async (updated) => {
                 await this.service.saveStackVersions(profile.id, this.stackVersions());
                 this.current.set(updated);
+                // Drop the persisted draft before re-hydrating so it cannot overwrite the saved values.
+                this.clearDraft();
                 this.hydrate(updated);
                 this.saved.set(true);
-                setTimeout(() => { this.lastSaved.set(this.currentDraft()); this.baselineReady.set(true); }, 0);
+                setTimeout(() => {
+                    this.lastSaved.set(this.currentDraft());
+                    this.lastDraftBaseline.set(JSON.stringify(this.draftSnapshot()));
+                    this.baselineReady.set(true);
+                    this.clearDraft();
+                }, 0);
                 this.workerImportDirty.set(false);
                 if (navigateAfter) void this.completeFinish();
                 else { void this.loadMigrationPreview(); void this.refreshLegacyHarness(); }
@@ -398,7 +405,11 @@ protected hydrate(profile: ConsumerProfile): void {
         this.plugins.set([...savedPlugins, ...discoveredProviders]);
         this.restoreDraft();
                 this.hydrated.set(true);
-        setTimeout(() => { this.lastSaved.set(this.currentDraft()); this.baselineReady.set(true); }, 500);
+        setTimeout(() => {
+            this.lastSaved.set(this.currentDraft());
+            this.lastDraftBaseline.set(JSON.stringify(this.draftSnapshot()));
+            this.baselineReady.set(true);
+        }, 500);
         void this.loadDefaultFlow(profile.id);
         void this.loadRuleFiles(profile.id);
         void this.loadFlowSummaries(profile.id);
@@ -407,9 +418,61 @@ protected hydrate(profile: ConsumerProfile): void {
         void this.loadKnowledgeIndex(profile.id);
     }
 
+private draftTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Snapshot of the last hydrated/saved form, so only real edits are persisted as a draft. */
+private readonly lastDraftBaseline = signal<string | null>(null);
+
+/**
+ * BUG-42: the draft was only ever read, so a 401/refresh dropped everything typed.
+ * Persist the restorable form state on change, debounced, and only after hydration.
+ */
+private readonly draftWriter = effect(() => {
+        const serialized = JSON.stringify(this.draftSnapshot());
+        if (!this.hydrated() || !this.baselineReady() || this.saving()) return;
+        if (this.lastDraftBaseline() === null || serialized === this.lastDraftBaseline()) return;
+        if (this.draftTimer !== null) clearTimeout(this.draftTimer);
+        this.draftTimer = setTimeout(() => {
+            this.draftTimer = null;
+            try { localStorage.setItem(this.draftKey(), serialized); } catch { /* storage unavailable */ }
+        }, 400);
+    });
+
+protected draftKey(): string {
+        return `eso.consumer-settings.${this.consumerId}`;
+    }
+
+protected draftSnapshot(): Record<string, unknown> {
+        return {
+            name: this.name(), owner: this.owner(), locale: this.locale(), tags: this.tags(), description: this.description(),
+            stackVersions: this.stackVersions(), activeStackVersion: this.activeStackVersion(), newStackVersion: this.newStackVersion(),
+            developers: this.developers(),
+            jiraEnabled: this.jiraEnabled(), jiraProject: this.jiraProject(), jiraSyncMode: this.jiraSyncMode(),
+            sdlcEnabled: this.sdlcEnabled(), sdlcPipeline: this.sdlcPipeline(), crProcess: this.crProcess(),
+            artifactKinds: this.artifactKinds(), representations: this.representations(),
+            docgraphIndex: this.docgraphIndex(), docgraphScope: this.docgraphScope(),
+            documentStatusRequired: this.documentStatusRequired(), preflightRequired: this.preflightRequired(),
+            goNoGoRequired: this.goNoGoRequired(), crossCheckRequired: this.crossCheckRequired(),
+            pipelineContractRequired: this.pipelineContractRequired(), openRegisterRequired: this.openRegisterRequired(),
+            buildEnforcementRequired: this.buildEnforcementRequired(), quartetProfile: this.quartetProfile(),
+            manifestEnabled: this.manifestEnabled(), manifestPath: this.manifestPath(),
+            manifestHumanHeaderKeys: this.manifestHumanHeaderKeys(), manifestAiHeaderKeys: this.manifestAiHeaderKeys(),
+            manifestFacets: this.manifestFacets(), manifestRelations: this.manifestRelations(), manifestChecks: this.manifestChecks(),
+            consent: this.consent(), events: this.events(),
+        };
+    }
+
+protected clearDraft(): void {
+        if (this.draftTimer !== null) {
+            clearTimeout(this.draftTimer);
+            this.draftTimer = null;
+        }
+        try { localStorage.removeItem(this.draftKey()); } catch { /* storage unavailable */ }
+    }
+
 protected restoreDraft(): void {
         try {
-            const raw = localStorage.getItem(`eso.consumer-settings.${this.consumerId}`);
+            const raw = localStorage.getItem(this.draftKey());
             if (!raw) return;
             const draft = JSON.parse(raw) as Record<string, any>;
             if (typeof draft.name === 'string') this.name.set(draft.name);

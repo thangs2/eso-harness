@@ -65,15 +65,15 @@ toggleProfile(profileId: string): void {
 effectiveLayers(profile: HostProfile): Array<{ id: string; label: string; value: string; scope: string }> {
         const stack = this.layersForVersion(profile.stackVersion);
         const layer = (id: LayerId) => stack.find((item) => item.id === id);
-        const memory = !this.isResolutionLayerEnabled('memory') ? 'Disabled by Stack' : (profile.memoryProvider ? `${profile.memorySource} · ${profile.memoryProvider}` : profile.memorySource);
-        const codeGraph = !this.isResolutionLayerEnabled('codeGraph') ? 'Disabled by Stack' : (profile.codeGraphProvider ? `${profile.codeGraphSource} · ${profile.codeGraphProvider}` : profile.codeGraphSource);
+        const memory = !this.isResolutionLayerEnabled('memory', profile.stackVersion) ? 'Disabled by Stack' : (profile.memoryProvider ? `${profile.memorySource} · ${profile.memoryProvider}` : profile.memorySource);
+        const codeGraph = !this.isResolutionLayerEnabled('codeGraph', profile.stackVersion) ? 'Disabled by Stack' : (profile.codeGraphProvider ? `${profile.codeGraphSource} · ${profile.codeGraphProvider}` : profile.codeGraphSource);
         return [
-            { id: 'multiAgent', label: 'Multi-agent', value: `${this.workers().length} workers · ${this.workers().length} roles`, scope: 'stack' },
+            { id: 'multiAgent', label: 'Multi-agent', value: `${this.workers().length} workers · ${this.workerRoleCount()} roles`, scope: 'stack' },
             { id: 'rules', label: 'Rules', value: (layer('rules')?.files ?? 0) + ' files', scope: 'stack' },
             { id: 'skills', label: 'Skills', value: (layer('skills')?.files ?? 0) + ' files', scope: 'stack' },
             { id: 'hooks', label: 'Hooks', value: (layer('hooks')?.files ?? 0) + ' files', scope: 'stack' },
-            { id: 'memory', label: 'Memory', value: memory, scope: this.isResolutionLayerEnabled('memory') ? 'resolved' : 'disabled' },
-            { id: 'codeGraph', label: 'Code graph', value: codeGraph, scope: this.isResolutionLayerEnabled('codeGraph') ? 'resolved' : 'disabled' },
+            { id: 'memory', label: 'Memory', value: memory, scope: this.isResolutionLayerEnabled('memory', profile.stackVersion) ? 'resolved' : 'disabled' },
+            { id: 'codeGraph', label: 'Code graph', value: codeGraph, scope: this.isResolutionLayerEnabled('codeGraph', profile.stackVersion) ? 'resolved' : 'disabled' },
             { id: 'documentGraph', label: 'Document graph', value: 'ESO-only · Postgres', scope: 'stack' },
             { id: 'topology', label: 'Topology', value: 'Deferred', scope: 'stack' },
             { id: 'material', label: 'Material', value: 'rules · skills · hooks', scope: 'stack' },
@@ -145,7 +145,7 @@ inheritedCapabilities(): Array<{ id: string; label: string; value: string }> {
         const layers = this.layersForVersion(this.newStackVersion());
         const layer = (id: LayerId) => layers.find((item) => item.id === id);
         return [
-            { id: 'multiAgent', label: 'Multi-agent / SLP', value: `${this.workers().length} workers · ${this.workers().length} roles` },
+            { id: 'multiAgent', label: 'Multi-agent / SLP', value: `${this.workers().length} workers · ${this.workerRoleCount()} roles` },
             { id: 'rules', label: 'Rules / law', value: `${layer('rules')?.files ?? 0} files` },
             { id: 'skills', label: 'Skills', value: `${layer('skills')?.files ?? 0} files` },
             { id: 'hooks', label: 'Hooks', value: `${layer('hooks')?.files ?? 0} files` },
@@ -238,13 +238,13 @@ removeDeveloper(userId: string): void {
     }
 
 hostSourcesSummary(profile: HostProfile): string {
-        const memory = this.isResolutionLayerEnabled('memory') ? `Memory ${profile.memorySource}` : 'Memory disabled';
-        const code = this.isResolutionLayerEnabled('codeGraph') ? `Code ${profile.codeGraphSource}` : 'Code disabled';
+        const memory = this.isResolutionLayerEnabled('memory', profile.stackVersion) ? `Memory ${profile.memorySource}` : 'Memory disabled';
+        const code = this.isResolutionLayerEnabled('codeGraph', profile.stackVersion) ? `Code ${profile.codeGraphSource}` : 'Code disabled';
         return `${memory} · ${code}`;
     }
 
 resolutionSummary(profile: HostProfile): string {
-        if (!this.isResolutionLayerEnabled('memory') && !this.isResolutionLayerEnabled('codeGraph')) return 'disabled';
+        if (!this.isResolutionLayerEnabled('memory', profile.stackVersion) && !this.isResolutionLayerEnabled('codeGraph', profile.stackVersion)) return 'disabled';
         const parts: string[] = [];
         if (profile.memoryProvider) parts.push('memory: ' + profile.memoryProvider);
         if (profile.codeGraphProvider) parts.push('code: ' + profile.codeGraphProvider);

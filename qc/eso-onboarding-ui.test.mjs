@@ -26,3 +26,10 @@ test('AC-39-3 · lỗi hiện code + HTTP status + message', () => {
 test('AC-39-3 · nhãn "Confirm & provision"', () => {
     assert.match(PAGE, /Confirm & provision/);
 });
+
+test('BUG-12 · chỉ nói "ready" khi setup.ready === true', () => {
+    assert.match(SVC, /ready: setupRes\.setup\.ready/);
+    assert.match(PAGE, /@if \(res\.ready\)/);
+    assert.match(PAGE, /does <strong>not<\/strong> report ready/);
+    assert.doesNotMatch(PAGE, /and is ready/);
+});

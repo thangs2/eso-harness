@@ -3,6 +3,7 @@ import { join } from 'node:path';
 
 import { fail } from '../../../platform/registry/errors.js';
 import { assertConsumerId, type PlatformStore } from '../../../platform/registry/store.js';
+import { normalizeListWindow } from '../../../platform/registry/types.js';
 import type { ConsumerRecord, ListConsumersOptions } from '../../../platform/registry/types.js';
 
 /**
@@ -44,9 +45,13 @@ export class RegistryQueryService {
     constructor(private readonly store: PlatformStore) {}
 
     async list(options: ListConsumersOptions = {}): Promise<ConsumerRecord[]> {
+        // BUG-45: the list is always windowed (default 100, cap 500) — never a full table scan.
+        const { limit, offset } = normalizeListWindow(options);
         return this.store.listConsumers({
             includeDeleted: Boolean(options.includeDeleted),
             status: options.status ?? null,
+            limit,
+            offset,
         });
     }
 

@@ -161,7 +161,15 @@ interface TraceSummary {
                     } @else {
                         <ul class="pulse-list" [class.playing]="pulsePlaying()">
                             @for (event of displayEvents(); track event.observationId) {
-                                <li (click)="openEvent(event)" [class.bad]="event.outcome === 'FAIL' || event.outcome === 'BLOCKED'" [class.pulse-current]="pulsePlaying() && $index === displayEvents().length - 1">
+                                <li
+                                    role="button"
+                                    tabindex="0"
+                                    (click)="openEvent(event)"
+                                    (keydown.enter)="openEvent(event)"
+                                    (keydown.space)="openEvent(event); $event.preventDefault()"
+                                    [class.bad]="event.outcome === 'FAIL' || event.outcome === 'BLOCKED'"
+                                    [class.pulse-current]="pulsePlaying() && $index === displayEvents().length - 1"
+                                >
                                     <div><code>{{ event.event }}</code><span>{{ event.workerId || '—' }}</span></div>
                                     <small>{{ event.at }}</small>
                                 </li>
@@ -269,6 +277,7 @@ interface TraceSummary {
         .pulse-list { display: grid; align-content: start; flex: 1 1 0; gap: 6px; min-height: 0; margin: 0; padding: 0; overflow-y: auto; list-style: none; scrollbar-color: #2b3b52 #0b1118; scrollbar-width: thin; }
         .pulse-list li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); cursor: pointer; }
         .pulse-list li:hover { background: var(--surface-2); }
+        .pulse-list li:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
         .pulse-list li.bad { border-left: 3px solid var(--warn-ink, #d97706); }
         .pulse-list li.pulse-current { border-color: rgba(90,169,255,.55); background: #16263c; }
         .pulse-list div { display: grid; gap: 1px; min-width: 0; }
@@ -602,10 +611,6 @@ export class ObservatoryPage implements OnInit, OnDestroy {
 
     shortId(id: string): string {
         return id.replace(/^worker-/, '').slice(0, 9);
-    }
-
-    openTrace(traceId: string): void {
-        void this.router.navigate(['/events'], { queryParams: { consumer: this.consumerId(), trace: traceId } });
     }
 
     openEvent(event: ObservationDto): void {

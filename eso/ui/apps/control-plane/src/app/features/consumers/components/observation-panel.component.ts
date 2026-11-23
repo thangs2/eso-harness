@@ -6,7 +6,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { ConsumerProfileService } from '../../../core/consumers/consumer-profile.service.js';
-import type { JevDecisionDto, JudgmentResponseDto, ObservationDto } from '../../../../../../../libs/api-client/types.js';
+import type { JevDecisionDto, ObservationDto } from '../../../../../../../libs/api-client/types.js';
 
 type JevMode = 'off' | 'shadow' | 'active';
 type EventKind = { id: string; label: string; description: string };
@@ -37,6 +37,8 @@ export class ObservationPanelComponent {
     readonly jevConfirmThresholdChange = output<string>();
     readonly jevConfidenceChange = output<string>();
 
+    /** BUG-41: the server returns the latest N rows only; the UI must say so instead of implying "all". */
+    readonly observationLimit = 100;
     readonly observations = signal<ObservationDto[]>([]);
     readonly observationsLoading = signal(false);
     readonly observationsError = signal<string | null>(null);
@@ -45,10 +47,6 @@ export class ObservationPanelComponent {
     readonly observationWorkerCount = computed(() => new Set(this.observations().map((item) => item.workerId).filter(Boolean)).size);
     readonly lastObservationAt = computed(() => this.observations().map((item) => item.at).filter(Boolean).sort().at(-1)?.slice(0, 19).replace('T', ' ') || '');
 
-    readonly judgmentInput = signal(JSON.stringify({ requirements: [], answers: [], enforcement: 'shadow' }, null, 2));
-    readonly judgmentResult = signal<JudgmentResponseDto | null>(null);
-    readonly judgmentLoading = signal(false);
-    readonly judgmentError = signal('');
     readonly jevDecision = signal<JevDecisionDto | null>(null);
     readonly jevDecisionLoading = signal(false);
     readonly jevDecisionError = signal('');
@@ -91,24 +89,24 @@ export class ObservationPanelComponent {
             .finally(() => this.jevDecisionLoading.set(false));
     }
 
-    runJudgment(): void {
-        this.judgmentError.set('');
-        let body: Record<string, unknown>;
-        try {
-            body = JSON.parse(this.judgmentInput());
-        } catch {
-            this.judgmentError.set('Verdict input must be valid JSON.');
-            return;
-        }
-        this.judgmentLoading.set(true);
-        this.service.evaluateSufficiency(this.consumerId(), body)
-            .then((result) => this.judgmentResult.set(result))
-            .catch((error) => this.judgmentError.set(this.message(error, 'Could not compute verdict')))
-            .finally(() => this.judgmentLoading.set(false));
+    evidenceText(evidence: unknown): string {
+        try { return JSON.stringify(this.redactEvidence(evidence ?? null), null, 2); } catch { return String(evidence); }
     }
 
-    evidenceText(evidence: unknown): string {
-        try { return JSON.stringify(evidence ?? null, null, 2); } catch { return String(evidence); }
+    /**
+     * BUG-36: same redaction convention as `/events` — prompt-bearing keys become `[redacted]`,
+     * walked recursively because host evidence can nest its payload.
+     */
+    private redactEvidence(value: unknown): unknown {
+        if (Array.isArray(value)) return value.map((item) => this.redactEvidence(item));
+        if (value && typeof value === 'object') {
+            const redacted: Record<string, unknown> = {};
+            for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+                redacted[key] = ['userQuery', 'prompt', 'requestBody'].includes(key) ? '[redacted]' : this.redactEvidence(item);
+            }
+            return redacted;
+        }
+        return value;
     }
 
     private loadObservations(force: boolean): void {
@@ -116,7 +114,7 @@ export class ObservationPanelComponent {
         if (this.loaded && !force) return;
         this.observationsLoading.set(true);
         this.observationsError.set(null);
-        this.service.getObservations(this.consumerId())
+        this.service.getObservations(this.consumerId(), this.observationLimit)
             .then((items) => {
                 this.observations.set([...items].sort((left, right) => this.observationTime(right) - this.observationTime(left)));
                 this.loaded = true;

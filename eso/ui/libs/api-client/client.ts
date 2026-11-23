@@ -72,6 +72,8 @@ export class ControlPlaneApiClient {
     private getHeaders(): Record<string, string> {
         const headers: Record<string, string> = {
             'Accept': 'application/json, text/html',
+            // BUG-44: every call carries a correlation id so a client error can be joined to server logs.
+            'X-Trace-Id': `tr-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
         };
         const token = this.tokenProvider();
         if (token) {

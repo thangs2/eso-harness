@@ -37,6 +37,12 @@ import type { ConsumerProfile, HostDto, KnowledgeSummaryDto, KnowledgeDocDto, Kn
  */
 import { SettingsHostsBase } from './settings-hosts.base.js';
 export abstract class SettingsKnowledgeBase extends SettingsHostsBase {
+/** BUG-15: `/knowledge/docs` returns at most this many rows (server clamps to 50). */
+readonly knowledgeDocsLimit = 50;
+
+/** BUG-16: findings counters are hidden at zero instead of printing a contradictory `0`. */
+readonly knowledgeFindingsCount = computed(() => this.knowledgeSummary()?.findings || 0);
+
 back(): void { const id = this.route.snapshot.paramMap.get('id'); this.router.navigate(['/consumers', id]); }
 
 pipelineGroups(): Array<{ id: string; title: string; stages: Array<{ id: string; label: string; gate: string }> }> {

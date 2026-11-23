@@ -14,7 +14,9 @@
     <div class="summary-stats" aria-label="Knowledge counts">
         <div class="summary-stat"><strong>{{ summary()?.docs || 0 }}</strong><span>Documents</span></div>
         <div class="summary-stat"><strong>{{ summary()?.edges || 0 }}</strong><span>Graph edges</span></div>
-        <div class="summary-stat" [class.warn]="(summary()?.findings || 0) > 0"><strong>{{ summary()?.findings || 0 }}</strong><span>Open findings</span></div>
+        @if ((summary()?.findings || 0) > 0) {
+            <div class="summary-stat warn"><strong>{{ summary()?.findings }}</strong><span>Open findings</span></div>
+        }
         <div class="summary-stat"><strong>{{ embeddingStatus()?.embedded || 0 }}<small>/{{ embeddingStatus()?.chunks || 0 }}</small></strong><span>Embedded chunks</span></div>
     </div>
 
@@ -43,7 +45,7 @@
             </button>
             <button type="button" class="knowledge-card" (click)="sectionChange.emit('index')">
                 <span class="eyebrow">Index &amp; health</span>
-                <strong>{{ summary()?.docs || 0 }} docs · {{ summary()?.findings || 0 }} findings</strong>
+                <strong>{{ summary()?.docs || 0 }} docs@if ((summary()?.findings || 0) > 0) { · {{ summary()?.findings }} findings }</strong>
                 <small>{{ embeddingStatus()?.embedded || 0 }}/{{ embeddingStatus()?.chunks || 0 }} chunks embedded</small>
             </button>
             <button type="button" class="knowledge-card" (click)="sectionChange.emit('manifest')">

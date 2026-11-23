@@ -185,6 +185,7 @@ type DialogMode = 'register' | 'host' | 'runtime';
                             <mat-form-field appearance="outline" subscriptSizing="dynamic">
                                 <mat-label>Host type</mat-label>
                                 <mat-select [ngModel]="formHostType()" (ngModelChange)="formHostType.set($event)">
+                                    <mat-option value="">Choose a host type…</mat-option>
                                     @for (item of hostCatalog; track item.type) { <mat-option [value]="item.type">{{ item.label }}</mat-option> }
                                 </mat-select>
                             </mat-form-field>
@@ -245,6 +246,7 @@ type DialogMode = 'register' | 'host' | 'runtime';
                                 <mat-checkbox class="full" [checked]="formLeadEligible()" (change)="formLeadEligible.set($event.checked)">Lead eligible — this runtime may run the Lead turn</mat-checkbox>
                             }
                             @if (submitted() && formError(); as message) { <p class="form-error form-error-full" role="alert">{{ message }}</p> }
+                            @if (dialogError(); as message) { <p class="form-error form-error-full" role="alert">{{ message }}</p> }
                         </div>
                         <footer class="host-dialog-actions">
                             <button mat-stroked-button type="button" (click)="closeDialog()">Cancel</button>
@@ -363,6 +365,8 @@ export class HostsPage implements OnInit {
     readonly editingHostId = signal<string | null>(null);
     readonly editingRuntimeId = signal<string | null>(null);
     readonly submitted = signal(false);
+    /** BUG-20: save failures belong inside the dialog, not on the page banner hidden by its backdrop. */
+    readonly dialogError = signal('');
     readonly formHostId = signal('');
     readonly formHostType = signal('cursor');
     readonly formHostLabel = signal('');
@@ -534,6 +538,7 @@ export class HostsPage implements OnInit {
         this.submitted.set(false);
         this.notice.set(null);
         this.error.set(null);
+        this.dialogError.set('');
         this.dialogOpen.set(true);
     }
 
@@ -551,6 +556,7 @@ export class HostsPage implements OnInit {
         this.editingRuntimeId.set(null);
         this.submitted.set(false);
         this.error.set(null);
+        this.dialogError.set('');
     }
 
     trapFocus(event: KeyboardEvent): void {
@@ -575,6 +581,7 @@ export class HostsPage implements OnInit {
         if (this.formError() || this.saving()) return;
         this.saving.set(true);
         this.error.set(null);
+        this.dialogError.set('');
         const mode = this.dialogMode();
         const hostId = this.formHostId().trim();
         const hostType = this.formHostType();
@@ -608,7 +615,7 @@ export class HostsPage implements OnInit {
                 this.submitted.set(false);
                 return this.load();
             })
-            .catch((err) => this.error.set(err?.detail || err?.message || 'Could not save host'))
+            .catch((err) => this.dialogError.set(err?.detail || err?.message || 'Could not save host'))
             .finally(() => this.saving.set(false));
     }
 

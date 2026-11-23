@@ -43,6 +43,7 @@ const WORKERS: WorkerDef[] = [
                         </select>
                     </label>
                     <a mat-stroked-button routerLink="/events" [queryParams]="{ consumer: consumerId() }">2D stream</a>
+                    <button mat-stroked-button type="button" (click)="toggleAutoRefresh()">{{ autoRefresh() ? 'Stop live' : 'Start live' }}</button>
                     <button mat-stroked-button type="button" (click)="resetCamera()">Reset camera</button>
                     <button mat-stroked-button type="button" [disabled]="loading()" (click)="load()">{{ loading() ? 'Refreshing…' : 'Refresh' }}</button>
                 </div>
@@ -54,7 +55,7 @@ const WORKERS: WorkerDef[] = [
                 <aside class="team-panel" aria-label="Team roster">
                     <header class="panel-head">
                         <div><p class="eyebrow">Team</p><h2>Staff</h2></div>
-                        <span class="live-chip"><i></i> live</span>
+                        @if (autoRefresh()) { <span class="live-chip"><i></i> live</span> } @else { <span class="staff-state">paused</span> }
                     </header>
                     <div class="roster">
                         @for (worker of workers(); track worker.id) {
@@ -193,6 +194,8 @@ export class OfficePage implements OnInit, AfterViewInit, OnDestroy {
     readonly selectedWorker = signal('');
     readonly sceneReady = signal(false);
     readonly activeTraceId = signal('');
+    /** BUG-29: the 5 s poll must be stoppable, otherwise the page keeps loading for as long as it is open. */
+    readonly autoRefresh = signal(true);
 
     readonly workers = computed<OfficeWorker[]>(() => {
         const trace = this.activeTraceId();
@@ -236,7 +239,28 @@ export class OfficePage implements OnInit, AfterViewInit, OnDestroy {
 
     ngOnInit(): void {
         void this.init();
-        this.timer = setInterval(() => { if (!this.loading()) void this.load(); }, 5000);
+        this.startPolling();
+    }
+
+    private startPolling(): void {
+        if (this.timer) return;
+        this.timer = setInterval(() => { if (this.autoRefresh() && !this.loading()) void this.load(); }, 5000);
+    }
+
+    private stopPolling(): void {
+        if (this.timer) clearInterval(this.timer);
+        this.timer = null;
+    }
+
+    toggleAutoRefresh(): void {
+        const next = !this.autoRefresh();
+        this.autoRefresh.set(next);
+        if (next) {
+            this.startPolling();
+            void this.load();
+        } else {
+            this.stopPolling();
+        }
     }
 
     ngAfterViewInit(): void {
@@ -247,7 +271,7 @@ export class OfficePage implements OnInit, AfterViewInit, OnDestroy {
     }
 
     ngOnDestroy(): void {
-        if (this.timer) clearInterval(this.timer);
+        this.stopPolling();
         this.scene?.dispose();
         this.syncScene.destroy();
     }
@@ -270,6 +294,10 @@ export class OfficePage implements OnInit, AfterViewInit, OnDestroy {
     selectConsumer(id: string): void {
         this.consumerId.set(id);
         this.selectedWorker.set('');
+        // BUG-29: never keep the previous consumer's rows on screen while the new one loads.
+        this.observations.set([]);
+        this.activeTraceId.set('');
+        this.error.set('');
         void this.router.navigate([], { relativeTo: this.route, queryParams: { consumer: id }, queryParamsHandling: 'merge', replaceUrl: true });
         void this.load();
     }
@@ -288,6 +316,9 @@ export class OfficePage implements OnInit, AfterViewInit, OnDestroy {
             if (best && best !== this.activeTraceId()) this.activeTraceId.set(best);
         } catch (error) {
             this.error.set((error as Error)?.message || 'Unable to load events');
+            // BUG-29: a failed poll must not leave the last successful rows looking current.
+            this.observations.set([]);
+            this.activeTraceId.set('');
         } finally {
             this.loading.set(false);
         }

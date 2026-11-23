@@ -49,7 +49,12 @@ import type { ConsumerOption, ProvisioningError, ProvisioningPreview, Provisioni
                         <span class="status-badge">{{ res.status }}</span>
                     </div>
                     <p class="alert-message">
-                        Consumer <code>{{ res.consumerId }}</code> was provisioned with schema <code>{{ res.schema }}</code> and is ready.
+                        Consumer <code>{{ res.consumerId }}</code> was provisioned with schema <code>{{ res.schema }}</code>.
+                        @if (res.ready) {
+                            Setup read-back reports <strong>ready</strong>.
+                        } @else {
+                            Setup read-back does <strong>not</strong> report ready (status <code>{{ res.status }}</code>); verify schema and material before use.
+                        }
                     </p>
                 </div>
             }

@@ -138,7 +138,8 @@ affectedBindings(): number {
 applyBulkUpgrade(): void {
         const target = this.bulkUpgradeTarget();
         if (!target) return;
-        this.hostProfiles.update((profiles) => profiles.map((profile) => ({ ...profile, stackVersion: target })));
+        // BUG-28: touch exactly the rows that were counted as affected (no wider rewrite).
+        this.hostProfiles.update((profiles) => profiles.map((profile) => profile.stackVersion === target ? profile : { ...profile, stackVersion: target }));
         this.closeBulkUpgrade();
     }
 
@@ -177,13 +178,13 @@ isLayerEnabled(layerId: LayerId, version = this.activeStackVersion()): boolean {
         return this.layersForVersion(version).find((item) => item.id === layerId)?.enabled ?? false;
     }
 
-isResolutionLayerEnabled(layerId: LayerId): boolean {
-        return this.isLayerEnabled(layerId, this.newStackVersion());
+isResolutionLayerEnabled(layerId: LayerId, version = this.newStackVersion()): boolean {
+        return this.isLayerEnabled(layerId, version);
     }
 
-sourceOptionsFor(layerId: LayerId): string[] {
-        if (!this.isResolutionLayerEnabled(layerId)) return [];
-        const layer = this.layersForVersion(this.newStackVersion()).find((item) => item.id === layerId);
+sourceOptionsFor(layerId: LayerId, version = this.newStackVersion()): string[] {
+        if (!this.isResolutionLayerEnabled(layerId, version)) return [];
+        const layer = this.layersForVersion(version).find((item) => item.id === layerId);
         return layer?.allowedSources?.length ? layer.allowedSources : this.policySources;
     }
 

@@ -5,7 +5,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { FCanvasComponent, FFlowModule, type FCreateConnectionEvent, type FMoveNodesEvent } from '@foblex/flow';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { ConsumerProfileService } from '../../../core/consumers/consumer-profile.service.js';
 import type { FlowDefinitionDto, FlowProposalDto, FlowSummaryDto, FlowValidationDto, WorkerConfigDto } from '../../../../../../../libs/api-client/types.js';
 
@@ -347,7 +347,6 @@ import type { FlowDefinitionDto, FlowProposalDto, FlowSummaryDto, FlowValidation
 export class FlowsPage implements OnInit {
     private readonly service = inject(ConsumerProfileService);
     private readonly route = inject(ActivatedRoute);
-    private readonly router = inject(Router);
     private readonly canvas = viewChild(FCanvasComponent);
 
     readonly consumerId = this.route.snapshot.paramMap.get('id') || '';
@@ -718,9 +717,5 @@ export class FlowsPage implements OnInit {
 
     workerInitial(id: string): string {
         return (this.workerLabel(id) || 'W').slice(0, 1).toUpperCase();
-    }
-
-    back(): void {
-        void this.router.navigate(['/consumers', this.consumerId, 'settings'], { queryParams: { tab: 'workers' } });
     }
 }

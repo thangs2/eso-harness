@@ -82,10 +82,17 @@
                 <mat-select formControlName="kind"><mat-option value="write">write</mat-option><mat-option value="read">read</mat-option></mat-select>
             </mat-form-field>
             <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Mode</mat-label>
-                <mat-select formControlName="mode"><mat-option value="once">once</mat-option><mat-option value="always">always (read only)</mat-option></mat-select>
+                <mat-select formControlName="mode"><mat-option value="once">once</mat-option><mat-option value="always" [disabled]="grantForm.controls.kind.value === 'write'">always (read only)</mat-option></mat-select>
             </mat-form-field>
-            <button mat-stroked-button type="button" [disabled]="!grantForm.controls.target.value.trim()" (click)="createGrant()">Create grant</button>
+            <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Expires in (minutes)</mat-label>
+                <input matInput type="number" formControlName="ttlMinutes" min="1" [max]="grantTtlMaxMinutes()">
+                <mat-hint>{{ grantForm.controls.mode.value === 'always' ? 'Always grants do not expire.' : '1–' + grantTtlMaxMinutes() + ' minutes.' }}</mat-hint>
+            </mat-form-field>
+            <button mat-stroked-button type="button" [disabled]="grantSaving() || !grantForm.controls.target.value.trim()" (click)="createGrant()">{{ grantSaving() ? 'Creating…' : 'Create grant' }}</button>
         </form>
+        @if (grantForm.controls.kind.value === 'write') {
+            <p class="grant-note">Write grants are single-use; choose the read kind for an always grant.</p>
+        }
 
         @if (grants().length === 0) {
             <p class="empty-grants">No active grants.</p>
