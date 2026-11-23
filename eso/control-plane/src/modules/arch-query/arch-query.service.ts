@@ -17,7 +17,7 @@
  * same `{code,status,detail}` shape locally instead of editing the shared table.
  */
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { dirname, extname, join, relative, sep } from 'node:path';
+import { dirname, extname, join, relative, resolve, sep } from 'node:path';
 
 const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.py', '.java', '.go', '.kt'];
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', 'build', 'coverage', '.harness', '.next', 'target', 'vendor', '__pycache__']);
@@ -44,6 +44,8 @@ export interface ArchCitation {
 
 export interface ArchAnswer {
     question: ArchQuestion;
+    /** Absolute root that was scanned (BUG-47); every citation is relative to this root. */
+    root: string;
     status: 'answered' | 'unknown';
     answer: string;
     evidence: ArchCitation[];
@@ -256,19 +258,31 @@ function dedupeEvidence(citations: ArchCitation[]): ArchCitation[] {
 }
 
 export class ArchQueryService {
-    private cached: RepoIndex | null = null;
+    /**
+     * BUG-47: one index per scanned root. Consumers have different trees, so a single cached
+     * graph would answer about whichever root was scanned first (the server's own cwd).
+     */
+    private readonly indexes = new Map<string, RepoIndex>();
 
     constructor(private readonly root: string) {}
 
-    /** Drop the cached graph index (the FRD assumes a per-commit index, not a per-request scan). */
-    refresh(): void {
-        this.cached = null;
+    /**
+     * Drop cached graph indexes: every root by default, or one root when given (the FRD assumes
+     * a per-commit index, not a per-request scan). `refresh()` keeps working for the default root.
+     */
+    refresh(root?: string): void {
+        if (root === undefined) this.indexes.clear();
+        else this.indexes.delete(this.rootKey(root));
     }
 
-    /** Synchronous on purpose: pure static scan, so `await` also works for callers. */
-    ask(question: ArchQuestion): ArchAnswer {
+    /**
+     * Synchronous on purpose: pure static scan, so `await` also works for callers.
+     * `root` overrides the constructor root (a consumer repo, BUG-47); citations stay relative to
+     * the scanned root and the answer names that root.
+     */
+    ask(question: ArchQuestion, root?: string): ArchAnswer {
         if (!question || typeof question !== 'object') invalidTask('an architecture question is required');
-        const index = this.index;
+        const index = this.indexFor(root);
         let answer: ArchAnswer;
         if (question.kind === 'monolith') {
             if (question.task === 'cycles') answer = this.monolithCycles(question, index);
@@ -285,9 +299,9 @@ export class ArchQueryService {
         return this.assertContract(answer);
     }
 
-    /** Answer all four F-21 groups against one snapshot of the graph. */
-    askAll(): Record<MicroserviceGroup, ArchAnswer> {
-        const index = this.index;
+    /** Answer all four F-21 groups against one snapshot of the graph for `root`. */
+    askAll(root?: string): Record<MicroserviceGroup, ArchAnswer> {
+        const index = this.indexFor(root);
         const answers = {} as Record<MicroserviceGroup, ArchAnswer>;
         for (const group of MICROSERVICE_GROUPS) {
             const question: ArchQuestion = { kind: 'microservices', group };
@@ -311,7 +325,7 @@ export class ArchQueryService {
         if (!Array.isArray(answer.evidence) || answer.evidence.length === 0) {
             violation(`answer '${answer.answer}' has no file:line evidence (derived ⊆ source)`);
         }
-        const index = this.index;
+        const index = this.indexFor(answer.root || undefined);
         for (const citation of answer.evidence) {
             const file = index.files.get(citation.file);
             if (!file) violation(`cited file '${citation.file}' is not in the scanned source set`);
@@ -326,17 +340,25 @@ export class ArchQueryService {
         return answer;
     }
 
-    private get index(): RepoIndex {
-        if (!this.cached) this.cached = this.buildIndex();
-        return this.cached;
+    private rootKey(root?: string): string {
+        return resolve(root ?? this.root);
     }
 
-    private buildIndex(): RepoIndex {
+    private indexFor(root?: string): RepoIndex {
+        const key = this.rootKey(root);
+        const cached = this.indexes.get(key);
+        if (cached) return cached;
+        const built = this.buildIndex(key);
+        this.indexes.set(key, built);
+        return built;
+    }
+
+    private buildIndex(root: string): RepoIndex {
         const absoluteFiles: string[] = [];
-        walkSources(this.root, absoluteFiles);
+        walkSources(root, absoluteFiles);
         const files = new Map<string, SourceFile>();
         for (const absolute of absoluteFiles.sort()) {
-            const path = relative(this.root, absolute).split(sep).join('/');
+            const path = relative(root, absolute).split(sep).join('/');
             const text = readFileSync(absolute, 'utf8');
             files.set(path, { path, lines: text.split(/\r?\n/), imports: [] });
         }
@@ -355,11 +377,11 @@ export class ArchQueryService {
                 }
             }
         }
-        return { root: this.root, files, cycles: findCycles(edges), scannedFiles: files.size };
+        return { root, files, cycles: findCycles(edges), scannedFiles: files.size };
     }
 
     private unknown(question: ArchQuestion, index: RepoIndex, reason: string): ArchAnswer {
-        return { question, status: 'unknown', answer: 'unknown', evidence: [], reason, scannedFiles: index.scannedFiles };
+        return { question, root: index.root, status: 'unknown', answer: 'unknown', evidence: [], reason, scannedFiles: index.scannedFiles };
     }
 
     private monolithImpact(question: ArchQuestion, index: RepoIndex): ArchAnswer {
@@ -410,6 +432,7 @@ export class ArchQueryService {
         const cycleNote = cycles.length ? ` Dependency cycle: ${cycles.map((cycle) => cycle.join(' -> ')).join('; ')}` : '';
         return {
             question,
+            root: index.root,
             status: 'answered',
             answer: `Changing ${target.path} affects ${dependents.length} module(s): ${dependents.join(', ')}.${cycleNote}`,
             evidence: dedupeEvidence(evidence),
@@ -436,6 +459,7 @@ export class ArchQueryService {
         const modules = [...new Set(index.cycles.flat())].sort();
         return {
             question,
+            root: index.root,
             status: 'answered',
             answer: `${index.cycles.length} dependency cycle(s): ${index.cycles.map((cycle) => cycle.join(' -> ')).join('; ')}`,
             evidence: dedupeEvidence(evidence),
@@ -467,6 +491,7 @@ export class ArchQueryService {
         const files = new Set(citations.map((citation) => citation.file)).size;
         return {
             question,
+            root: index.root,
             status: 'answered',
             answer: `${spec.label} is evidenced at ${first.file}:${first.line} (${citations.length} citation(s) across ${files} file(s)).`,
             evidence: citations,

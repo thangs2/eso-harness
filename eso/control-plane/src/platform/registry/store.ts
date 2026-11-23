@@ -28,6 +28,51 @@ import type {
 import { normalizeListWindow } from './types.js';
 
 /**
+ * BUG-46: one durable home for host evidence. Both ingest write paths
+ * (`/ingest/events` envelopes and `/evidence` ledger records) persist here, so a restart loses
+ * nothing and there is a single source of truth for a consumer.
+ *
+ * `origin` keeps each route's identity namespace: an ingest envelope is idempotent by `event_id`,
+ * an evidence claim by its explicit `id`. The unique key is `(origin, evidence_id)`.
+ */
+export type EvidenceOrigin = 'ingest' | 'evidence';
+
+/** Input for `PlatformStore.appendEvidence` (camelCase, like the other write methods). */
+export interface EvidenceWrite {
+    evidenceId: string;
+    origin: EvidenceOrigin;
+    schema?: string | null;
+    kind: string;
+    occurredAt?: string | null;
+    receivedAt?: string | null;
+    contentHash?: string | null;
+    sourceHash?: string | null;
+    payload?: unknown;
+    provenance?: unknown;
+    redaction?: unknown;
+}
+
+/** Persisted row shape, identical for both stores (snake_case, like `listObservations`). */
+export interface EvidenceRow {
+    evidence_id: string;
+    origin: EvidenceOrigin;
+    schema: string | null;
+    kind: string;
+    occurred_at: string | Date | null;
+    received_at: string | Date;
+    content_hash: string | null;
+    source_hash: string | null;
+    payload: unknown;
+    provenance: unknown;
+    redaction: unknown;
+}
+
+export interface EvidenceAppended {
+    record: EvidenceRow;
+    created: boolean;
+}
+
+/**
  * PlatformDb contract (plane B §3 · plane D §1):
  *   query/exec/transaction, plus the small typed surface the registry needs.
  *
@@ -81,6 +126,14 @@ export interface PlatformStore {
     insertObservation(consumerId: string, observation: any): Promise<{ observation: any; created: boolean }>;
     listObservations(consumerId: string, limit?: number): Promise<any[]>;
     pruneObservations(consumerId: string, before: string): Promise<number>;
+    /**
+     * BUG-46: append-only evidence, idempotent by `(origin, evidence_id)`. No update/delete member
+     * exists on purpose — AC-19's 405 is a property of the surface, not a route check.
+     */
+    appendEvidence(consumerId: string, records: ReadonlyArray<EvidenceWrite>): Promise<EvidenceAppended[]>;
+    /** Oldest first (append order), so ingest echoes its batch in the host's order. */
+    listEvidence(consumerId: string, options?: { origin?: EvidenceOrigin }): Promise<EvidenceRow[]>;
+    getEvidence(consumerId: string, evidenceId: string, options?: { origin?: EvidenceOrigin }): Promise<EvidenceRow | null>;
     listWorkerHostPolicies(consumerId: string): Promise<any[]>;
     getWorkerHostPolicy(consumerId: string, workerId: string): Promise<any>;
     upsertWorkerHostPolicy(consumerId: string, workerId: string, config: any): Promise<any>;
@@ -201,6 +254,8 @@ export class MemoryPlatformStore implements PlatformStore {
     private workerHostPolicies = new Map<string, any>();
     private hostTokens = new Map<string, any>();
     private observations = new Map<string, any[]>();
+    private evidence = new Map<string, any[]>();
+    private evidenceSeq = 0;
     private schemas = new Set<string>();
     private nextEventId = 1;
     private searchPath: string | null = null;
@@ -230,6 +285,8 @@ export class MemoryPlatformStore implements PlatformStore {
             workerHostPolicies: new Map([...this.workerHostPolicies].map(([key, value]) => [key, clone(value)])),
             hostTokens: new Map([...this.hostTokens].map(([key, value]) => [key, clone(value)])),
             observations: new Map([...this.observations].map(([key, value]) => [key, clone(value)])),
+            evidence: new Map([...this.evidence].map(([key, value]) => [key, clone(value)])),
+            evidenceSeq: this.evidenceSeq,
             schemas: new Set(this.schemas),
             nextEventId: this.nextEventId,
             searchPath: this.searchPath,
@@ -245,6 +302,8 @@ export class MemoryPlatformStore implements PlatformStore {
             this.workerHostPolicies = snapshot.workerHostPolicies;
             this.hostTokens = snapshot.hostTokens;
             this.observations = snapshot.observations;
+            this.evidence = snapshot.evidence;
+            this.evidenceSeq = snapshot.evidenceSeq;
             this.schemas = snapshot.schemas;
             this.nextEventId = snapshot.nextEventId;
             this.searchPath = snapshot.searchPath;
@@ -509,6 +568,47 @@ export class MemoryPlatformStore implements PlatformStore {
         const kept = rows.filter((row) => String(row.received_at) >= String(before));
         this.observations.set(consumerId, kept);
         return rows.length - kept.length;
+    }
+
+    async appendEvidence(consumerId: string, records: ReadonlyArray<EvidenceWrite>): Promise<EvidenceAppended[]> {
+        const rows = this.evidence.get(consumerId) ?? [];
+        const appended = records.map((record) => {
+            const existing = rows.find((row) => row.origin === record.origin && row.evidence_id === record.evidenceId);
+            if (existing) return { record: clone(existing), created: false };
+            const row = {
+                seq: ++this.evidenceSeq,
+                evidence_id: record.evidenceId,
+                origin: record.origin,
+                schema: record.schema ?? null,
+                kind: record.kind,
+                occurred_at: record.occurredAt ?? null,
+                received_at: record.receivedAt ?? new Date().toISOString(),
+                content_hash: record.contentHash ?? null,
+                source_hash: record.sourceHash ?? null,
+                payload: clone(record.payload ?? {}),
+                provenance: clone(record.provenance ?? {}),
+                redaction: clone(record.redaction ?? {}),
+            };
+            rows.push(row);
+            return { record: clone(row), created: true };
+        });
+        this.evidence.set(consumerId, rows);
+        return appended;
+    }
+
+    async listEvidence(consumerId: string, options: { origin?: EvidenceOrigin } = {}): Promise<EvidenceRow[]> {
+        return (this.evidence.get(consumerId) ?? [])
+            .filter((row) => !options.origin || row.origin === options.origin)
+            .slice()
+            .sort((a, b) => Number(a.seq) - Number(b.seq))
+            .map((row) => clone(row));
+    }
+
+    async getEvidence(consumerId: string, evidenceId: string, options: { origin?: EvidenceOrigin } = {}): Promise<EvidenceRow | null> {
+        const row = (this.evidence.get(consumerId) ?? []).find(
+            (entry) => entry.evidence_id === evidenceId && (!options.origin || entry.origin === options.origin)
+        );
+        return row ? clone(row) : null;
     }
 
     async listWorkerHostPolicies(consumerId: string): Promise<any[]> {
@@ -1357,6 +1457,64 @@ export class BunSqlPlatformStore implements PlatformStore {
             [before]
         );
         return rows.length;
+    }
+
+    async appendEvidence(consumerId: string, records: ReadonlyArray<EvidenceWrite>): Promise<EvidenceAppended[]> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        const appended: EvidenceAppended[] = [];
+        for (const record of records) {
+            const rows = await this.sql.unsafe(
+                `INSERT INTO ${schema}.knowledge_evidence
+                 (evidence_id,origin,schema,kind,occurred_at,received_at,content_hash,source_hash,payload,provenance,redaction)
+                 VALUES ($1,$2,$3,$4,$5::timestamptz,COALESCE($6::timestamptz, now()),$7,$8,$9::jsonb,$10::jsonb,$11::jsonb)
+                 ON CONFLICT (origin,evidence_id) DO NOTHING
+                 RETURNING evidence_id,origin,schema,kind,occurred_at,received_at,content_hash,source_hash,payload,provenance,redaction`,
+                [record.evidenceId, record.origin, record.schema ?? null, record.kind,
+                 record.occurredAt ?? null, record.receivedAt ?? null,
+                 record.contentHash ?? null, record.sourceHash ?? null,
+                 record.payload ?? {}, record.provenance ?? {}, record.redaction ?? {}]
+            );
+            if (rows.length) {
+                appended.push({ record: rows[0], created: true });
+                continue;
+            }
+            // `DO NOTHING` swallowed a duplicate: echo the row that already exists (AC-36 keeps
+            // the original `received_at`).
+            const existing = await this.sql.unsafe(
+                `SELECT evidence_id,origin,schema,kind,occurred_at,received_at,content_hash,source_hash,payload,provenance,redaction
+                 FROM ${schema}.knowledge_evidence WHERE origin=$1 AND evidence_id=$2`,
+                [record.origin, record.evidenceId]
+            );
+            if (!existing.length) throw new Error(`EVIDENCE_CONFLICT_MISSING:${record.origin}:${record.evidenceId}`);
+            appended.push({ record: existing[0], created: false });
+        }
+        return appended;
+    }
+
+    async listEvidence(consumerId: string, options: { origin?: EvidenceOrigin } = {}): Promise<EvidenceRow[]> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        const columns = 'evidence_id,origin,schema,kind,occurred_at,received_at,content_hash,source_hash,payload,provenance,redaction';
+        return options.origin
+            ? await this.sql.unsafe(
+                `SELECT ${columns} FROM ${schema}.knowledge_evidence WHERE origin=$1 ORDER BY seq ASC`,
+                [options.origin]
+            )
+            : await this.sql.unsafe(`SELECT ${columns} FROM ${schema}.knowledge_evidence ORDER BY seq ASC`);
+    }
+
+    async getEvidence(consumerId: string, evidenceId: string, options: { origin?: EvidenceOrigin } = {}): Promise<EvidenceRow | null> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        const columns = 'evidence_id,origin,schema,kind,occurred_at,received_at,content_hash,source_hash,payload,provenance,redaction';
+        const rows = options.origin
+            ? await this.sql.unsafe(
+                `SELECT ${columns} FROM ${schema}.knowledge_evidence WHERE origin=$1 AND evidence_id=$2`,
+                [options.origin, evidenceId]
+            )
+            : await this.sql.unsafe(
+                `SELECT ${columns} FROM ${schema}.knowledge_evidence WHERE evidence_id=$1`,
+                [evidenceId]
+            );
+        return rows[0] || null;
     }
 
     async listWorkerHostPolicies(consumerId: string): Promise<any[]> {

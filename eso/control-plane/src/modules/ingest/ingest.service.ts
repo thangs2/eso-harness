@@ -12,9 +12,9 @@ import { assertConsumerId } from '../../platform/registry/store.js';
  * The ledger is append-only: the port exposes `appendBatch` + `list` only, records are frozen on
  * write, and a batch is validated before anything is written (AC-36-3: no partial write).
  *
- * Persistence note: `c_<id>.evidence_event` + `ingest_receipt` DDL is not part of this slice — the
- * `EvidenceLedger` port is the seam the route/DB owner wires. The in-memory ledger is the
- * service-level implementation used by the AC tests.
+ * Persistence: the `EvidenceLedger` port is implemented by `StoreEvidenceLedger`, which persists
+ * through `PlatformStore` (BUG-46). There is no in-memory ledger left in the request path: the
+ * route and the `/evidence` route write the same `knowledge_evidence` table.
  */
 
 /** The only envelope version ESO accepts today (`D-118`). */
@@ -89,59 +89,8 @@ function requiredText(value: unknown, field: string, max = 512): string {
     return text;
 }
 
-function freezeDeep<T>(value: T): T {
-    if (Array.isArray(value)) {
-        value.forEach(freezeDeep);
-        return Object.freeze(value) as T;
-    }
-    if (value && typeof value === 'object') {
-        Object.values(value as Record<string, unknown>).forEach(freezeDeep);
-        return Object.freeze(value) as T;
-    }
-    return value;
-}
-
-/**
- * Service-level ledger: atomic per batch, idempotent per `(consumerId, event_id)`, append-only.
- */
-export class InMemoryEvidenceLedger implements EvidenceLedger {
-    private readonly records = new Map<string, EvidenceRecord[]>();
-    private readonly byKey = new Map<string, EvidenceRecord>();
-
-    async appendBatch(records: ReadonlyArray<EvidenceRecord>): Promise<AppendedRecord[]> {
-        const appended: AppendedRecord[] = [];
-        const pending: EvidenceRecord[] = [];
-        for (const record of records) {
-            const key = `${record.consumerId}\u0000${record.eventId}`;
-            const existing = this.byKey.get(key);
-            if (existing) {
-                appended.push({ record: freezeDeep({ ...existing }), created: false });
-                continue;
-            }
-            const frozen = freezeDeep({ ...record });
-            this.byKey.set(key, frozen);
-            pending.push(frozen);
-            appended.push({ record: frozen, created: true });
-        }
-        const byConsumer = new Map<string, EvidenceRecord[]>();
-        for (const record of pending) {
-            const rows = byConsumer.get(record.consumerId) ?? [];
-            rows.push(record);
-            byConsumer.set(record.consumerId, rows);
-        }
-        for (const [consumerId, rows] of byConsumer) {
-            this.records.set(consumerId, [...(this.records.get(consumerId) ?? []), ...rows]);
-        }
-        return appended;
-    }
-
-    async list(consumerId: string): Promise<EvidenceRecord[]> {
-        return (this.records.get(consumerId) ?? []).map((record) => freezeDeep({ ...record }));
-    }
-}
-
 export class EvidenceIngestService {
-    constructor(private readonly ledger: EvidenceLedger = new InMemoryEvidenceLedger()) {}
+    constructor(private readonly ledger: EvidenceLedger) {}
 
     /**
      * Validate the whole batch first, then append atomically.

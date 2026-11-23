@@ -11,12 +11,13 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import { PlatformError } from '../src/platform/registry/errors.js';
+import { MemoryPlatformStore } from '../src/platform/registry/store.js';
 import {
     EvidenceIngestService,
     INGEST_LIMITS,
     INGEST_SCHEMA,
-    InMemoryEvidenceLedger,
 } from '../src/modules/ingest/ingest.service.js';
+import { StoreEvidenceLedger } from '../src/modules/ingest/store-evidence-ledger.js';
 import {
     HARNESS_CORE_VERSION,
     HARNESS_PACKAGE_COMPONENTS,
@@ -86,7 +87,7 @@ function validPackageFiles(): Record<string, string | null> {
 
 describe('AC legacy batch 4b — US-36 ingest + US-37 packaging', () => {
     test('SCN-36-1 · AC-36-1 — batch hợp lệ ⇒ 202 accepted=2, mỗi event có event_id + received_at, ledger append-only', async () => {
-        const ingest = new EvidenceIngestService();
+        const ingest = new EvidenceIngestService(new StoreEvidenceLedger(new MemoryPlatformStore()));
 
         const result = await ingest.ingest('acme', batch([validEvent(EVENT_ID_1), validEvent(EVENT_ID_2)]));
 
@@ -112,7 +113,7 @@ describe('AC legacy batch 4b — US-36 ingest + US-37 packaging', () => {
     });
 
     test('SCN-36-2 · AC-36-2 — gửi lại E1 ⇒ 202 duplicate=1, không tạo record mới, giữ received_at gốc', async () => {
-        const ingest = new EvidenceIngestService();
+        const ingest = new EvidenceIngestService(new StoreEvidenceLedger(new MemoryPlatformStore()));
         const first = await ingest.ingest('acme', batch([validEvent(EVENT_ID_1)]));
         const receivedAt = first.events[0].received_at;
 
@@ -127,7 +128,7 @@ describe('AC legacy batch 4b — US-36 ingest + US-37 packaging', () => {
     });
 
     test('SCN-36-3 · AC-36-3 — schema lạ ⇒ 400 UNKNOWN_SCHEMA; quá size ⇒ 413 PAYLOAD_TOO_LARGE; không ghi record', async () => {
-        const ingest = new EvidenceIngestService();
+        const ingest = new EvidenceIngestService(new StoreEvidenceLedger(new MemoryPlatformStore()));
 
         await rejectsCode(ingest.ingest('acme', batch([validEvent(EVENT_ID_1)], 'eso.event.v2')), 'UNKNOWN_SCHEMA', 400);
         await rejectsCode(
@@ -140,7 +141,7 @@ describe('AC legacy batch 4b — US-36 ingest + US-37 packaging', () => {
         await rejectsCode(ingest.ingest('acme', batch(oversized)), 'PAYLOAD_TOO_LARGE', 413);
 
         assert.equal((await ingest.records('acme')).length, 0, 'a rejected batch writes nothing');
-        assert.equal((await new EvidenceIngestService(new InMemoryEvidenceLedger()).records('acme')).length, 0);
+        assert.equal((await new EvidenceIngestService(new StoreEvidenceLedger(new MemoryPlatformStore())).records('acme')).length, 0);
     });
 
     test('SCN-37-1 · AC-37-1 — đủ protocol · core · adapters · manifests; core không import SDK host', async () => {

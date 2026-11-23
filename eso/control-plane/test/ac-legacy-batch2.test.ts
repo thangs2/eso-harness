@@ -256,29 +256,29 @@ describe('AC legacy batch 2', () => {
         assert.deepEqual(readdirSync(root), []);
     });
 
-    test('SCN-19-1 · AC-19-1 — evidence hợp lệ: id + hash, ledger tăng 1 dòng', () => {
-        const ledger = new EvidenceLedgerService();
-        const row = ledger.append('ev-1', { id: 'ev-1', kind: 'turn', contentHash: 'h1', sourceHash: 'h1' });
+    test('SCN-19-1 · AC-19-1 — evidence hợp lệ: id + hash, ledger tăng 1 dòng', async () => {
+        const ledger = new EvidenceLedgerService(new MemoryPlatformStore());
+        const row = await ledger.append('ev-1', { id: 'ev-1', kind: 'turn', contentHash: 'h1', sourceHash: 'h1' });
         assert.equal(row.id, 'ev-1');
         assert.equal(row.contentHash, 'h1');
-        assert.equal(ledger.list('ev-1').length, 1);
+        assert.equal((await ledger.list('ev-1')).length, 1);
     });
 
-    test('SCN-19-2 · AC-19-2 — derived không khớp nguồn: DOC_CONTRACT_VIOLATION, không ghi', () => {
-        const ledger = new EvidenceLedgerService();
-        assert.throws(
-            () => ledger.append('ev-1', { id: 'bad', kind: 'turn', contentHash: 'h1', sourceHash: 'h2' }),
+    test('SCN-19-2 · AC-19-2 — derived không khớp nguồn: DOC_CONTRACT_VIOLATION, không ghi', async () => {
+        const ledger = new EvidenceLedgerService(new MemoryPlatformStore());
+        await assert.rejects(
+            ledger.append('ev-1', { id: 'bad', kind: 'turn', contentHash: 'h1', sourceHash: 'h2' }),
             (e: any) => e.code === 'DOC_CONTRACT_VIOLATION',
         );
-        assert.equal(ledger.list('ev-1').length, 0);
+        assert.equal((await ledger.list('ev-1')).length, 0);
     });
 
-    test('SCN-19-3 · AC-19-3 — PUT/DELETE evidence: 405/404, record còn', () => {
-        const ledger = new EvidenceLedgerService();
-        ledger.append('ev-1', { id: 'keep', kind: 'turn', contentHash: 'h', sourceHash: 'h' });
+    test('SCN-19-3 · AC-19-3 — PUT/DELETE evidence: 405/404, record còn', async () => {
+        const ledger = new EvidenceLedgerService(new MemoryPlatformStore());
+        await ledger.append('ev-1', { id: 'keep', kind: 'turn', contentHash: 'h', sourceHash: 'h' });
         assert.throws(() => (ledger as any).update(), (e: any) => e.code === 'INVALID_STATE');
-        assert.throws(() => ledger.get('ev-1', 'nope'), (e: any) => e.code === 'NOT_FOUND');
-        assert.equal(ledger.list('ev-1').length, 1);
+        await assert.rejects(ledger.get('ev-1', 'nope'), (e: any) => e.code === 'NOT_FOUND');
+        assert.equal((await ledger.list('ev-1')).length, 1);
         const routes = readFileSync(new URL('../src/common/http/server.ts', import.meta.url), 'utf8');
         assert.match(routes, /app\.put\('\/api\/v1\/consumers\/:id\/evidence\/:evidenceId'[\s\S]{0,160}405/);
         assert.match(routes, /app\.delete\('\/api\/v1\/consumers\/:id\/evidence\/:evidenceId'[\s\S]{0,160}405/);

@@ -255,6 +255,28 @@ CREATE TABLE knowledge_observation (
 CREATE INDEX knowledge_observation_trace ON knowledge_observation (trace_id, received_at DESC);
 CREATE INDEX knowledge_observation_received ON knowledge_observation (received_at DESC);
 
+-- BUG-46: durable host evidence, one table for both ingest paths (`/ingest/events` envelopes and
+-- `/evidence` ledger records). Append-only: no update/delete column or trigger, the API has no verb
+-- for either. `origin` is part of the identity so each route keeps its own idempotency key
+-- (`event_id` for ingest, explicit `id` for evidence); `received_at` is ESO time, never host time.
+CREATE TABLE knowledge_evidence (
+  seq          bigserial PRIMARY KEY,
+  evidence_id  text NOT NULL,
+  origin       text NOT NULL CHECK (origin IN ('ingest','evidence')),
+  schema       text,
+  kind         text NOT NULL,
+  occurred_at  timestamptz,
+  received_at  timestamptz NOT NULL DEFAULT now(),
+  content_hash text,
+  source_hash  text,
+  payload      jsonb NOT NULL DEFAULT '{}'::jsonb,
+  provenance   jsonb NOT NULL DEFAULT '{}'::jsonb,
+  redaction    jsonb NOT NULL DEFAULT '{}'::jsonb,
+  UNIQUE (origin, evidence_id)
+);
+
+CREATE INDEX knowledge_evidence_origin ON knowledge_evidence (origin, seq);
+
 CREATE TABLE knowledge_worker_handoff (
   handoff_id      text PRIMARY KEY,
   from_worker_id  text NOT NULL,

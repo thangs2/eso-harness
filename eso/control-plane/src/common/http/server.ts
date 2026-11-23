@@ -32,6 +32,7 @@ import { EvidenceLedgerService } from '../../modules/evidence-ledger/evidence-le
 import { InMemoryMemoryFactStore, MemoryService } from '../../modules/memory/memory.service.js';
 import { InMemoryTransferStore, TransferService } from '../../modules/transfer/transfer.service.js';
 import { EvidenceIngestService } from '../../modules/ingest/ingest.service.js';
+import { StoreEvidenceLedger } from '../../modules/ingest/store-evidence-ledger.js';
 import { HarnessPackagingService } from '../../modules/harness-packaging/harness-packaging.service.js';
 import { SelfUpgradeService } from '../../modules/self-upgrade/self-upgrade.service.js';
 import { ArchQueryService } from '../../modules/arch-query/arch-query.service.js';
@@ -525,12 +526,14 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
         return parity.compare((request.params as any).id, request.body ?? {});
     });
 
-    const evidenceLedger = new EvidenceLedgerService();
+    // BUG-46: both evidence write paths persist through the same store-backed adapter; no request
+    // path keeps evidence in a process-local Map.
+    const evidenceLedger = new EvidenceLedgerService(store);
 
 
     const memoryService = new MemoryService(new InMemoryMemoryFactStore());
     const transferService = new TransferService(new InMemoryTransferStore());
-    const ingestService = new EvidenceIngestService();
+    const ingestService = new EvidenceIngestService(new StoreEvidenceLedger(store));
     const packagingService = new HarnessPackagingService(process.cwd());
     const selfUpgradeService = new SelfUpgradeService(process.cwd());
     const archQueryService = new ArchQueryService(process.cwd());
@@ -630,6 +633,25 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
         return selfUpgradeService.apply((request.params as any).proposalId, (request as any).actor, (request.body as any) || undefined);
     });
 
+    /**
+     * BUG-47 — consumer-scoped architecture questions. The scan root is the consumer's repo, so
+     * `answer.root` and every citation refer to that tree instead of the control-plane cwd.
+     * Unknown consumer ⇒ 404 `CONSUMER_NOT_FOUND`; a consumer without a root ⇒ 422 `ROOT_NOT_FOUND`.
+     */
+    app.post('/api/v1/consumers/:id/arch/ask', { preHandler: requireAuth }, async (request) => {
+        const consumerId = String((request.params as any).id);
+        const consumer = await store.getConsumer(consumerId);
+        if (!consumer) throw new PlatformError('CONSUMER_NOT_FOUND', consumerId);
+        if (!consumer.root) throw new PlatformError('ROOT_NOT_FOUND', consumerId);
+        const answer = archQueryService.ask((request.body ?? {}) as any, consumer.root);
+        return archQueryService.assertContract(answer);
+    });
+
+    /**
+     * Backward compatibility only (repo scope): scans this control-plane checkout
+     * (`process.cwd()`), never a consumer repo. New callers must use
+     * `POST /api/v1/consumers/:id/arch/ask`; this route remains for pre-BUG-47 clients.
+     */
     app.post('/api/v1/arch/ask', { preHandler: requireAuth }, async (request) => {
         const answer = archQueryService.ask((request.body ?? {}) as any);
         return archQueryService.assertContract(answer);
@@ -640,7 +662,7 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
     });
 
     app.post('/api/v1/consumers/:id/evidence', { preHandler: requireAuth }, async (request, reply) => {
-        return reply.code(201).send(evidenceLedger.append((request.params as any).id, request.body ?? {}));
+        return reply.code(201).send(await evidenceLedger.append((request.params as any).id, request.body ?? {}));
     });
 
     app.get('/api/v1/consumers/:id/evidence/:evidenceId', { preHandler: requireAuth }, async (request) => {
