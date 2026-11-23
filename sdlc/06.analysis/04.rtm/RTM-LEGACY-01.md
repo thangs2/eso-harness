@@ -16,9 +16,9 @@ type: traceability-matrix
 | AC | SCN | endpoint | test |
 |---|---|---|---|
 | `AC-01-1` | `SCN-01-1` | — | `eso/control-plane/test/auth.test.ts` |
-| `AC-01-2` | `SCN-01-2` | — | MISSING |
-| `AC-01-3` | `SCN-01-3` | — | MISSING |
-| `AC-01-4` | `SCN-01-4` | — | MISSING |
+| `AC-01-2` | `SCN-01-2` | — | `qc/eso-auth.test.mjs` ||
+| `AC-01-3` | `SCN-01-3` | — | `qc/eso-auth.test.mjs` ||
+| `AC-01-4` | `SCN-01-4` | — | `qc/eso-auth.test.mjs` ||
 | `AC-03-1` | `SCN-03-1` | — | `eso/control-plane/test/consumer.test.ts` |
 | `AC-03-2` | `SCN-03-2` | — | `eso/control-plane/test/consumer.test.ts` |
 | `AC-03-3` | `SCN-03-3` | — | MISSING |
@@ -103,8 +103,8 @@ type: traceability-matrix
 | `AC-33-1` | `SCN-33-1` | — | MISSING |
 | `AC-33-2` | `SCN-33-2` | — | MISSING |
 | `AC-33-3` | `SCN-33-3` | — | MISSING |
-| `AC-34-1` | `SCN-34-1` | — | MISSING |
-| `AC-34-2` | `SCN-34-2` | — | MISSING |
+| `AC-34-1` | `SCN-34-1` | — | `qc/eso-surfaces.test.mjs` ||
+| `AC-34-2` | `SCN-34-2` | — | `qc/eso-surfaces.test.mjs` ||
 | `AC-34-3` | `SCN-34-3` | — | MISSING |
 | `AC-35-1` | `SCN-35-1` | — | MISSING |
 | `AC-35-2` | `SCN-35-2` | — | MISSING |
