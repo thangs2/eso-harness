@@ -119,8 +119,8 @@ type: traceability-matrix
 | `AC-38-2` | `SCN-38-2` | — | MISSING |
 | `AC-38-3` | `SCN-38-3` | — | MISSING |
 | `AC-39-1` | `SCN-39-1` | — | `eso/ui/test/onboarding.test.mjs` |
-| `AC-39-2` | `SCN-39-2` | — | MISSING |
-| `AC-39-3` | `SCN-39-3` | — | MISSING |
+| `AC-39-2` | `SCN-39-2` | — | `eso/ui/test/onboarding.test.mjs` |
+| `AC-39-3` | `SCN-39-3` | — | `eso/ui/test/onboarding.test.mjs` |
 | `AC-40-1` | `SCN-40-1` | — | `eso/control-plane/test/provisioning-schema.test.ts` |
 | `AC-40-2` | `SCN-40-2` | — | `eso/control-plane/test/provisioning-state.test.ts` |
 | `AC-40-3` | `SCN-40-3` | — | `eso/control-plane/test/provisioning-api.test.ts` |
