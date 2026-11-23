@@ -44,24 +44,6 @@
         </div>
 
         <div class="observatory-grid">
-            <section class="panel judgment-panel" aria-label="Judgment sufficiency">
-                <header class="panel-head">
-                    <div><h3>Judgment / sufficiency</h3><p>Verdict evidence only. Host executes the gate; ESO computes and displays the verdict. unknown is not absent; cannot-judge never allows.</p></div>
-                    @if (judgmentResult(); as result) { <span class="tag" [class.muted]="result.decision === 'allow'">{{ result.verdict.level }}</span> }
-                </header>
-                <mat-form-field appearance="outline" class="full">
-                    <mat-label>Verdict input JSON</mat-label>
-                    <textarea matInput rows="7" [value]="judgmentInput()" (input)="judgmentInput.set($any($event.target).value)"></textarea>
-                </mat-form-field>
-                <div class="action-row">
-                    <button mat-flat-button color="primary" type="button" [disabled]="judgmentLoading()" (click)="runJudgment()">{{ judgmentLoading() ? 'Judging…' : 'Run verdict' }}</button>
-                    @if (judgmentResult(); as result) {
-                        <span class="result-summary">{{ result.verdict.level }} · basis {{ result.verdict.basis }} · mode {{ result.verdict.mode }} · decision {{ result.decision }}<br>{{ result.gaps.total_gaps || 0 }} gap(s) · wouldBlock {{ result.wouldBlock }}</span>
-                    }
-                </div>
-                @if (judgmentError(); as message) { <p class="form-error" role="alert">{{ message }}</p> }
-            </section>
-
             <section class="panel jev-panel" aria-label="JEV integration">
                 <header class="panel-head">
                     <div><h3>JEV integration</h3><p>Decision facade config only. ESO stores the policy; the host owns JEV execution and evidence.</p></div>
