@@ -17,7 +17,7 @@ const TAIL = src('eso/ui/apps/control-plane/src/app/features/consumers/pages/set
 test('F-03 §9 · consent + JEV + timeline link', () => {
     assert.match(FRD, /## 9\. Bề mặt `settings\?tab=observation`/);
     assert.match(FRD, /PROFILE_JEV_NEEDS_CONSENT/);
-    assert.match(FRD, /observatory\?consumer=:id/);
+    assert.match(FRD, /không.*link.*observatory/i);
 });
 
 test('AC-49 4 tiêu chí + SCN + RTM', () => {

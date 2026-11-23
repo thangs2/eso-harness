@@ -19,7 +19,7 @@ const PANEL = src('eso/ui/apps/control-plane/src/app/features/consumers/componen
 test('F-06 §7 + REQ-10', () => {
     assert.match(FRD, /## 7\. Bề mặt `settings\?tab=boundaries`/);
     assert.match(SRS, /`REQ-10`/);
-    assert.match(FRD, /deny thắng allow/);
+    assert.match(FRD, /specificity/);
 });
 
 test('AC-48 4 tiêu chí + SCN + RTM', () => {
