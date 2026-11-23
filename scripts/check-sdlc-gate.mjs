@@ -139,20 +139,13 @@ const x12 = () => {
 /** X13 — every priority page has a doc, and every tab/section the code declares appears in it. */
 const x13 = () => {
     const dir = join(SDLC, '08.ui-design', '20.pages');
-    const registry = join(dir, '00.index.md');
-    if (!existsSync(registry)) return { id: 'X13', pages: 0, documented: 0, tabs: 0, tabsCovered: 0, sections: 0, sectionsCovered: 0 };
-    const rows = [];
-    for (const line of readFileSync(registry, 'utf8').split('\n')) {
-        const m = /^\|\s*(\d+)\s*\|(.+?)\|(.+?)\|\s*$/.exec(line);
-        if (!m) continue;
-        const link = /\]\(([^)]+)\)/.exec(m[3]);
-        const code = /`([^`]+\.md)`/.exec(m[3]);
-        const file = link ? link[1] : code ? code[1] : '';
-        rows.push({ url: m[2].replace(/`/g, '').trim(), file, exists: file ? existsSync(join(dir, file)) : false });
-    }
-    const docs = rows.filter((r) => r.exists).map((r) => readFileSync(join(dir, r.file), 'utf8')).join('\n');
-    // Settings đã/đang được tách thành nhiều file (tabs/ + *.base.ts) — quét cả subtree,
-    // không bám một file duy nhất, để phép đo không mất nguồn khi refactor.
+    if (!existsSync(dir)) return { id: 'X13', pages: 0, documented: 0, tabs: 0, tabsCovered: 0, sections: 0, sectionsCovered: 0 };
+    // Nguồn: mọi page doc trong 20.pages/ (không phụ thuộc link trong index).
+    const files = readdirSync(dir).filter((f) => f.endsWith('.md') && f !== '00.index.md');
+    const texts = files.map((f) => readFileSync(join(dir, f), 'utf8'));
+    const docs = texts.join('\n');
+    const documented = texts.filter((t) => /^id:\s*\S*PAGE-/m.test(t) && /^\|\s*Route\s*\|/m.test(t)).length;
+    // Settings đã/đang được tách thành nhiều file (tabs/ + *.base.ts) — quét cả subtree.
     const features = join(ROOT, 'eso/ui/apps/control-plane/src/app/features/consumers');
     const sourceFiles = existsSync(features)
         ? readdirSync(features, { recursive: true }).map(String).filter((f) => f.endsWith('.ts'))
@@ -163,12 +156,11 @@ const x13 = () => {
     const sectionBlock = /\['overview'[^\]]*\]/.exec(code);
     const sections = sectionBlock ? [...sectionBlock[0].matchAll(/'([a-z-]+)'/g)].map((m) => m[1]) : [];
     return {
-        id: 'X13', pages: rows.length, documented: rows.filter((r) => r.exists).length,
+        id: 'X13', pages: files.length, documented,
         tabs: tabs.length, tabsCovered: tabs.filter((t) => docs.includes(`tab=${t}`)).length,
         sections: sections.length, sectionsCovered: sections.filter((t) => docs.includes(`section=${t}`)).length,
     };
 };
-
 
 /** X14 — chuỗi AC↔SCN↔RTM: mỗi AC có ≥1 SCN, mỗi SCN trỏ AC có thật, RTM phủ mọi AC và nói rõ test. */
 const x14 = () => {
@@ -253,7 +245,7 @@ const main = () => {
         console.log(`X10 AC → id sdlc    ${x10r.joined}/${x10r.acInTests} AC join được (${x10r.testFiles} test)  ${x10r.joined ? '✅' : '❌'}`);
         console.log(`X11 path resolve    ${x11r.dead}/${x11r.cited} chết (${x11r.share}%)            ${x11r.dead ? '❌' : '✅'}`);
         console.log(`X12 slice            ${x12r.incomplete}/${x12r.pages} page chưa đủ hạng mục   ${x12r.incomplete ? '❌' : '✅'}`);
-        console.log(`X13 page inventory   ${x13r.documented}/${x13r.pages} page có ⑦ · tab ${x13r.tabsCovered}/${x13r.tabs} · section ${x13r.sectionsCovered}/${x13r.sections}  ${x13r.documented === x13r.pages && x13r.tabsCovered === x13r.tabs ? '✅' : '❌'}`);
+        console.log(`X13 page inventory   ${x13r.documented}/${x13r.pages} page có id · tab ${x13r.tabsCovered}/${x13r.tabs} · section ${x13r.sectionsCovered}/${x13r.sections}  ${x13r.documented === x13r.pages && x13r.tabsCovered === x13r.tabs ? '✅' : '❌'}`);
         console.log(`X14 chain AC-SCN-RTM   AC=${x14r.ac} · SCN=${x14r.scn} · AC thiếu SCN=${x14r.acWithoutSCN} · SCN trỏ AC lạ=${x14r.missingAC} · AC thiếu RTM=${x14r.acWithoutRTM} · test MISSING=${x14r.missingTest}/${x14r.rtm}  ${x14r.acWithoutSCN || x14r.missingAC || x14r.acWithoutRTM ? '❌' : (x14r.missingTest ? '⏳' : '✅')}`);
         const filledPages = x14r.pages.filter((p) => p.filled);
         const blocked = filledPages.filter((p) => p.missing > 0).map((p) => `${p.page} (0/${p.rows} test)`);
