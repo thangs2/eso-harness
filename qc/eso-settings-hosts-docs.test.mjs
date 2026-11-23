@@ -15,10 +15,10 @@ const UI = doc('08.ui-design/20.pages/08.settings-hosts.md');
 const CLIENT = src('eso/ui/libs/api-client/client.ts');
 const HOSTS_TAB = src('eso/ui/apps/control-plane/src/app/features/consumers/components/hosts-tab.component.html');
 
-test('F-44 · PRD + REQ-49 + BR-48', () => {
-    assert.match(doc('05.requirements/01.specification/01.prd/03.capabilities.md'), /`F-44`/);
+test('F-35 · PRD + REQ-49 + BR-35', () => {
+    assert.match(doc('05.requirements/01.specification/01.prd/03.capabilities.md'), /`F-35`/);
     assert.match(SRS, /`REQ-49`/);
-    assert.match(doc('05.requirements/01.specification/02.brd/04.business-rules.md'), /`BR-48`/);
+    assert.match(doc('05.requirements/01.specification/02.brd/04.business-rules.md'), /`BR-35`/);
 });
 
 test('FRD §1–§7 + chỉ published', () => {

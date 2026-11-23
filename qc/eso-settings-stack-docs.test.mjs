@@ -15,10 +15,10 @@ const UI = doc('08.ui-design/20.pages/07.settings-stack.md');
 const CLIENT = src('eso/ui/libs/api-client/client.ts');
 const SERVICE = src('eso/ui/apps/control-plane/src/app/core/consumers/consumer-profile.service.ts');
 
-test('F-43 · PRD + REQ-48 + BR-47', () => {
-    assert.match(doc('05.requirements/01.specification/01.prd/03.capabilities.md'), /`F-43`/);
+test('F-34 · PRD + REQ-48 + BR-32', () => {
+    assert.match(doc('05.requirements/01.specification/01.prd/03.capabilities.md'), /`F-34`/);
     assert.match(SRS, /`REQ-48`/);
-    assert.match(doc('05.requirements/01.specification/02.brd/04.business-rules.md'), /`BR-47`/);
+    assert.match(doc('05.requirements/01.specification/02.brd/04.business-rules.md'), /`BR-32`/);
 });
 
 test('FRD §1–§7 + bất biến sau publish', () => {
