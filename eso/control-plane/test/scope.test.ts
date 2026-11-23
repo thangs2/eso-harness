@@ -4,7 +4,7 @@
  */
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkFileWriteScope, executeFileWrite, transitionTaskStatus } from '../src/modules/scope/domain/scope.js';
+import { checkFileWriteScope, executeFileWrite, queryTaskJudgement, transitionTaskStatus } from '../src/modules/scope/domain/scope.js';
 
 const codeOf = (fn: () => unknown): string => {
     try { fn(); } catch (error) { return String((error as { code?: string }).code ?? (error as Error).message); }
@@ -66,5 +66,38 @@ describe('AC-50 — scope guard', () => {
         assert.equal(codeOf(() => transitionTaskStatus({ currentStatus: 'in-progress', newStatus: 'Done', actorRole: 'agent' })), 'DONE_FORBIDDEN');
         const human = transitionTaskStatus({ currentStatus: 'in-progress', newStatus: 'Done', actorRole: 'human' });
         assert.equal(human.success, true);
+    });
+
+});
+
+describe('AC-52 — queryTaskJudgement chống leak', () => {
+    test('AC-52-1 · task ngoài scope (có thật) ⇒ OUT_OF_SCOPE', () => {
+        const store = new Map([['task-1', { id: 'task-1', status: 'open' }]]);
+        assert.equal(codeOf(() => queryTaskJudgement({ agentScope: ['task-9'], taskId: 'task-1', taskStore: store })), 'OUT_OF_SCOPE');
+    });
+
+    test('AC-52-2 · task có thật vs bịa ⇒ cùng mã và cùng message', () => {
+        const store = new Map([['task-1', { id: 'task-1', status: 'open' }]]);
+        const errOf = (id: string): { code: string; message: string } => {
+            try { queryTaskJudgement({ agentScope: [], taskId: id, taskStore: store }); } catch (error) {
+                const e = error as { code?: string; message: string };
+                return { code: String(e.code), message: e.message };
+            }
+            return { code: 'NO_ERROR', message: '' };
+        };
+        const real = errOf('task-1');
+        const fake = errOf('task-does-not-exist');
+        assert.equal(real.code, 'OUT_OF_SCOPE');
+        assert.equal(fake.code, 'OUT_OF_SCOPE');
+        assert.equal(real.message, fake.message);
+    });
+
+    test('AC-52-3 · task trong scope ⇒ allowed + task; không store ⇒ placeholder', () => {
+        const store = new Map([['task-1', { id: 'task-1', status: 'open' }]]);
+        const owned = queryTaskJudgement({ agentScope: ['task-1'], taskId: 'task-1', taskStore: store });
+        assert.equal(owned.allowed, true);
+        assert.equal(owned.task.status, 'open');
+        const noStore = queryTaskJudgement({ agentScope: ['task-1'], taskId: 'task-1' });
+        assert.equal(noStore.task.status, 'IN_SCOPE');
     });
 });
