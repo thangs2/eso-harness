@@ -61,7 +61,7 @@ const x11 = () => {
         for (const line of lines) {
             for (const m of line.matchAll(token)) {
                 const path = m[1];
-                if (path.includes('<') || path.includes('>') || path.includes('*') || path.includes('..')) continue;
+                if (path.includes('<') || path.includes('>') || path.includes('*') || path.includes('..') || path.includes('{') || path.includes('}') || path.includes('…')) continue;
                 cited.push(path);
                 if (existsSync(join(ROOT, path))) continue;
                 const tomb = TOMBSTONES.find((t) => path === t.prefix.replace(/\/$/, '') || path.startsWith(t.prefix));
