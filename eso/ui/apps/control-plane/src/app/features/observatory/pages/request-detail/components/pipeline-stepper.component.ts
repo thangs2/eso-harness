@@ -11,13 +11,16 @@ import type { StepperStageView } from '../request-detail.models.js';
     standalone: true,
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
-        <div class="stepper-head">
-            <p class="stepper-hint">Select a step to open its evidence</p>
+        <header class="stepper-head">
+            <div class="stepper-heading">
+                <p class="stepper-eyebrow">Pipeline v2</p>
+                <p class="stepper-hint">Select a step to open its evidence</p>
+            </div>
             <p class="stepper-count">
                 <span class="count-value">{{ evidenced() }}/{{ stages().length }}</span>
                 <span class="count-label">steps with evidence</span>
             </p>
-        </div>
+        </header>
         <nav class="pipeline-stepper" aria-label="Pipeline stages">
             @for (stage of stages(); track stage.id; let index = $index) {
                 <button
@@ -47,10 +50,21 @@ import type { StepperStageView } from '../request-detail.models.js';
                 </button>
             }
         </nav>
+        <footer class="stepper-legend" aria-label="Step status legend">
+            <span class="legend-item"><i class="legend-dot ok"></i>Evidence recorded</span>
+            <span class="legend-item"><i class="legend-dot warn"></i>Attention</span>
+            <span class="legend-item"><i class="legend-dot missing"></i>Not captured</span>
+            <span class="legend-hint">Click a step, or use ← → · Enter opens its evidence</span>
+        </footer>
     `,
     styles: [`
         :host {
             display: block;
+            padding: var(--space-3) var(--space-4) var(--space-2);
+            border: 1px solid var(--line);
+            border-radius: var(--radius-md);
+            background: var(--surface);
+            box-shadow: 0 1px 2px rgba(0,0,0,.35);
             --brand: #38bdf8;
             --muted: #94a3b8;
             --dim: #64748b;
@@ -59,10 +73,19 @@ import type { StepperStageView } from '../request-detail.models.js';
             --warn-ink: #fbbf24;
             --ok-ink: #34d399;
         }
-        .stepper-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); margin: 0 0 var(--space-3); }
+        .stepper-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); margin: 0 0 var(--space-3); padding-bottom: var(--space-2); border-bottom: 1px solid var(--line-soft, #1e2a3e); }
+        .stepper-heading { display: grid; gap: .125rem; }
+        .stepper-eyebrow { margin: 0; color: var(--dim); font-size: .6875rem; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
         .stepper-hint { margin: 0; color: var(--muted); font-size: .75rem; }
         .stepper-count { margin: 0; display: flex; align-items: baseline; gap: .375rem; color: var(--dim); font-size: .6875rem; }
         .count-value { color: #cbd5e1; font-weight: 700; font-variant-numeric: tabular-nums; }
+        .stepper-legend { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--line-soft, #1e2a3e); color: var(--dim); font-size: .6875rem; }
+        .legend-item { display: inline-flex; align-items: center; gap: .375rem; }
+        .legend-dot { width: .4375rem; height: .4375rem; border-radius: 50%; background: var(--dim); }
+        .legend-dot.ok { background: var(--ok-ink); }
+        .legend-dot.warn { background: var(--warn-ink); }
+        .legend-dot.missing { background: var(--dim); }
+        .legend-hint { margin-left: auto; color: #475569; }
         .pipeline-stepper { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 0; border: 0; background: transparent; }
         .pipeline-step {
             position: relative;
