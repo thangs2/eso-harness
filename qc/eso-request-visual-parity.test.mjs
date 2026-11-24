@@ -11,7 +11,7 @@
  * Contract under test:
  *   · the legacy structure markers exist and render in that order;
  *   · the card chrome is legacy-style: icon chips, accent left rail, status dots, token tiles;
- *   · the stepper keeps the 8 pipeline v2 stage ids, one row at ≥1200, and an active/tab state;
+ *   · the stepper keeps the 8 pipeline v2 stage ids, one row at ≥1200, and one selected step;
  *   · the E2E step cards are dense: 3 sub-columns, empty steps collapse to one line;
  *   · the waterfall is full width with summary chips and no right rail;
  *   · all mandatory honest strings survive the revamp;
@@ -22,15 +22,35 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 
-const PAGE = readFileSync(
-    new URL('../eso/ui/apps/control-plane/src/app/features/observatory/pages/request-detail.page.ts', import.meta.url),
-    'utf8',
-);
+const PAGE_DIR = new URL('../eso/ui/apps/control-plane/src/app/features/observatory/pages/request-detail/', import.meta.url);
+const ORDER = [
+    'request-detail.models.ts',
+    'request-detail.selectors.ts',
+    'components/request-hero.component.ts',
+    'components/glance-cards.component.ts',
+    'components/pipeline-stepper.component.ts',
+    'components/pipeline-flow.component.ts',
+    'components/waterfall-panel.component.ts',
+    'components/graph-panel.component.ts',
+    'components/verdict-panel.component.ts',
+    'components/rules-panel.component.ts',
+    'components/telemetry-panel.component.ts',
+    'request-detail.page.ts',
+];
+const readPageFolder = () => {
+    const root = readdirSync(PAGE_DIR).filter((file) => file.endsWith('.ts'));
+    const components = readdirSync(new URL('components/', PAGE_DIR)).filter((file) => file.endsWith('.ts')).map((file) => `components/${file}`);
+    return [...root, ...components, '../request-detail.page.ts']
+        .sort((a, b) => (ORDER.indexOf(a) + 1 || ORDER.length + 1) - (ORDER.indexOf(b) + 1 || ORDER.length + 1) || a.localeCompare(b))
+        .map((file) => readFileSync(new URL(file, PAGE_DIR), 'utf8'))
+        .join('\n');
+};
+const stylesOf = (source) => [...source.matchAll(/styles:\s*\[`([\s\S]*?)`\]/g)].map((match) => match[1]).join('\n');
 
-const STYLES_START = PAGE.indexOf('styles: [');
-const STYLES = PAGE.slice(STYLES_START, PAGE.indexOf('`]', STYLES_START));
+const PAGE = readPageFolder();
+const STYLES = stylesOf(PAGE);
 
 /** Mandatory strings the existing qc suites (and the operator) assert verbatim. */
 const MANDATORY_STRINGS = [
@@ -122,17 +142,20 @@ test('card chrome mirrors the legacy language: icon chips, accent rails, status 
     assert.match(STYLES, /\.detail-page\s*\{[\s\S]*?gap:\s*var\(--space-5\)/);
 });
 
-test('stepper keeps the 8 v2 stage ids, one row, readable labels and an active/tab state', () => {
+test('stepper keeps the 8 v2 stage ids, one row, readable labels and a single selected step', () => {
     for (const id of STAGE_IDS) {
         assert.match(PAGE, new RegExp(`'?${id.replace('-', '\\-')}'?:\\s*'`), `stage glyph for ${id}`);
     }
-    assert.match(PAGE, /@for \(stage of systemStages\(\); track stage\.id\)/);
+    assert.match(PAGE, /@for \(stage of stages\(\); track stage\.id; let index = \$index\)/);
     assert.match(PAGE, /class="pipeline-step-title">\{\{ stage\.title \}\}/);
     assert.match(PAGE, /class="stage-icon"/);
     assert.match(PAGE, /\{\{ stageGlyph\(stage\.id\) \}\}/);
     assert.match(PAGE, /class="step-dot"/);
-    assert.match(PAGE, /\[class\.active\]="activeTab\(\) === stage\.tab"/);
-    assert.match(PAGE, /\[attr\.aria-pressed\]="activeTab\(\) === stage\.tab"/);
+    // Selection — never the tab — decides which single step is active.
+    assert.match(PAGE, /\[class\.active\]="selectedStepId\(\) === stage\.id"/);
+    assert.match(PAGE, /\[attr\.aria-current\]="selectedStepId\(\) === stage\.id \? 'step' : null"/);
+    assert.doesNotMatch(PAGE, /\[class\.active\]="activeTab\(\) === stage\.tab"/);
+    assert.doesNotMatch(PAGE, /\[attr\.aria-pressed\]/);
     assert.match(STYLES, /\.pipeline-step\.active\s*\{[^}]*box-shadow:\s*inset 0 -2px 0 var\(--brand\)/);
     assert.match(STYLES, /\.pipeline-stepper\s*\{[^}]*grid-template-columns:\s*repeat\(8, minmax\(0, 1fr\)\)/);
     // No label ellipsis: the title is allowed to wrap; only the sub line may truncate.
@@ -143,7 +166,7 @@ test('stepper keeps the 8 v2 stage ids, one row, readable labels and an active/t
 });
 
 test('E2E flow keeps 8 step cards, 3 sub-columns, one missing tag and empty-step collapse', () => {
-    assert.match(PAGE, /@for \(step of endSteps\(\); track step\.id; let index = \$index\)/);
+    assert.match(PAGE, /@for \(step of steps\(\); track step\.id; let index = \$index\)/);
     assert.match(PAGE, /class="endflow-card-title">STEP \{\{ index \+ 1 \}\} · \{\{ step\.label \}\}/);
     assert.match(PAGE, /class="endflow-subgrid" \[class\.single\]="step\.subcards\.length === 1"/);
     assert.match(PAGE, /class="sub-label">\{\{ sub\.label \}\}/);
@@ -171,8 +194,10 @@ test('drill tabs are full width, icon + label + count, and keep the five tabs', 
 });
 
 test('waterfall is full width, has summary chips, a table-like event grid and no right rail', () => {
-    const start = PAGE.indexOf("activeTab() === 'waterfall'");
-    const pane = PAGE.slice(start, PAGE.indexOf("activeTab() === 'topology'", start));
+    const pane = PAGE.slice(
+        PAGE.indexOf("selector: 'eso-waterfall-panel'"),
+        PAGE.indexOf("selector: 'eso-graph-panel'"),
+    );
     assert.match(pane, /class="panel waterfall"/);
     assert.match(pane, /class="wf-summary"/);
     for (const chip of ['Files', 'Tool calls', 'LLM calls']) {

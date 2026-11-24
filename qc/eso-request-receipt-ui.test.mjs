@@ -7,10 +7,34 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+
+const PAGE_DIR = new URL('../eso/ui/apps/control-plane/src/app/features/observatory/pages/request-detail/', import.meta.url);
+const ORDER = [
+    'request-detail.models.ts',
+    'request-detail.selectors.ts',
+    'components/request-hero.component.ts',
+    'components/glance-cards.component.ts',
+    'components/pipeline-stepper.component.ts',
+    'components/pipeline-flow.component.ts',
+    'components/waterfall-panel.component.ts',
+    'components/graph-panel.component.ts',
+    'components/verdict-panel.component.ts',
+    'components/rules-panel.component.ts',
+    'components/telemetry-panel.component.ts',
+    'request-detail.page.ts',
+];
+const readPageFolder = () => {
+    const root = readdirSync(PAGE_DIR).filter((file) => file.endsWith('.ts'));
+    const components = readdirSync(new URL('components/', PAGE_DIR)).filter((file) => file.endsWith('.ts')).map((file) => `components/${file}`);
+    return [...root, ...components, '../request-detail.page.ts']
+        .sort((a, b) => (ORDER.indexOf(a) + 1 || ORDER.length + 1) - (ORDER.indexOf(b) + 1 || ORDER.length + 1) || a.localeCompare(b))
+        .map((file) => readFileSync(new URL(file, PAGE_DIR), 'utf8'))
+        .join('\n');
+};
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
-const PAGE = read('eso/ui/apps/control-plane/src/app/features/observatory/pages/request-detail.page.ts');
+const PAGE = readPageFolder();
 const CLIENT = read('eso/ui/libs/api-client/client.ts');
 const TYPES = read('eso/ui/libs/api-client/types.ts');
 

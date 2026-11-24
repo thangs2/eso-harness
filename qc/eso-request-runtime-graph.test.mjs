@@ -7,19 +7,40 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 
-const PAGE = readFileSync(
-    new URL('../eso/ui/apps/control-plane/src/app/features/observatory/pages/request-detail.page.ts', import.meta.url),
-    'utf8',
-);
+const PAGE_DIR = new URL('../eso/ui/apps/control-plane/src/app/features/observatory/pages/request-detail/', import.meta.url);
+const ORDER = [
+    'request-detail.models.ts',
+    'request-detail.selectors.ts',
+    'components/request-hero.component.ts',
+    'components/glance-cards.component.ts',
+    'components/pipeline-stepper.component.ts',
+    'components/pipeline-flow.component.ts',
+    'components/waterfall-panel.component.ts',
+    'components/graph-panel.component.ts',
+    'components/verdict-panel.component.ts',
+    'components/rules-panel.component.ts',
+    'components/telemetry-panel.component.ts',
+    'request-detail.page.ts',
+];
+const readPageFolder = () => {
+    const root = readdirSync(PAGE_DIR).filter((file) => file.endsWith('.ts'));
+    const components = readdirSync(new URL('components/', PAGE_DIR)).filter((file) => file.endsWith('.ts')).map((file) => `components/${file}`);
+    return [...root, ...components, '../request-detail.page.ts']
+        .sort((a, b) => (ORDER.indexOf(a) + 1 || ORDER.length + 1) - (ORDER.indexOf(b) + 1 || ORDER.length + 1) || a.localeCompare(b))
+        .map((file) => readFileSync(new URL(file, PAGE_DIR), 'utf8'))
+        .join('\n');
+};
+const stylesOf = (source) => [...source.matchAll(/styles:\s*\[`([\s\S]*?)`\]/g)].map((match) => match[1]).join('\n');
+
+const PAGE = readPageFolder();
+const STYLES = stylesOf(PAGE);
 
 const TOPOLOGY = PAGE.slice(
-    PAGE.indexOf("activeTab() === 'topology'"),
-    PAGE.indexOf("activeTab() === 'decisions'"),
+    PAGE.indexOf("selector: 'eso-graph-panel'"),
+    PAGE.indexOf("selector: 'eso-verdict-panel'"),
 );
-const STYLES_START = PAGE.indexOf('styles: [');
-const STYLES = PAGE.slice(STYLES_START, PAGE.indexOf('`]', STYLES_START));
 
 /** One computed block, cut at the next `readonly` declaration or comment boundary. */
 const block = (start, end) => PAGE.slice(PAGE.indexOf(start), PAGE.indexOf(end));
@@ -121,7 +142,9 @@ test('comparison styles keep golden layout tokens (no hardcoded spacing px)', ()
     assert.match(CSS, /\.runtime-divergence\[data-kind='matches'\]/);
     assert.match(CSS, /\.runtime-divergence\[data-kind='missing'\]/);
     assert.match(CSS, /\.runtime-divergence\[data-kind='extra'\]/);
-    assert.match(STYLES, /@media \(max-width: 62\.5rem\) \{ \.top-grid \{ grid-template-columns: 1fr; \} \.runtime-compare \{ grid-template-columns: 1fr; \}/);
+    // The at-a-glance row and the graph columns each keep their own stack rule per component.
+    assert.match(STYLES, /@media \(max-width: 62\.5rem\) \{ \.top-grid \{ grid-template-columns: 1fr; \}/);
+    assert.match(STYLES, /@media \(max-width: 62\.5rem\) \{ \.runtime-compare \{ grid-template-columns: 1fr; \}/);
     const decls = CSS.match(/[a-z-]+\s*:\s*[^;{}]+/g) ?? [];
     const bad = decls.filter((decl) => {
         const prop = decl.split(':')[0].trim();
