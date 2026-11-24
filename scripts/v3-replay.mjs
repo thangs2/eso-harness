@@ -41,7 +41,7 @@ export const QUESTIONS = Object.freeze({
     q3: Object.freeze({ id: 'q3', text: 'Is the recorded evidence sufficient to justify the outcome?', choices: Object.freeze(['sufficient', 'insufficient', 'unknown']) }),
     q4: Object.freeze({ id: 'q4', text: 'What changed: were tools used or files touched?', choices: Object.freeze(['changed', 'none', 'unknown']) }),
     q5: Object.freeze({ id: 'q5', text: 'Is the record integrity verified by a receipt?', choices: Object.freeze(['verified', 'unverified', 'unknown']) }),
-    q6: Object.freeze({ id: 'q6', text: 'If the turn failed, is a next action recorded?', choices: Object.freeze(['present', 'none', 'unknown']) }),
+    q6: Object.freeze({ id: 'q6', text: 'Is a next action recorded for this turn?', choices: Object.freeze(['present', 'none', 'unknown']) }),
 });
 export const QUESTION_IDS = Object.freeze(Object.keys(QUESTIONS));
 
@@ -470,7 +470,9 @@ export function deriveTruth(turn) {
     const q5 = receipt == null ? 'unknown' : receipt.verified === true || str(receipt.status) === 'verified' ? 'verified' : 'unverified';
 
     const nextAction = evidence.next_action && typeof evidence.next_action === 'object' ? evidence.next_action : null;
-    const q6 = nextAction ? 'present' : q1 === 'unknown' ? 'unknown' : 'none';
+    // Unambiguous on purpose: no recorded next action is `none`, even when the verdict is
+    // missing — the question asks what the record contains, not what the reader would do.
+    const q6 = nextAction ? 'present' : 'none';
 
     return { q1, q2, q3, q4, q5, q6 };
 }
