@@ -35,6 +35,14 @@ import {
                         <div class="score-track" aria-hidden="true"><span class="score-fill" [attr.data-level]="v.level" [style.width.%]="v.score"></span></div>
                         <p class="score-caption"><strong>{{ v.score }}</strong><span>/100 evidence score</span><small>{{ scoreFormula(v) }}</small></p>
                     </div>
+                    <div class="score-ledger" aria-label="How the evidence score is calculated">
+                        <div class="ledger-row"><span class="ledger-op">Start</span><span class="ledger-val">100</span><span class="ledger-why">all four proof checks present</span></div>
+                        @for (gap of v.gaps; track gap.code) {
+                            <div class="ledger-row negative"><span class="ledger-op">−25</span><span class="ledger-val">{{ gap.code }}</span><span class="ledger-why">{{ gap.what }}</span></div>
+                        }
+                        <div class="ledger-row total"><span class="ledger-op">=</span><span class="ledger-val">{{ v.score }}</span><span class="ledger-why">{{ proofsPresent(v) }}/{{ PROOF_TOTAL }} proofs present</span></div>
+                    </div>
+                    <p class="score-impact">{{ scoreImpact(v) }}</p>
                     <div class="gap-row">
                         <span class="gap-label">Gaps</span>
                         @for (gap of v.gaps.slice(0, 3); track gap.code) {
@@ -280,6 +288,16 @@ import {
         .score-caption { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--space-2); color: var(--muted); font-size: var(--fs-label); }
         .score-caption strong { color: #f1f5f9; font-size: 1.125rem; font-variant-numeric: tabular-nums; }
         .score-caption small { margin-left: auto; padding-left: var(--space-2); border-left: 1px solid var(--line); color: var(--dim); }
+        .score-ledger { display: grid; gap: .125rem; padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); }
+        .ledger-row { display: grid; grid-template-columns: 3rem 8.5rem minmax(0, 1fr); gap: var(--space-2); align-items: baseline; font-size: var(--fs-label); }
+        .ledger-row.negative { color: var(--warn-ink); }
+        .ledger-op { color: var(--dim); font-variant-numeric: tabular-nums; text-transform: uppercase; letter-spacing: .05em; }
+        .ledger-val { color: #e2e8f0; font-weight: 650; font-family: ui-monospace, monospace; }
+        .ledger-row.negative .ledger-val { color: var(--warn-ink); }
+        .ledger-why { color: var(--muted); overflow-wrap: anywhere; }
+        .ledger-row.total { margin-top: .125rem; padding-top: var(--space-1); border-top: 1px solid var(--line); }
+        .ledger-row.total .ledger-val { color: #f1f5f9; font-size: var(--fs-title); }
+        .score-impact { color: var(--muted); font-size: var(--fs-label); line-height: 1.45; }
         .gap-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
         .gap-label { color: var(--dim); font-size: var(--fs-label); text-transform: uppercase; letter-spacing: .06em; margin-right: var(--space-1); }
         .gap-chip { padding: .0625rem .375rem; border: 1px solid rgba(251,191,36,.4); border-radius: 999px; background: rgba(251,191,36,.1); color: var(--warn-ink); font-size: var(--fs-label); font-family: ui-monospace, monospace; }
@@ -416,6 +434,20 @@ export class GlanceCardsComponent {
                 ? 'The host reported no decision, so ESO cannot prove why this turn proceeded.'
                 : 'No decision evidence was recorded for this turn.';
         }
+    }
+
+    /** The four proof checks named by the backend (HOST_SILENT, EVIDENCE_MISSING, ACTOR_MISSING, ACTION_MISSING). */
+    readonly PROOF_TOTAL = 4;
+
+    proofsPresent(v: TurnVerdictView): number {
+        return Math.max(0, this.PROOF_TOTAL - v.gaps.length);
+    }
+
+    /** What the number changes downstream: it is receipt content, not a write-gate verdict. */
+    scoreImpact(v: TurnVerdictView): string {
+        if (!v.gaps.length) return 'Every required proof is present, so this verdict is sustainable and the sealed receipt carries 100.';
+        const missing = v.gaps.length;
+        return `${missing} of ${this.PROOF_TOTAL} proof checks failed, so the verdict is "${v.level}", not "allow". The score is written into the sealed receipt as evidenceScore; it does not by itself block a write.`;
     }
 
     /** Score is a formula, not a vibe: 100 − 25 per gap, so a reader can reproduce it. */

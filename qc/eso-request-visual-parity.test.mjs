@@ -129,7 +129,11 @@ test('at-a-glance row: verdict + effectiveness, then the two large gate + cost c
     assert.match(row, /class="gate-big"/, 'gate keeps a large state word');
     assert.match(row, /class="token-gauge"/, 'cost keeps a proportion gauge');    assert.match(row, /class="verdict-meaning"/, 'verdict explains what the level means');
     assert.match(row, /class="score-track"/, 'verdict score has a proportion track');
-    assert.match(row, /class="gap-chip"/, 'verdict lists gap codes');
+    assert.match(row, /class="gap-chip"/, 'verdict lists gap codes');    assert.match(row, /class="score-ledger"/, 'verdict shows the score arithmetic');
+    assert.match(row, /class="ledger-row negative"/, 'each gap subtracts 25 explicitly');
+    assert.match(row, /class="score-impact"/, 'verdict explains what the score affects');
+    assert.match(row, /PROOF_TOTAL/, 'proof total is named, not magic');
+
     assert.match(row, /gate-meaning/, 'write gate explains its state');
     assert.match(row, /gate-action/, 'write gate says how to fix a missing decision');
     assert.match(row, /gate-criteria/, 'write gate states the three scope rules');
