@@ -164,7 +164,7 @@ test('b0 signals fixture: detail.signals raises B0-1/4/6/8 without legacy eviden
     const proofs = {
         'B0-1': /detail\.signals\.preflight\.state=HOT/,
         'B0-4': /detail\.signals\.recon: .*3 call\(s\)/,
-        'B0-6': /detail\.signals\.brainTier=flash/,
+        'B0-6': /SLP roles \d+/,
         'B0-8': /detail\.signals\.distill\.memorySaved=true/,
     };
     for (const [id, pattern] of Object.entries(proofs)) {
@@ -174,6 +174,12 @@ test('b0 signals fixture: detail.signals raises B0-1/4/6/8 without legacy eviden
     }
 
     // A host that reports "not saved" / "0 calls" is not proof; the signal does not fall back.
+    const legacyTierOnly = fixtureSignalDetail();
+    legacyTierOnly.pipeline = [];
+    const tierOnlyRows = scoreDetail(legacyTierOnly);
+    assert.equal(row(tierOnlyRows, 'B0-6').present, false, 'brainTier alone must not satisfy B0-6');
+    assert.match(row(tierOnlyRows, 'B0-6').evidence, /legacy substitute/);
+
     const denied = fixtureSignalDetail();
     denied.signals.distill = { memorySaved: false };
     denied.signals.recon = [{ adapter: 'codegraph', calls: 0 }];

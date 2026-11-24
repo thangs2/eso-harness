@@ -337,36 +337,25 @@ function detectSufficiencyAndReceipt(detail) {
     return { present: false, evidence: 'no sufficiency score/gaps and no hash/HMAC receipt' };
 }
 
-function detectBrainTier(detail) {
-    // P6a: `detail.signals.brainTier` is the tier the host routed through (B0-6).
-    const reported = str(detail?.signals?.brainTier);
-    if (/^(zero|flash|pro)$/.test(reported)) {
-        const calls = arr(detail?.telemetry?.llmCalls).length;
-        return { present: true, evidence: `detail.signals.brainTier=${reported} · ${calls} call(s)` };
+/**
+ * B0-6 — "who does what", not "which model tier". Legacy routed one agent through zero/flash/pro
+ * because it had no pipeline; the modern model assigns **SLP roles** to workers (scout, plan,
+ * build, verify, audit, qc, fixbug). A host-reported `brainTier` alone is therefore NOT proof:
+ * it is the legacy substitute this revamp replaced.
+ */
+function detectSlpRoles(detail) {
+    const pipeline = arr(detail?.pipeline);
+    const roles = unique(pipeline.map((stage) => str(stage?.role)).filter((role) => meaningful(role)));
+    const workers = pipeline.filter((stage) => meaningful(str(stage?.workerId))).length;
+    if (roles.length >= 3) {
+        return { present: true, evidence: `SLP roles ${roles.length}: ${roles.slice(0, 6).join(' · ')} · ${workers} worker(s)` };
     }
-    const hits = collectKeyed(detail, ['tier', 'brainTier', 'brain_tier', 'brain']);
-    const tiers = [];
-    for (const { key, value } of hits) {
-        if (typeof value === 'string' && /^(zero|flash|pro)$/i.test(value.trim())) tiers.push(value.trim().toLowerCase());
-        if (value && typeof value === 'object') {
-            for (const candidate of [value.tier, value.level, value.mode]) {
-                if (typeof candidate === 'string' && /^(zero|flash|pro)$/i.test(candidate.trim())) {
-                    tiers.push(candidate.trim().toLowerCase());
-                }
-            }
-        }
-        void key;
-    }
-    const models = arr(detail?.telemetry?.llmCalls).map((call) => str(call?.model)).filter((model) => meaningful(model));
-    const calls = arr(detail?.telemetry?.llmCalls).length;
-    if (unique(tiers).length > 0) {
-        return { present: true, evidence: `tier ${unique(tiers).join('/')} · ${calls} call(s)` };
-    }
+    const reportedTier = str(detail?.signals?.brainTier);
     return {
         present: false,
-        evidence: models.length
-            ? `model list only (${unique(models).slice(0, 2).join(', ')}) — no zero/flash/pro tier`
-            : 'no zero/flash/pro tier recorded',
+        evidence: roles.length
+            ? `only ${roles.length} SLP role(s) — a pipeline needs ≥3`
+            : `no SLP role pipeline${reportedTier ? ` (brainTier=${reportedTier} is the legacy substitute, not the modern equivalent)` : ''}`,
     };
 }
 
@@ -459,7 +448,7 @@ const DETECTORS = Object.freeze({
     'B0-3': detectDecision,
     'B0-4': detectRecon,
     'B0-5': detectSufficiencyAndReceipt,
-    'B0-6': detectBrainTier,
+    'B0-6': detectSlpRoles,
     'B0-7': detectActions,
     'B0-8': detectMemory,
     'B0-9': detectSpec,
@@ -655,6 +644,15 @@ export function fixtureSignalDetail() {
         brainTier: 'flash',
         distill: { memorySaved: true, lessons: 2 },
     };
+    detail.pipeline = [
+        { workerId: 'worker-scout', label: 'Scout', role: 'scout', status: 'PASS' },
+        { workerId: 'worker-plan', label: 'Plan', role: 'plan', status: 'PASS' },
+        { workerId: 'worker-build', label: 'Build', role: 'build', status: 'PASS' },
+        { workerId: 'worker-verify', label: 'Verify', role: 'verify', status: 'PASS' },
+        { workerId: 'worker-audit', label: 'Audit', role: 'audit', status: 'PASS' },
+        { workerId: 'worker-qc', label: 'QC 1', role: 'qc', status: 'PASS' },
+        { workerId: 'worker-fixbug', label: 'Fixbug', role: 'fixbug', status: 'PENDING' },
+    ];
     return detail;
 }
 

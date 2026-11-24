@@ -625,6 +625,7 @@ export class RequestService {
         const warnChecks = detail.checks.filter((item) => item.status === 'warn').length;
         const observedStages = detail.pipeline.filter((stage) => stage.status !== 'PENDING');
         const failedStages = detail.pipeline.filter((stage) => stage.status === 'FAIL' || stage.status === 'BLOCKED');
+        const roleNames = [...new Set(detail.pipeline.map((stage) => stage.role).filter(Boolean))];
         const calls = detail.telemetry.llmCalls.length;
         const tools = detail.telemetry.tools.length;
         const models = [...new Set(detail.telemetry.llmCalls.map((call) => call.model).filter((value) => value && value !== '—'))];
@@ -664,11 +665,13 @@ export class RequestService {
                 details: detail.checks.slice(0, 3).map((item) => ({ label: item.checkId, value: item.status, detail: item.detail })),
             },
             {
-                id: 'brain', stepNumber: 6, title: 'Brain Tier', sub: `${calls} calls · ${models.length || 1} models`, status: 'ok', tab: 'telemetry',
+                // SLP replaces the legacy brain tier (flash/pro): who does what is a role assignment,
+                // not a model-routing decision. The stage reports the assigned roles, not a tier claim.
+                id: 'brain', stepNumber: 6, title: 'SLP Roles', sub: `${roleNames.length} role(s) · ${detail.pipeline.length} worker(s)`, status: roleNames.length >= 3 ? 'ok' : 'info', tab: 'telemetry',
                 details: [
-                    { label: 'Models', value: models.length ? models.join(', ') : model, detail: String(detail.routing['tier'] || '—') },
-                    { label: 'Calls', value: String(calls), detail: `${detail.requestMetrics.inputTokens ?? '—'} in / ${detail.requestMetrics.outputTokens ?? '—'} out` },
-                    { label: 'Estimate', value: detail.requestMetrics.tokensEstimated ? 'estimated' : 'reported', detail: 'chars/4 or agent-reported' },
+                    { label: 'Roles', value: roleNames.length ? roleNames.join(', ') : 'no role assignment', detail: 'scout · plan · build · verify · audit · qc · fixbug' },
+                    { label: 'Lead', value: String(detail.context['role'] || '—'), detail: String(detail.context['workerId'] || 'no worker context') },
+                    { label: 'Model calls', value: `${calls} · ${models.length || 1} model(s)`, detail: `${detail.requestMetrics.inputTokens ?? '—'} in / ${detail.requestMetrics.outputTokens ?? '—'} out` },
                 ],
             },
             {
