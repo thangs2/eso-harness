@@ -429,6 +429,8 @@ const WORKER_LABEL: Record<string, string> = {
 export class RequestDetailPage implements OnInit {
     private readonly api = inject(CONTROL_PLANE_API_CLIENT, { optional: true });
     private readonly route = inject(ActivatedRoute);
+    /** V2 telemetry: one in-memory session id per page load, never persisted. */
+    private readonly uiSession = crypto.randomUUID();
 
     readonly loading = signal(true);
     readonly error = signal('');
@@ -548,6 +550,7 @@ export class RequestDetailPage implements OnInit {
     readonly fileCount = computed(() => this.detail()?.telemetry.files.length ?? 0);
 
     ngOnInit(): void {
+        this.trackSurface('surface.request.open');
         // BUG-30: the id must be observed, not frozen at first render.
         this.route.paramMap.subscribe((params) => {
             const next = decodeURIComponent(params.get('requestId') || '');
@@ -562,6 +565,13 @@ export class RequestDetailPage implements OnInit {
             void this.load();
         });
         void this.load();
+    }
+
+    /** V2 telemetry — fire-and-forget; a beacon failure must never block or surface in the UI. */
+    private trackSurface(surface: string): void {
+        if (!this.api) return;
+        const consumerId = this.consumerId() || this.route.snapshot.queryParamMap.get('consumer') || null;
+        void this.api.postUiEvent({ surface, consumerId, session: this.uiSession }).catch(() => undefined);
     }
 
     private async load(): Promise<void> {

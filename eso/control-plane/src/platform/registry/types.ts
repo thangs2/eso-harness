@@ -92,6 +92,37 @@ export const ACTOR_KINDS: ReadonlySet<string> = new Set([
 
 export type StackVersionStatus = 'draft' | 'published' | 'retired';
 
+/**
+ * Vision test V2 — the surfaces telemetry counts. `surface.*` is a page/screen open;
+ * `raw.*` is raw evidence (JSON) opened in the UI. Raw JSON opened in a terminal or host
+ * transcript is outside ESO's observation and is deliberately not modelled.
+ */
+export const UI_SURFACES = [
+    'surface.observatory.open',
+    'surface.events.open',
+    'surface.request.open',
+    'raw.evidence.expand',
+    'raw.json.copy',
+] as const;
+
+export type UiSurface = (typeof UI_SURFACES)[number];
+
+export const UI_SURFACE_SET: ReadonlySet<string> = new Set(UI_SURFACES);
+
+/** One append-only UI surface view (`platform.ui_event`). */
+export interface UiEvent {
+    consumerId: string;
+    surface: UiSurface;
+    session: string | null;
+    at: string;
+}
+
+export interface UiEventQuery {
+    from?: string | null;
+    to?: string | null;
+    consumerId?: string | null;
+}
+
 export interface StackVersionRecord {
     consumerId: string;
     version: number;

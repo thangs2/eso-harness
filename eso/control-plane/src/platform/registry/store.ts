@@ -24,6 +24,8 @@ import type {
     ConsumerStatus,
     ListConsumersOptions,
     StackVersionRecord,
+    UiEvent,
+    UiEventQuery,
 } from './types.js';
 import { normalizeListWindow } from './types.js';
 
@@ -101,6 +103,12 @@ export interface PlatformStore {
     setMaterializedHash(id: string, hash: string | null): Promise<void>;
     appendEvent(event: ConsumerEvent): Promise<ConsumerEvent>;
     listEvents(consumerId: string, limit?: number): Promise<ConsumerEvent[]>;
+    /**
+     * Vision test V2: append-only UI surface views. Every call is a new row (a page can be opened
+     * twice); there is deliberately no update/delete member.
+     */
+    recordUiEvent(event: UiEvent): Promise<UiEvent>;
+    listUiEvents(query?: UiEventQuery): Promise<UiEvent[]>;
     listStackVersions(consumerId: string): Promise<StackVersionRecord[]>;
     /**
      * BUG-27: replace-all with optimistic concurrency. When `expected` is supplied the write only
@@ -247,6 +255,7 @@ export class MemoryPlatformStore implements PlatformStore {
     private tables = new Set<string>();
     private consumers = new Map<string, ConsumerRecord>();
     private events: ConsumerEvent[] = [];
+    private uiEvents: UiEvent[] = [];
     private stackVersions = new Map<string, StackVersionRecord[]>();
     private hosts = new Map<string, any>();
     /** Keyed by `${hostId}:${runtimeId}` (runtimeKey). */
@@ -279,6 +288,7 @@ export class MemoryPlatformStore implements PlatformStore {
         const snapshot = {
             consumers: clone(this.consumers),
             events: clone(this.events),
+            uiEvents: clone(this.uiEvents),
             stackVersions: new Map([...this.stackVersions].map(([key, value]) => [key, clone(value)])),
             hosts: new Map([...this.hosts].map(([key, value]) => [key, clone(value)])),
             hostRuntimes: new Map([...this.hostRuntimes].map(([key, value]) => [key, clone(value)])),
@@ -296,6 +306,7 @@ export class MemoryPlatformStore implements PlatformStore {
         } catch (error) {
             this.consumers = snapshot.consumers;
             this.events = snapshot.events;
+            this.uiEvents = snapshot.uiEvents;
             this.stackVersions = snapshot.stackVersions;
             this.hosts = snapshot.hosts;
             this.hostRuntimes = snapshot.hostRuntimes;
@@ -392,6 +403,24 @@ export class MemoryPlatformStore implements PlatformStore {
             .filter((event) => event.consumerId === consumerId)
             .sort((a, b) => (b.at || '').localeCompare(a.at || '') || (b.id || 0) - (a.id || 0))
             .slice(0, limit)
+            .map((event) => clone(event));
+    }
+
+    async recordUiEvent(event: UiEvent): Promise<UiEvent> {
+        const stored = clone(event);
+        this.uiEvents.push(stored);
+        return clone(stored);
+    }
+
+    async listUiEvents(query: UiEventQuery = {}): Promise<UiEvent[]> {
+        const consumerId = query.consumerId ? String(query.consumerId) : null;
+        const from = query.from ? String(query.from) : null;
+        const to = query.to ? String(query.to) : null;
+        return this.uiEvents
+            .filter((event) => !consumerId || event.consumerId === consumerId)
+            .filter((event) => !from || event.at >= from)
+            .filter((event) => !to || event.at <= to)
+            .sort((a, b) => a.at.localeCompare(b.at))
             .map((event) => clone(event));
     }
 
@@ -1249,6 +1278,38 @@ export class BunSqlPlatformStore implements PlatformStore {
             [consumerId]
         );
         return rows.map(mapEvent);
+    }
+
+    async recordUiEvent(event: UiEvent): Promise<UiEvent> {
+        const rows = await this.sql.unsafe(
+            `INSERT INTO platform.ui_event (consumer_id, surface, session, at)
+             VALUES ($1,$2,$3,COALESCE($4::timestamptz, now())) RETURNING *`,
+            [event.consumerId, event.surface, event.session ?? null, event.at ?? null]
+        );
+        return mapUiEvent(rows[0]);
+    }
+
+    async listUiEvents(query: UiEventQuery = {}): Promise<UiEvent[]> {
+        const conditions: string[] = [];
+        const params: unknown[] = [];
+        if (query.consumerId) {
+            params.push(String(query.consumerId));
+            conditions.push(`consumer_id = $${params.length}`);
+        }
+        if (query.from) {
+            params.push(String(query.from));
+            conditions.push(`at >= $${params.length}::timestamptz`);
+        }
+        if (query.to) {
+            params.push(String(query.to));
+            conditions.push(`at <= $${params.length}::timestamptz`);
+        }
+        const where = conditions.length ? ` WHERE ${conditions.join(' AND ')}` : '';
+        const rows = await this.sql.unsafe(
+            `SELECT * FROM platform.ui_event${where} ORDER BY at ASC, surface ASC`,
+            params
+        );
+        return rows.map(mapUiEvent);
     }
 
     async listStackVersions(consumerId: string): Promise<StackVersionRecord[]> {
@@ -2214,6 +2275,15 @@ function mapEvent(row: any): ConsumerEvent {
         actorLabel: row.actor_label ?? null,
         at: toIso(row.at),
         detail: typeof row.detail === 'string' ? JSON.parse(row.detail) : (row.detail || {}),
+    };
+}
+
+function mapUiEvent(row: any): UiEvent {
+    return {
+        consumerId: String(row.consumer_id ?? ''),
+        surface: String(row.surface) as UiEvent['surface'],
+        session: row.session ?? null,
+        at: toIso(row.at),
     };
 }
 

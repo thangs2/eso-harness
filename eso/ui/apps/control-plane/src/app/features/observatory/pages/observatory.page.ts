@@ -315,6 +315,8 @@ export class ObservatoryPage implements OnInit, OnDestroy {
     private readonly api = inject(CONTROL_PLANE_API_CLIENT, { optional: true });
     private readonly route = inject(ActivatedRoute);
     private readonly router = inject(Router);
+    /** V2 telemetry: one in-memory session id per page load, never persisted. */
+    private readonly uiSession = crypto.randomUUID();
 
     readonly consumers = signal<ConsumerSummary[]>([]);
     readonly consumerId = signal('');
@@ -430,7 +432,15 @@ export class ObservatoryPage implements OnInit, OnDestroy {
     readonly lastEventAt = computed(() => this.observations()[0]?.at || '');
 
     ngOnInit(): void {
+        this.trackSurface('surface.observatory.open');
         void this.init();
+    }
+
+    /** V2 telemetry — fire-and-forget; a beacon failure must never block or surface in the UI. */
+    private trackSurface(surface: string): void {
+        if (!this.api) return;
+        const consumerId = this.consumerId() || this.route.snapshot.queryParamMap.get('consumer') || null;
+        void this.api.postUiEvent({ surface, consumerId, session: this.uiSession }).catch(() => undefined);
     }
 
     private async init(): Promise<void> {

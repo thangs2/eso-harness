@@ -924,4 +924,23 @@ export class ControlPlaneApiClient {
         if (!res.ok) throw await this.problem(res);
         return (await res.json()) as { revoked: boolean };
     }
+
+    /**
+     * Vision test V2 telemetry — fire-and-forget UI surface beacon.
+     *
+     * The body is deliberately limited to the surface, an optional consumer id and the in-memory
+     * page session; prompt text, evidence payloads and any other PII never leave the page.
+     */
+    async postUiEvent(event: { surface: string; consumerId?: string | null; session?: string | null }): Promise<void> {
+        const res = await fetch(`${this.baseUrl}/api/v1/telemetry/ui`, {
+            method: 'POST',
+            headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                surface: event.surface,
+                consumerId: event.consumerId ?? undefined,
+                session: event.session ?? undefined,
+            }),
+        });
+        if (!res.ok) throw await this.problem(res);
+    }
 }

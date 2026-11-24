@@ -81,6 +81,23 @@ export const HOST_TOKEN_DDL = `CREATE TABLE IF NOT EXISTS platform.host_token (
 export const HOST_TOKEN_INDEX_DDL = `CREATE INDEX IF NOT EXISTS idx_host_token_scope
     ON platform.host_token (consumer_id, host_id, runtime_id)`;
 
+/**
+ * Vision test V2 telemetry: one row per UI surface view. Raw evidence is defined as the user
+ * opening the JSON evidence panel *in the UI* — terminal/transcript opens are not observable by
+ * ESO and are not counted. Append-only; no idempotency key because every view is a new event.
+ */
+export const UI_EVENT_TABLE = 'platform.ui_event';
+export const UI_EVENT_DDL = `CREATE TABLE IF NOT EXISTS platform.ui_event (
+    consumer_id text not null,
+    surface     text not null,
+    session     text,
+    at          timestamptz not null default now()
+)`;
+export const UI_EVENT_AT_INDEX_DDL = `CREATE INDEX IF NOT EXISTS idx_ui_event_at
+    ON platform.ui_event (at desc)`;
+export const UI_EVENT_CONSUMER_INDEX_DDL = `CREATE INDEX IF NOT EXISTS idx_ui_event_consumer_at
+    ON platform.ui_event (consumer_id, at desc)`;
+
 export const PLATFORM_DDL: readonly string[] = [
     `CREATE SCHEMA IF NOT EXISTS platform`,
     `CREATE TABLE IF NOT EXISTS platform.consumer (
@@ -167,6 +184,9 @@ export const PLATFORM_DDL: readonly string[] = [
         ON platform.host_runtime (health)`,
     HOST_TOKEN_DDL,
     HOST_TOKEN_INDEX_DDL,
+    UI_EVENT_DDL,
+    UI_EVENT_AT_INDEX_DDL,
+    UI_EVENT_CONSUMER_INDEX_DDL,
 ];
 
 export const CONSUMER_ID_PATTERN = /^[a-z0-9][a-z0-9-]{1,31}$/;

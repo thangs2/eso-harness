@@ -181,7 +181,7 @@ interface WorkerLane {
                                 </dl>
                             </section>
                         }
-                        <details>
+                        <details (toggle)="onEvidenceToggle($event)">
                             <summary>Evidence</summary>
                             <pre>{{ evidenceText(event.evidence) }}</pre>
                         </details>
@@ -256,6 +256,8 @@ export class EventStreamPage implements OnInit, OnDestroy {
     private readonly api = inject(CONTROL_PLANE_API_CLIENT, { optional: true });
     private readonly route = inject(ActivatedRoute);
     private readonly router = inject(Router);
+    /** V2 telemetry: one in-memory session id per page load, never persisted. */
+    private readonly uiSession = crypto.randomUUID();
     private timer: ReturnType<typeof setInterval> | null = null;
     private streamAbort: AbortController | null = null;
 
@@ -329,6 +331,7 @@ export class EventStreamPage implements OnInit, OnDestroy {
     });
 
     ngOnInit(): void {
+        this.trackSurface('surface.events.open');
         void this.init();
         this.timer = setInterval(() => {
             if (this.autoRefresh() && this.streamState() !== 'live') void this.load();
@@ -344,6 +347,13 @@ export class EventStreamPage implements OnInit, OnDestroy {
         this.autoRefresh.set(enabled);
         if (enabled) this.startStream();
         else this.stopStream();
+    }
+
+    /** V2 telemetry — fire-and-forget; a beacon failure must never block or surface in the UI. */
+    private trackSurface(surface: string): void {
+        if (!this.api) return;
+        const consumerId = this.consumerId() || this.route.snapshot.queryParamMap.get('consumer') || null;
+        void this.api.postUiEvent({ surface, consumerId, session: this.uiSession }).catch(() => undefined);
     }
 
     private async init(): Promise<void> {
@@ -477,6 +487,13 @@ export class EventStreamPage implements OnInit, OnDestroy {
         } finally {
             this.loading.set(false);
         }
+    }
+
+    /** Raw evidence counts only when the user actually expands the JSON panel. */
+    onEvidenceToggle(event: Event): void {
+        const details = event.target as HTMLDetailsElement | null;
+        if (!details?.open) return;
+        this.trackSurface('raw.evidence.expand');
     }
 
     selectObservation(event: ObservationDto): void {

@@ -152,4 +152,47 @@ describe('HTTP contract — CR-010/011 routes', () => {
         const ask = await call('/api/v1/arch/ask', { method: 'POST', body: JSON.stringify({ kind: 'monolith', module: 'src/common/http/server.ts' }) });
         assert.equal(ask.status, 200);
     });
+
+    test('V2 telemetry — POST 202, unknown surface 422, summary counts', async () => {
+        const { call } = await fixture();
+
+        const views = ['surface.observatory.open', 'surface.events.open', 'raw.evidence.expand'];
+        for (const surface of views) {
+            const recorded = await call('/api/v1/telemetry/ui', {
+                method: 'POST',
+                body: JSON.stringify({ surface, consumerId: 'c-telemetry', session: 'page-1' }),
+            });
+            assert.equal(recorded.status, 202);
+            const body = await recorded.json() as any;
+            assert.equal(body.surface, surface);
+            assert.equal(body.consumerId, 'c-telemetry');
+            assert.equal(body.session, 'page-1');
+        }
+
+        const bad = await call('/api/v1/telemetry/ui', {
+            method: 'POST',
+            body: JSON.stringify({ surface: 'surface.not-a-surface' }),
+        });
+        assert.equal(bad.status, 422);
+        assert.equal((await bad.json()).code, 'INVALID_STATE');
+
+        const summary = await call('/api/v1/telemetry/summary?consumer=c-telemetry');
+        assert.equal(summary.status, 200);
+        const counts = await summary.json() as any;
+        assert.equal(counts.surface_views, 2);
+        assert.equal(counts.raw_views, 1);
+        assert.equal(counts.ratio, 2 / 3);
+        assert.equal(counts.bySurface['surface.observatory.open'], 1);
+        assert.equal(counts.bySurface['surface.events.open'], 1);
+        assert.equal(counts.bySurface['raw.evidence.expand'], 1);
+    });
+
+    test('V2 telemetry — summary requires auth', async () => {
+        await fixture();
+        // The fixture always adds authorization; call the server without it through a raw fetch.
+        const app = servers[servers.length - 1];
+        const address = app.server.address() as any;
+        const res = await fetch(`http://127.0.0.1:${address.port}/api/v1/telemetry/summary`);
+        assert.equal(res.status, 401);
+    });
 });

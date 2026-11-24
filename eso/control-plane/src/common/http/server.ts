@@ -68,6 +68,7 @@ import { ConfigSnapshotService, RUNTIME_KEY_PATTERN, etagMatches } from '../../m
 import { ObservationService } from '../../modules/observations/observation.service.js';
 import { RequestService } from '../../modules/requests/request.service.js';
 import { PluginService } from '../../modules/plugins/plugin.service.js';
+import { TelemetryService } from '../../modules/telemetry/telemetry.service.js';
 
 /**
  * L6.2 — the HTTP surface for Sprint 1.
@@ -178,6 +179,7 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
     const observations = new ObservationService(store);
     const requests = new RequestService(store, configSnapshot);
     const plugins = new PluginService(store);
+    const telemetry = new TelemetryService(store);
 
     const provisionConsumer = async (id: string, body: any) => {
         try {
@@ -1209,6 +1211,28 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
                 ok: true,
             }));
         },
+    });
+
+    // Vision test V2 telemetry: append-only UI surface views. The beacon is unauthenticated on
+    // purpose (it must never delay or block a render); it carries no prompt/PII, only the surface,
+    // an optional consumer id and an in-memory page session. Reading the aggregate requires auth.
+    app.post('/api/v1/telemetry/ui', async (request, reply) => {
+        const body = (request.body ?? {}) as any;
+        const event = await telemetry.record({
+            surface: body?.surface,
+            consumerId: body?.consumerId,
+            session: body?.session,
+        });
+        return reply.code(202).send(event);
+    });
+
+    app.get('/api/v1/telemetry/summary', { preHandler: requireAuth }, async (request) => {
+        const q = (request.query ?? {}) as any;
+        return telemetry.summary({
+            from: q?.from,
+            to: q?.to,
+            consumerId: q?.consumer ?? q?.consumerId,
+        });
     });
 
     app.setNotFoundHandler(async (request, reply) => {
