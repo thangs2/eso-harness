@@ -30,16 +30,63 @@ import {
                     @if (verdict(); as v) { <span class="verdict-level-badge" [class]="'level-' + v.level">{{ v.level }}</span> }
                 </header>
                 @if (verdict(); as v) {
-                    <div class="verdict-figures">
-                        <div class="verdict-meta"><small>Score</small><strong>{{ v.score }}</strong></div>
-                        <div class="verdict-meta"><small>Actor</small><span class="verdict-actor-id" [title]="actorId(v.actor)">{{ actorId(v.actor) }}</span>@if (actorRole(v.actor); as role) { <span class="verdict-actor-role">{{ role }}</span> }</div>
-                        <div class="verdict-meta"><small>Computed</small><time>{{ relative(v.computedAt) }}</time></div>
+                    <p class="verdict-meaning">{{ levelMeaning(v) }}</p>
+                    <div class="score-row">
+                        <div class="score-track" aria-hidden="true"><span class="score-fill" [attr.data-level]="v.level" [style.width.%]="v.score"></span></div>
+                        <p class="score-caption"><strong>{{ v.score }}</strong><span>/100 evidence score</span><small>{{ scoreFormula(v) }}</small></p>
                     </div>
-                    <p class="verdict-basis">{{ v.basis }}</p>
+                    <div class="gap-row">
+                        <span class="gap-label">Gaps</span>
+                        @for (gap of v.gaps.slice(0, 3); track gap.code) {
+                            <span class="gap-chip" [title]="gap.what + ' — ' + gap.consequence">{{ gap.code }}</span>
+                        } @empty {
+                            <span class="gap-none">none recorded</span>
+                        }
+                        @if (v.gaps.length > 3) { <span class="gap-more">+{{ v.gaps.length - 3 }}</span> }
+                    </div>
+                    <dl class="verdict-facts">
+                        <div><dt>Basis</dt><dd>{{ v.basis }}</dd></div>
+                        <div><dt>Actor</dt><dd>{{ actorLine(v.actor) }}</dd></div>
+                        <div><dt>Computed</dt><dd>{{ relative(v.computedAt) }} · ESO adjudication of the host claim</dd></div>
+                    </dl>
+                    @if (v.gaps.length) {
+                        <p class="verdict-consequence">{{ v.gaps[0].consequence }}</p>
+                    }
                 } @else {
                     <div class="verdict-figures"><span class="verdict-level-badge level-unknown">not returned</span></div>
                     <p class="verdict-basis">The API response for this request carried no verdict.</p>
                 }
+            </section>
+
+            <section class="panel gate-card" aria-label="Write gate">
+                <header class="panel-head">
+                    <div class="card-head-main"><span class="icon-chip gate-chip" aria-hidden="true">⛨</span><div><p class="eyebrow">Scope guard</p><h2>Write gate</h2></div></div>
+                    <div class="card-actions">
+                        @if (writeGate()) { <button type="button" class="mini-btn" (click)="copyGate()">{{ gateCopied() ? 'Copied' : 'Copy' }}</button> }
+                        <span class="gate-badge" [attr.data-state]="writeGate()?.allowed === true ? 'allowed' : writeGate() ? 'blocked' : 'none'">{{ writeGate() ? gateLabel() : 'not recorded' }}</span>
+                    </div>
+                </header>
+                @if (writeGate(); as gate) {
+                    <p class="gate-meaning">{{ gateMeaning(gate) }}</p>
+                    <p class="gate-big" [attr.data-state]="gate.allowed ? 'allowed' : 'blocked'"><span class="status-dot" aria-hidden="true"></span>{{ gate.allowed ? 'allowed' : 'blocked' }}</p>
+                    <dl class="gate-facts">
+                        <div><dt>Target</dt><dd><code class="gate-target" [title]="gate.target">{{ gate.target }}</code></dd></div>
+                        @if (gate.code) { <div><dt>Code</dt><dd><code class="gate-code">{{ gate.code }}</code> <small>{{ gateCodeMeaning(gate.code) }}</small></dd></div> }
+                        <div><dt>Decision</dt><dd><code>{{ gate.decisionId }}</code></dd></div>
+                        <div><dt>Actor</dt><dd>{{ writeGateActor(gate.actor) || 'no actor recorded' }}</dd></div>
+                        <div><dt>At</dt><dd>{{ relative(gate.at) }}</dd></div>
+                    </dl>
+                } @else {
+                    <p class="gate-meaning">No scope decision was recorded, so write permission for this turn is <strong>unverified — not granted</strong>.</p>
+                    <p class="gate-big none">not recorded</p>
+                    <p class="hint gate-empty">No scope decision was recorded for this turn</p>
+                    <p class="gate-action">The host must call <code>POST /consumers/:id/scope/check</code> with a <code>traceId</code> before writing.</p>
+                }
+                <ul class="gate-criteria">
+                    <li>target is inside the consumer root</li>
+                    <li>target is listed in <code>allowed_files</code></li>
+                    <li>the target directory exists</li>
+                </ul>
             </section>
 
             <section class="effectiveness" aria-label="Orchestration effectiveness (pipeline v2)">
@@ -75,31 +122,6 @@ import {
                     </div>
                 } @else {
                     <p class="signals-inline" title="No host signal was reported for this turn"><span class="signals-key">Host signals:</span> not reported</p>
-                }
-            </section>
-
-            <section class="panel gate-card" aria-label="Write gate">
-                <header class="panel-head">
-                    <div class="card-head-main"><span class="icon-chip gate-chip" aria-hidden="true">⛨</span><div><p class="eyebrow">Scope guard</p><h2>Write gate</h2></div></div>
-                    <div class="card-actions">
-                        @if (writeGate()) { <button type="button" class="mini-btn" (click)="copyGate()">{{ gateCopied() ? 'Copied' : 'Copy' }}</button> }
-                        <span class="gate-badge" [attr.data-state]="writeGate()?.allowed === true ? 'allowed' : writeGate() ? 'blocked' : 'none'">{{ writeGate() ? gateLabel() : 'not recorded' }}</span>
-                    </div>
-                </header>
-                @if (writeGate(); as gate) {
-                    <p class="gate-big" [attr.data-state]="gate.allowed ? 'allowed' : 'blocked'"><span class="status-dot" aria-hidden="true"></span>{{ gate.allowed ? 'allowed' : 'blocked' }}</p>
-                    <div class="gate-summary">
-                        @if (gate.code) { <code class="gate-code">{{ gate.code }}</code> } @else { <span class="hint">no code</span> }
-                        <code class="gate-target" [title]="gate.target">{{ gate.target }}</code>
-                        <time>{{ relative(gate.at) }}</time>
-                    </div>
-                    <dl class="gate-facts">
-                        <div><dt>Decision</dt><dd><code>{{ gate.decisionId }}</code></dd></div>
-                        @if (writeGateActor(gate.actor); as actor) { <div><dt>Actor</dt><dd>{{ actor }}</dd></div> }
-                    </dl>
-                } @else {
-                    <p class="gate-big none">not recorded</p>
-                    <p class="hint gate-empty">No scope decision was recorded for this turn</p>
                 }
             </section>
 
@@ -247,6 +269,32 @@ import {
         .token-meta { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); padding-top: var(--space-2); border-top: 1px solid var(--line-soft); color: var(--muted); font-size: var(--fs-label); }
         .token-meta strong { color: #e2e8f0; font-variant-numeric: tabular-nums; }
         .status-dot { display: inline-block; width: .4375rem; height: .4375rem; border-radius: 50%; background: currentColor; }
+        .verdict-meaning { color: #cbd5e1; font-size: var(--fs-body); line-height: 1.45; padding-bottom: var(--space-1); border-bottom: 1px solid var(--line-soft); }
+        .score-row { display: grid; gap: var(--space-1); }
+        .score-track { height: .375rem; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+        .score-fill { display: block; height: 100%; border-radius: 999px; background: var(--brand); }
+        .score-fill[data-level='allow'] { background: var(--ok-ink); }
+        .score-fill[data-level='partial'] { background: var(--warn-ink); }
+        .score-fill[data-level='deny'] { background: var(--danger-ink); }
+        .score-fill[data-level='unknown'] { background: var(--dim); }
+        .score-caption { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--space-2); color: var(--muted); font-size: var(--fs-label); }
+        .score-caption strong { color: #f1f5f9; font-size: 1.125rem; font-variant-numeric: tabular-nums; }
+        .score-caption small { margin-left: auto; padding-left: var(--space-2); border-left: 1px solid var(--line); color: var(--dim); }
+        .gap-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
+        .gap-label { color: var(--dim); font-size: var(--fs-label); text-transform: uppercase; letter-spacing: .06em; margin-right: var(--space-1); }
+        .gap-chip { padding: .0625rem .375rem; border: 1px solid rgba(251,191,36,.4); border-radius: 999px; background: rgba(251,191,36,.1); color: var(--warn-ink); font-size: var(--fs-label); font-family: ui-monospace, monospace; }
+        .gap-none, .gap-more { color: var(--dim); font-size: var(--fs-label); }
+        .verdict-facts, .gate-facts { display: grid; gap: .25rem; }
+        .verdict-facts > div, .gate-facts > div { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr); gap: var(--space-2); align-items: baseline; }
+        .verdict-facts dt, .gate-facts dt { color: var(--dim); font-size: var(--fs-label); text-transform: uppercase; letter-spacing: .05em; }
+        .verdict-facts dd, .gate-facts dd { color: #cbd5e1; font-size: var(--fs-label); min-width: 0; overflow-wrap: anywhere; }
+        .verdict-consequence { padding: var(--space-2); border-left: 2px solid var(--warn-ink); background: var(--surface-2); color: var(--muted); font-size: var(--fs-label); line-height: 1.45; }
+        .gate-meaning { color: #cbd5e1; font-size: var(--fs-body); line-height: 1.45; }
+        .gate-action { padding: var(--space-2); border: 1px dashed var(--line); border-radius: var(--radius-sm); color: var(--muted); font-size: var(--fs-label); }
+        .gate-action code { color: var(--brand); }
+        .gate-criteria { display: grid; gap: .1875rem; margin: 0; padding: 0 0 0 var(--space-4); color: var(--dim); font-size: var(--fs-label); line-height: 1.4; }
+        .gate-criteria li::marker { color: var(--line); }
+        .gate-criteria code { color: var(--muted); }
         @media (max-width: 74.9375rem) { .signal-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
         @media (max-width: 62.5rem) { .top-grid { grid-template-columns: 1fr; } }
         @media (max-width: 47.9375rem) { .glance-grid { grid-template-columns: minmax(0, 1fr); } .token-tiles { grid-template-columns: minmax(0, 1fr); } }
@@ -355,6 +403,46 @@ export class GlanceCardsComponent {
         if (!distill) return 'not captured';
         const saved = distill.memorySaved ? 'memory saved' : 'memory not saved';
         return typeof distill.lessons === 'number' ? `${saved} · ${distill.lessons} lesson(s)` : saved;
+    }
+
+    /** Plain-language reading of the level — the badge alone does not say what it means. */
+    levelMeaning(v: TurnVerdictView): string {
+        const gap = v.gaps[0]?.code;
+        switch (v.level) {
+            case 'allow': return 'Evidence supports this turn: the host claim was adjudicated and no gap was recorded.';
+            case 'deny': return 'A recorded rule or decision blocked this turn.';
+            case 'partial': return gap ? `Evidence is incomplete: ${gap} means the claim cannot be fully supported.` : 'Evidence is incomplete for this turn.';
+            default: return gap === 'HOST_SILENT'
+                ? 'The host reported no decision, so ESO cannot prove why this turn proceeded.'
+                : 'No decision evidence was recorded for this turn.';
+        }
+    }
+
+    /** Score is a formula, not a vibe: 100 − 25 per gap, so a reader can reproduce it. */
+    scoreFormula(v: TurnVerdictView): string {
+        const gaps = v.gaps.length;
+        return gaps ? `100 − 25 × ${gaps} gap${gaps === 1 ? '' : 's'}` : '100 − no gaps';
+    }
+
+    actorLine(actor: VerdictActor | null): string {
+        const id = this.actorId(actor);
+        if (!id || id === 'unknown actor') return 'unknown actor — no actor was recorded';
+        const role = this.actorRole(actor);
+        return role ? `${id} · ${role}` : id;
+    }
+
+    gateMeaning(gate: WriteGateView): string {
+        return gate.allowed
+            ? 'ESO scope rules accepted this target for the recorded write.'
+            : 'ESO scope rules rejected this target; a write to it is not permitted.';
+    }
+
+    gateCodeMeaning(code: string | null): string {
+        switch (code) {
+            case 'BLOCKED_SCOPE': return 'target is outside the allowed_files scope';
+            case 'DANGLING_SCOPE': return 'target directory does not exist';
+            default: return code ? 'scope rule rejected the target' : '';
+        }
     }
 
     /** Pipeline v2 — a counter is shown only when the API actually sent a finite number. */
