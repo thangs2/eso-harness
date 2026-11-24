@@ -989,8 +989,8 @@ export class RequestService {
                 tokensEstimated: detail.requestMetrics.tokensEstimated,
             });
         }
-        // Chronological (oldest first): a conversation reads as it happened, 1 → 2 → 3.
-        return { items: items.sort((left, right) => String(left.startedAt).localeCompare(String(right.startedAt))).slice(0, Math.max(1, limit)) };
+        // Newest first: the latest ticket is the one an operator needs at the top.
+        return { items: items.sort((left, right) => String(right.startedAt).localeCompare(String(left.startedAt))).slice(0, Math.max(1, limit)) };
     }
 
     private async enrichPipeline(consumerId: string, detail: RequestDetailBase): Promise<void> {
@@ -1061,7 +1061,7 @@ export class RequestService {
                 });
             }
         }
-        return { items: items.sort((left, right) => String(left.at).localeCompare(String(right.at))).slice(0, Math.max(1, limit)) };
+        return { items: items.sort((left, right) => String(right.at).localeCompare(String(left.at))).slice(0, Math.max(1, limit)) };
     }
 
     async get(consumerId: string, requestId: string): Promise<RequestDetail> {

@@ -369,9 +369,9 @@ export class RequestGridComponent implements OnChanges {
         return [...map.entries()].map(([conversationId, items]) => ({
             conversationId,
             host: items[0]?.hostId || 'unknown',
-            items: [...items].sort((a, b) => String(a.startedAt).localeCompare(String(b.startedAt)) || (a.boundaryIndex ?? 0) - (b.boundaryIndex ?? 0)),
+            items: [...items].sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)) || (b.boundaryIndex ?? 0) - (a.boundaryIndex ?? 0)),
             latest: items[0]?.startedAt || '',
-        })).sort((a, b) => String(a.latest).localeCompare(String(b.latest)));
+        })).sort((a, b) => String(b.latest).localeCompare(String(a.latest)));
     });
 
     ngOnChanges(changes: SimpleChanges): void {
