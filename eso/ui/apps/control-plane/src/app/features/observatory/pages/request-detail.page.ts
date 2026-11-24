@@ -43,6 +43,62 @@ const WORKER_LABEL: Record<string, string> = {
     'worker-qc-2': 'QC 2',
 };
 
+/** P2 — the four levels ESO adjudicates. Anything else is not a verdict. */
+type VerdictLevel = 'allow' | 'deny' | 'partial' | 'unknown';
+
+/** One proof gap: what ESO could not establish, and the consequence for the reader. */
+interface VerdictGap {
+    code: string;
+    what: string;
+    consequence: string;
+}
+
+/** A reference the host cited as the rule/basis of its decision. */
+interface VerdictRuleRef {
+    kind: string;
+    path?: string;
+    line?: number;
+}
+
+interface VerdictActor {
+    kind?: string;
+    id?: string;
+    role?: string;
+    [key: string]: unknown;
+}
+
+/** Verdict as returned on `detail.verdict` by GET /consumers/:id/requests/:requestId (P2). */
+interface TurnVerdictView {
+    level: VerdictLevel;
+    basis: string;
+    actor: VerdictActor | null;
+    gaps: VerdictGap[];
+    score: number;
+    ruleRefs: VerdictRuleRef[];
+    receiptId: string | null;
+    computedAt: string;
+}
+
+/** The shared detail DTO predates P2; the verdict rides on the same payload, so it is added here. */
+type RequestDetailWithVerdict = RequestDetailDto & { verdict?: TurnVerdictView | null };
+
+interface ActionEventView {
+    id: string;
+    tool: string;
+    outcome: string;
+    filesCount: number;
+    readBeforeEdit: string;
+    diffRef: string;
+}
+
+/** Q6 — rule-based only: each verdict level maps to exactly one next action. */
+const NEXT_STEP: Record<VerdictLevel, string> = {
+    deny: 'Close the gaps, then re-run',
+    unknown: 'Host must emit decision.recorded for this turn',
+    partial: 'Capture the missing data and re-issue the verdict',
+    allow: 'No action required',
+};
+
 @Component({
     selector: 'eso-request-detail-page',
     standalone: true,
@@ -78,6 +134,21 @@ const WORKER_LABEL: Record<string, string> = {
                         <span><small>Model</small>{{ value(request, 'model') }}</span>
                     </div>
                 </header>
+
+                <section class="verdict-hero" [attr.data-level]="verdict()?.level || 'unknown'" aria-label="Turn verdict (Q1)">
+                    @if (verdict(); as v) {
+                        <div class="verdict-head">
+                            <span class="verdict-level-badge" [class]="'level-' + v.level">{{ v.level }}</span>
+                            <div class="verdict-meta"><small>Score</small><strong>{{ v.score }}</strong></div>
+                            <div class="verdict-meta"><small>Actor</small><span class="verdict-actor-id">{{ actorId(v.actor) }}</span>@if (actorRole(v.actor); as role) {<span class="verdict-actor-role">{{ role }}</span>}</div>
+                            <div class="verdict-meta"><small>Computed</small><time>{{ relative(v.computedAt) }}</time></div>
+                        </div>
+                        <p class="verdict-basis">{{ v.basis }}</p>
+                    } @else {
+                        <div class="verdict-head"><span class="verdict-level-badge level-unknown">not returned</span></div>
+                        <p class="verdict-basis">The API response for this request carried no verdict.</p>
+                    }
+                </section>
 
                 <nav class="pipeline-stepper" aria-label="Pipeline stages">
                     @for (stage of systemStages(); track stage.id) {
@@ -185,8 +256,81 @@ const WORKER_LABEL: Record<string, string> = {
                         </div>
                     </section>
                 } @else if (activeTab() === 'decisions') {
+                    <section class="panel verdict-panel">
+                        <header class="panel-head"><div><p class="eyebrow">Verdict</p><h2>Verdict &amp; gaps</h2></div><span class="badge muted">ESO adjudication</span></header>
+                        @if (verdict(); as v) {
+                            <div class="verdict-block">
+                                <h3><span class="q-no">Q1</span> Verdict</h3>
+                                <div class="verdict-head">
+                                    <span class="verdict-level-badge" [class]="'level-' + v.level">{{ v.level }}</span>
+                                    <div class="verdict-meta"><small>Score</small><strong>{{ v.score }}</strong></div>
+                                    <div class="verdict-meta"><small>Actor</small><span class="verdict-actor-id">{{ actorId(v.actor) }}</span>@if (actorRole(v.actor); as role) {<span class="verdict-actor-role">{{ role }}</span>}</div>
+                                    <div class="verdict-meta"><small>Computed</small><time>{{ relative(v.computedAt) }}</time></div>
+                                </div>
+                                <p class="verdict-basis">{{ v.basis }}</p>
+                            </div>
+                            <div class="verdict-block">
+                                <h3><span class="q-no">Q2</span> Why this verdict</h3>
+                                <ul class="rule-refs">
+                                    @for (ref of v.ruleRefs; track $index) {
+                                        <li class="rule-ref"><code>{{ ruleRefLabel(ref) }}</code></li>
+                                    } @empty {
+                                        <li class="hint">No rule reference was recorded</li>
+                                    }
+                                </ul>
+                                <p class="verdict-basis">{{ v.basis }}</p>
+                            </div>
+                            <div class="verdict-block">
+                                <h3><span class="q-no">Q3</span> Sufficiency</h3>
+                                <p class="verdict-score-line">Score <strong>{{ v.score }}</strong> / 100 · {{ v.gaps.length }} gap(s)</p>
+                                <ul class="gap-list">
+                                    @for (gap of v.gaps; track gap.code) {
+                                        <li class="gap-row"><div class="gap-head"><code>{{ gap.code }}</code> · <span>{{ gap.what }}</span></div><p class="gap-consequence">{{ gap.consequence }}</p></li>
+                                    } @empty {
+                                        <li class="hint">No gaps recorded</li>
+                                    }
+                                </ul>
+                            </div>
+                        } @else {
+                            <p class="hint">The API response for this request carried no verdict.</p>
+                        }
+                    </section>
+
+                    <section class="panel change-panel">
+                        <header class="panel-head"><div><p class="eyebrow">Action</p><h2><span class="q-no">Q4</span> What changed</h2></div><span class="badge muted">{{ actionEvents().length }} action event(s)</span></header>
+                        <ul class="action-list">
+                            @for (action of actionEvents(); track action.id) {
+                                <li class="action-row"><strong>{{ action.tool }}</strong><span class="badge">{{ action.outcome }}</span><span>{{ action.filesCount }} file(s)</span><span>read before edit: {{ action.readBeforeEdit }}</span><code>diff: {{ action.diffRef }}</code></li>
+                            } @empty {
+                                <li class="hint">No action event was captured (host did not report it)</li>
+                            }
+                        </ul>
+                    </section>
+
+                    <section class="panel next-panel">
+                        <header class="panel-head"><div><p class="eyebrow">Next</p><h2>Integrity &amp; next action</h2></div></header>
+                        @if (verdict(); as v) {
+                            <div class="verdict-block">
+                                <h3><span class="q-no">Q5</span> Integrity</h3>
+                                <p class="receipt-line">Receipt <code>{{ receiptLabel(v.receiptId) }}</code></p>
+                                @if (!v.receiptId) { <p class="hint">No receipt was issued for this turn; nothing is claimed to be signed.</p> }
+                            </div>
+                            <div class="verdict-block">
+                                <h3><span class="q-no">Q6</span> What next</h3>
+                                <p class="next-step">{{ nextStep(v.level) }}</p>
+                                @if (v.gaps.length) {
+                                    <ul class="next-codes">@for (gap of v.gaps; track gap.code) { <li>{{ gap.code }}</li> }</ul>
+                                } @else {
+                                    <p class="hint">No gap codes recorded for this verdict.</p>
+                                }
+                            </div>
+                        } @else {
+                            <p class="hint">No verdict was returned, so no next step can be derived.</p>
+                        }
+                    </section>
+
                     <section class="panel">
-                        <header class="panel-head"><div><p class="eyebrow">Governance</p><h2>Checks &amp; worker outcomes</h2></div><span class="badge muted">{{ checks().length }} checks</span></header>
+                        <header class="panel-head"><div><p class="eyebrow">Heuristic checks — not the verdict</p><h2>Checks &amp; worker outcomes</h2></div><span class="badge muted">{{ checks().length }} checks</span></header>
                         <div class="checks">
                             @for (check of checks(); track check.checkId) {
                                 <div class="check-row"><span class="check-status" [attr.data-status]="check.status">{{ check.status }}</span><strong>{{ check.checkId }}</strong><small>{{ check.detail }}</small></div>
@@ -424,6 +568,43 @@ const WORKER_LABEL: Record<string, string> = {
         .loading-label { color: var(--muted); }
         .error-panel { display: grid; gap: var(--space-2); padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-md); color: var(--muted); }
         .error-panel strong { color: var(--ink); }
+        .verdict-hero { --card-accent: #64748b; display: grid; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--line); border-left: 3px solid var(--card-accent); border-radius: var(--radius-md); background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.35); }
+        .verdict-hero[data-level='allow'] { --card-accent: var(--ok-ink); }
+        .verdict-hero[data-level='partial'] { --card-accent: var(--warn-ink); }
+        .verdict-hero[data-level='deny'] { --card-accent: var(--danger-ink); }
+        .verdict-hero[data-level='unknown'] { --card-accent: #64748b; }
+        .verdict-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); }
+        .verdict-level-badge { display: inline-flex; align-items: center; padding: var(--space-1) var(--space-3); border: 1px solid currentColor; border-radius: var(--radius-sm); font-size: var(--text-sm); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+        .level-allow { color: var(--ok-ink); background: rgba(78,201,122,.12); }
+        .level-partial { color: var(--warn-ink); background: rgba(224,179,65,.12); }
+        .level-deny { color: var(--danger-ink); background: rgba(255,107,107,.12); }
+        .level-unknown { color: var(--muted); background: rgba(139,151,171,.12); }
+        .verdict-meta { display: grid; gap: .0625rem; min-width: 0; }
+        .verdict-meta small { color: var(--muted); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .08em; }
+        .verdict-meta strong { color: var(--warn-ink); font-size: var(--text-xl); font-variant-numeric: tabular-nums; line-height: 1; }
+        .verdict-meta time, .verdict-actor-id { color: var(--ink); font-size: var(--text-sm); overflow-wrap: anywhere; }
+        .verdict-actor-role { color: var(--muted); font-size: var(--text-xs); }
+        .verdict-basis { margin: 0; color: #cbd5e1; font-size: var(--text-sm); line-height: 1.5; overflow-wrap: anywhere; }
+        .verdict-block { display: grid; gap: var(--space-2); padding-top: var(--space-3); border-top: 1px solid var(--line); }
+        .verdict-block h3 { display: flex; align-items: baseline; gap: var(--space-2); margin: 0; font-size: var(--text-md); }
+        .q-no { color: var(--muted); font-size: var(--text-xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+        .verdict-score-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); margin: 0; color: var(--muted); font-size: var(--text-xs); }
+        .verdict-score-line strong { color: var(--ink); font-size: var(--text-md); font-variant-numeric: tabular-nums; }
+        .rule-refs, .gap-list, .action-list, .next-codes { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+        .rule-ref { padding: var(--space-2) var(--space-3); border: 1px solid #1e2a3e; border-radius: var(--radius-sm); background: #0d1118; font-size: var(--text-xs); overflow-wrap: anywhere; }
+        .rule-ref code { color: var(--brand); }
+        .gap-row { display: grid; gap: var(--space-1); padding: var(--space-2) var(--space-3); border: 1px solid #1e2a3e; border-left: 3px solid var(--warn-ink); border-radius: var(--radius-sm); background: #0d1118; }
+        .gap-head { color: #cbd5e1; font-size: var(--text-xs); overflow-wrap: anywhere; }
+        .gap-head code { color: var(--warn-ink); font-weight: 700; }
+        .gap-consequence { margin: 0; color: var(--muted); font-size: var(--text-xs); }
+        .action-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-3); padding: var(--space-2) var(--space-3); border: 1px solid #1e2a3e; border-radius: var(--radius-sm); background: #0d1118; color: #cbd5e1; font-size: var(--text-xs); }
+        .action-row strong { color: var(--ink); font-size: var(--text-sm); }
+        .action-row code { color: var(--brand); overflow-wrap: anywhere; }
+        .receipt-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); margin: 0; font-size: var(--text-sm); color: var(--muted); }
+        .receipt-line code { color: var(--brand); overflow-wrap: anywhere; }
+        .next-step { margin: 0; padding: var(--space-3); border: 1px solid #1e2a3e; border-left: 3px solid var(--brand); border-radius: var(--radius-sm); background: #0d1118; color: var(--ink); font-size: var(--text-sm); }
+        .next-codes { grid-auto-flow: column; justify-content: start; }
+        .next-codes li { padding: var(--space-1) var(--space-2); border: 1px solid rgba(224,179,65,.4); border-radius: var(--radius-sm); background: rgba(224,179,65,.1); color: var(--warn-ink); font-size: var(--text-xs); }
         @media (max-width: 62.5rem) { .top-grid { grid-template-columns: 1fr; } .title-row { flex-direction: column; } }
     `],
 })
@@ -436,12 +617,12 @@ export class RequestDetailPage implements OnInit {
     readonly loading = signal(true);
     readonly error = signal('');
     readonly consumerId = signal('');
-    readonly detail = signal<RequestDetailDto | null>(null);
+    readonly detail = signal<RequestDetailWithVerdict | null>(null);
     readonly activeTab = signal<TabKey>('waterfall');
     readonly tabs = [
         { id: 'waterfall' as const, label: 'Execution & Waterfall' },
         { id: 'topology' as const, label: 'Graphs & Topology' },
-        { id: 'decisions' as const, label: 'Governance & Decisions' },
+        { id: 'decisions' as const, label: 'Verdict & gaps' },
         { id: 'rules' as const, label: 'Rules & Context' },
         { id: 'telemetry' as const, label: 'Telemetry & Trace' },
     ];
@@ -550,6 +731,29 @@ export class RequestDetailPage implements OnInit {
     readonly toolCount = computed(() => this.detail()?.telemetry.tools.length ?? 0);
     readonly fileCount = computed(() => this.detail()?.telemetry.files.length ?? 0);
 
+    /** P2 — ESO's adjudication of this turn; never derived from prompt text or worker status. */
+    readonly verdict = computed<TurnVerdictView | null>(() => this.detail()?.verdict ?? null);
+
+    /** Q4 — only the events the host actually reported as actions, with no inferred fields. */
+    readonly actionEvents = computed<ActionEventView[]>(() => (this.detail()?.events ?? [])
+        .filter((event) => event.event === 'action.recorded')
+        .map((event) => {
+            const evidence = (event.evidence ?? {}) as Record<string, unknown>;
+            const files = Array.isArray(evidence['files']) ? evidence['files'].map(String) : [];
+            const readBeforeEdit = evidence['readBeforeEdit'];
+            const diffRef = evidence['diffRef'];
+            const tool = typeof evidence['tool'] === 'string' ? evidence['tool'].trim() : '';
+            const outcome = typeof evidence['outcome'] === 'string' ? evidence['outcome'].trim() : '';
+            return {
+                id: event.observationId,
+                tool: tool || 'tool not recorded',
+                outcome: outcome || 'outcome not recorded',
+                filesCount: files.length,
+                readBeforeEdit: readBeforeEdit === true ? 'yes' : readBeforeEdit === false ? 'no' : 'not captured',
+                diffRef: typeof diffRef === 'string' && diffRef.trim() ? diffRef.trim() : 'not captured',
+            };
+        }));
+
     ngOnInit(): void {
         this.trackSurface('surface.request.open');
         // BUG-30: the id must be observed, not frozen at first render.
@@ -643,6 +847,49 @@ export class RequestDetailPage implements OnInit {
 
     workerLabel(id: string | null | undefined): string {
         return WORKER_LABEL[id || ''] || id || 'unknown';
+    }
+
+    /** Q1 actor — only an honest id is shown; a missing actor is named, never guessed. */
+    actorId(actor: VerdictActor | null): string {
+        const id = actor && typeof actor['id'] === 'string' ? actor['id'].trim() : '';
+        return id || 'unknown actor';
+    }
+
+    /** Q1 role — omitted in the template when the host did not report one. */
+    actorRole(actor: VerdictActor | null): string {
+        const role = actor && typeof actor['role'] === 'string' ? actor['role'].trim() : '';
+        return role || '';
+    }
+
+    /** Q2 — `kind / path:line`, degrading honestly when path or line was not cited. */
+    ruleRefLabel(ref: VerdictRuleRef): string {
+        const kind = ref.kind || 'rule ref';
+        if (!ref.path) return kind;
+        return ref.line ? `${kind} / ${ref.path}:${ref.line}` : `${kind} / ${ref.path}`;
+    }
+
+    /** Q5 — a null receipt is a fact about P4, not a hash to invent. */
+    receiptLabel(receiptId: string | null): string {
+        return receiptId && receiptId.trim() ? receiptId : 'Not issued yet';
+    }
+
+    /** Q6 — the only mapping the page is allowed to make: level ⇒ next action. */
+    nextStep(level: VerdictLevel): string {
+        return NEXT_STEP[level];
+    }
+
+    /** Q1 — computedAt as a relative time, matching the requests list convention. */
+    relative(value: string): string {
+        if (!value) return 'not reported';
+        const ms = Date.now() - new Date(value).getTime();
+        if (Number.isNaN(ms)) return value;
+        const minutes = Math.floor(ms / 60000);
+        if (minutes < 1) return 'just now';
+        if (minutes < 60) return `${minutes}m ago`;
+        const hours = Math.floor(minutes / 60);
+        if (hours < 24) return `${hours}h ago`;
+        const days = Math.floor(hours / 24);
+        return days < 30 ? `${days}d ago` : this.formatAt(value);
     }
 
     formatAt(value: string): string {

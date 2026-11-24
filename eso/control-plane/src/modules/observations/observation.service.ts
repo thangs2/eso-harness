@@ -1,5 +1,6 @@
 import { PlatformError } from '../../platform/registry/errors.js';
 import { assertConsumerId, type PlatformStore } from '../../platform/registry/store.js';
+import { validateObservedEvent } from './event-contract.js';
 
 /**
  * Observation ingest (P2).
@@ -114,6 +115,8 @@ export class ObservationService {
         if (evidenceBytes > OBSERVATION_LIMITS.evidenceMaxBytes) {
             throw new PlatformError('OBSERVATION_INVALID', `evidence must be at most ${OBSERVATION_LIMITS.evidenceMaxBytes} bytes`);
         }
+        // P1 event contract: validated in place, never rewritten — evidence keeps actor/schemaVersion.
+        validateObservedEvent(event, evidence);
         const observationId = String(body?.observationId || '').trim()
             || `obs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
         const idempotencyKey = String(body?.idempotencyKey || '').trim() || observationId;

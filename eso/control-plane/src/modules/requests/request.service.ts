@@ -1,6 +1,9 @@
 import { PlatformError } from '../../platform/registry/errors.js';
 import { assertConsumerId, type PlatformStore } from '../../platform/registry/store.js';
+import type { EvidenceReceipt, TurnVerdict } from '../../platform/registry/types.js';
 import type { ConfigSnapshotService } from '../config-snapshot/config-snapshot.service.js';
+import { ReceiptService } from '../receipt/receipt.service.js';
+import { VerdictService } from '../verdict/verdict.service.js';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
@@ -178,7 +181,12 @@ export interface RequestDetail {
         tools: unknown[];
         files: unknown[];
     };
+    /** P2: ESO's adjudication of the host claim — always present on an HTTP detail response. */
+    verdict: TurnVerdict;
 }
+
+/** Everything `buildRequest` can compute from observations alone; the verdict is appended in `get`. */
+type RequestDetailBase = Omit<RequestDetail, 'verdict'>;
 
 function rowField(row: any, ...keys: string[]): any {
     for (const key of keys) {
@@ -222,7 +230,7 @@ function statusOf(events: RequestEvent[]): string {
     return events.length > 0 ? 'submitted' : 'unknown';
 }
 
-function buildRequest(consumerId: string, events: RequestEvent[]): RequestDetail | null {
+function buildRequest(consumerId: string, events: RequestEvent[]): RequestDetailBase | null {
     const prompt = events.find((event) => event.event === 'prompt.submitted');
     if (!prompt) return null;
     const startedAt = events[0]?.at || prompt.at;
@@ -346,7 +354,18 @@ function buildRequest(consumerId: string, events: RequestEvent[]): RequestDetail
 }
 
 export class RequestService {
-    constructor(private readonly store: PlatformStore, private readonly configSnapshot?: ConfigSnapshotService) {}
+    private readonly verdict: VerdictService;
+    private readonly receipt: ReceiptService;
+
+    constructor(
+        private readonly store: PlatformStore,
+        private readonly configSnapshot?: ConfigSnapshotService,
+        verdict?: VerdictService,
+        receipt?: ReceiptService
+    ) {
+        this.verdict = verdict ?? new VerdictService(store);
+        this.receipt = receipt ?? new ReceiptService(store, this.verdict);
+    }
 
     private async rows(consumerId: string, limit = 2000): Promise<RequestEvent[]> {
         const id = assertConsumerId(consumerId);
@@ -360,7 +379,7 @@ export class RequestService {
         try { return JSON.parse(await readFile(path, 'utf8')); } catch { return null; }
     }
 
-    private async reconAdaptersFor(consumerId: string, detail: RequestDetail): Promise<RequestReconAdapter[]> {
+    private async reconAdaptersFor(consumerId: string, detail: RequestDetailBase): Promise<RequestReconAdapter[]> {
         if (!this.configSnapshot) return [];
         try {
             const snapshot = await this.configSnapshot.get(consumerId) as any;
@@ -404,7 +423,7 @@ export class RequestService {
         }
     }
 
-    private async buildSystemStages(consumerId: string, detail: RequestDetail): Promise<RequestSystemStage[]> {
+    private async buildSystemStages(consumerId: string, detail: RequestDetailBase): Promise<RequestSystemStage[]> {
         const recon = detail.recon;
         const lawLayer = recon.find((item) => item.kind === 'law');
         const memoryLayer = recon.find((item) => item.kind === 'memory');
@@ -522,7 +541,7 @@ export class RequestService {
         return { items: items.sort((left, right) => String(right.startedAt).localeCompare(String(left.startedAt))).slice(0, Math.max(1, limit)) };
     }
 
-    private async enrichPipeline(consumerId: string, detail: RequestDetail): Promise<void> {
+    private async enrichPipeline(consumerId: string, detail: RequestDetailBase): Promise<void> {
         if (!this.configSnapshot) return;
         try {
             const snapshot = await this.configSnapshot.get(consumerId) as any;
@@ -601,11 +620,56 @@ export class RequestService {
             const byObservation = events.find((event) => event.observationId === decoded);
             if (byObservation) traceEvents = events.filter((event) => event.traceId === byObservation.traceId);
         }
-        const detail = buildRequest(consumerId, traceEvents);
-        if (!detail) throw new PlatformError('REQUEST_NOT_FOUND', `Request not found: ${decoded}`);
+        const base = buildRequest(consumerId, traceEvents);
+        if (!base) throw new PlatformError('NOT_FOUND', `Request not found: ${decoded}`);
+        // P2/P4 — the detail is the proof surface: every detail response carries ESO's verdict and
+        // the id of the receipt that seals it.
+        const detail: RequestDetail = {
+            ...base,
+            verdict: await this.adjudicated(consumerId, base.request.traceId),
+        };
         detail.recon = await this.reconAdaptersFor(consumerId, detail);
         await this.enrichPipeline(consumerId, detail);
         detail.systemStages = await this.buildSystemStages(consumerId, detail);
         return detail;
+    }
+
+    /**
+     * P2 — verdict for one request. Resolves the request id exactly like `get` (trace id or
+     * observation id) so the route and the detail block always describe the same turn.
+     */
+    async getVerdict(consumerId: string, requestId: string): Promise<TurnVerdict> {
+        const traceId = await this.resolveTraceId(consumerId, requestId);
+        return this.adjudicated(consumerId, traceId);
+    }
+
+    /**
+     * P4 — the sealed receipt of one request (issue-or-get). The route accepts the same request id
+     * forms as the detail/verdict routes.
+     */
+    async getReceipt(consumerId: string, requestId: string): Promise<EvidenceReceipt> {
+        const traceId = await this.resolveTraceId(consumerId, requestId);
+        return this.receipt.issue(consumerId, traceId);
+    }
+
+    /** The stored verdict plus the id of the receipt that seals it (`verdict.receiptId`). */
+    private async adjudicated(consumerId: string, traceId: string): Promise<TurnVerdict> {
+        const receipt = await this.receipt.issue(consumerId, traceId);
+        const verdict = await this.verdict.ensureVerdict(consumerId, traceId);
+        return { ...verdict, receiptId: receipt.receiptId };
+    }
+
+    private async resolveTraceId(consumerId: string, requestId: string): Promise<string> {
+        const decoded = decodeURIComponent(requestId);
+        const events = await this.rows(consumerId);
+        let traceId = events.find((event) => event.traceId === decoded && event.event === 'prompt.submitted')?.traceId ?? '';
+        if (!traceId) {
+            const byObservation = events.find((event) => event.observationId === decoded);
+            traceId = byObservation
+                ? events.find((event) => event.traceId === byObservation.traceId && event.event === 'prompt.submitted')?.traceId ?? ''
+                : '';
+        }
+        if (!traceId) throw new PlatformError('NOT_FOUND', `Request not found: ${decoded}`);
+        return traceId;
     }
 }

@@ -66,6 +66,7 @@ import { FlowProposalService } from '../../modules/flows/flow-proposal.service.j
 import { HostRuntimeService } from '../../modules/host-runtime/host-runtime.service.js';
 import { ConfigSnapshotService, RUNTIME_KEY_PATTERN, etagMatches } from '../../modules/config-snapshot/config-snapshot.service.js';
 import { ObservationService } from '../../modules/observations/observation.service.js';
+import { ReceiptService } from '../../modules/receipt/receipt.service.js';
 import { RequestService } from '../../modules/requests/request.service.js';
 import { PluginService } from '../../modules/plugins/plugin.service.js';
 import { TelemetryService } from '../../modules/telemetry/telemetry.service.js';
@@ -177,7 +178,8 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
     const hostTokens = new HostTokenService(store);
     const configSnapshot = new ConfigSnapshotService(store, flowFiles, workerFiles, hostRuntime);
     const observations = new ObservationService(store);
-    const requests = new RequestService(store, configSnapshot);
+    const receipts = new ReceiptService(store);
+    const requests = new RequestService(store, configSnapshot, undefined, receipts);
     const plugins = new PluginService(store);
     const telemetry = new TelemetryService(store);
 
@@ -1006,6 +1008,21 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
 
     app.get('/api/v1/consumers/:id/requests/:requestId', { preHandler: requireAuth }, async (request) => {
         return requests.get((request.params as any).id, (request.params as any).requestId);
+    });
+
+    // P2 — the append-only verdict of one turn (the same object embedded in the detail response).
+    app.get('/api/v1/consumers/:id/requests/:requestId/verdict', { preHandler: requireAuth }, async (request) => {
+        return requests.getVerdict((request.params as any).id, (request.params as any).requestId);
+    });
+
+    // P4 — the sealed receipt of one turn (issue-or-get: one receipt per trace, hash-chained).
+    app.get('/api/v1/consumers/:id/requests/:requestId/receipt', { preHandler: requireAuth }, async (request) => {
+        return requests.getReceipt((request.params as any).id, (request.params as any).requestId);
+    });
+
+    // P4 — recompute a receipt's hash (and HMAC when a key is configured) and check the chain link.
+    app.get('/api/v1/consumers/:id/receipts/:receiptId/verify', { preHandler: requireAuth }, async (request) => {
+        return receipts.verify((request.params as any).id, (request.params as any).receiptId);
     });
 
     app.get('/api/v1/consumers/:id/prompts', { preHandler: requireAuth }, async (request) => {

@@ -22,8 +22,10 @@ import type {
     ConsumerEvent,
     ConsumerRecord,
     ConsumerStatus,
+    EvidenceReceipt,
     ListConsumersOptions,
     StackVersionRecord,
+    TurnVerdict,
     UiEvent,
     UiEventQuery,
 } from './types.js';
@@ -109,6 +111,25 @@ export interface PlatformStore {
      */
     recordUiEvent(event: UiEvent): Promise<UiEvent>;
     listUiEvents(query?: UiEventQuery): Promise<UiEvent[]>;
+    /**
+     * P2: append-only turn verdict, one row per trace. A repeated insert for the same trace is a
+     * no-op that returns the stored row, so `ensureVerdict` stays idempotent under concurrency.
+     * There is deliberately no update/delete member.
+     */
+    insertTurnVerdict(verdict: TurnVerdict): Promise<TurnVerdict>;
+    getTurnVerdict(consumerId: string, traceId: string): Promise<TurnVerdict | null>;
+    /**
+     * P4: append-only sealed receipt, one row per trace. A repeated insert for the same
+     * `(consumerId, traceId)` is a no-op that returns the stored row, so `issue` stays idempotent.
+     * There is deliberately no update/delete member.
+     */
+    insertReceipt(receipt: EvidenceReceipt): Promise<EvidenceReceipt>;
+    getReceipt(consumerId: string, receiptId: string): Promise<EvidenceReceipt | null>;
+    getReceiptByTrace(consumerId: string, traceId: string): Promise<EvidenceReceipt | null>;
+    /** Newest receipt of the consumer's chain (append order); `null` before the first one. */
+    getLastReceipt(consumerId: string): Promise<EvidenceReceipt | null>;
+    /** Oldest first — the chain order a verifier walks. */
+    listReceipts(consumerId: string): Promise<EvidenceReceipt[]>;
     listStackVersions(consumerId: string): Promise<StackVersionRecord[]>;
     /**
      * BUG-27: replace-all with optimistic concurrency. When `expected` is supplied the write only
@@ -256,6 +277,9 @@ export class MemoryPlatformStore implements PlatformStore {
     private consumers = new Map<string, ConsumerRecord>();
     private events: ConsumerEvent[] = [];
     private uiEvents: UiEvent[] = [];
+    private turnVerdicts = new Map<string, TurnVerdict>();
+    /** Receipts keyed by receipt id; Map iteration order is the chain append order. */
+    private receipts = new Map<string, EvidenceReceipt>();
     private stackVersions = new Map<string, StackVersionRecord[]>();
     private hosts = new Map<string, any>();
     /** Keyed by `${hostId}:${runtimeId}` (runtimeKey). */
@@ -289,6 +313,8 @@ export class MemoryPlatformStore implements PlatformStore {
             consumers: clone(this.consumers),
             events: clone(this.events),
             uiEvents: clone(this.uiEvents),
+            turnVerdicts: new Map([...this.turnVerdicts].map(([key, value]) => [key, clone(value)])),
+            receipts: new Map([...this.receipts].map(([key, value]) => [key, clone(value)])),
             stackVersions: new Map([...this.stackVersions].map(([key, value]) => [key, clone(value)])),
             hosts: new Map([...this.hosts].map(([key, value]) => [key, clone(value)])),
             hostRuntimes: new Map([...this.hostRuntimes].map(([key, value]) => [key, clone(value)])),
@@ -307,6 +333,8 @@ export class MemoryPlatformStore implements PlatformStore {
             this.consumers = snapshot.consumers;
             this.events = snapshot.events;
             this.uiEvents = snapshot.uiEvents;
+            this.turnVerdicts = snapshot.turnVerdicts;
+            this.receipts = snapshot.receipts;
             this.stackVersions = snapshot.stackVersions;
             this.hosts = snapshot.hosts;
             this.hostRuntimes = snapshot.hostRuntimes;
@@ -422,6 +450,59 @@ export class MemoryPlatformStore implements PlatformStore {
             .filter((event) => !to || event.at <= to)
             .sort((a, b) => a.at.localeCompare(b.at))
             .map((event) => clone(event));
+    }
+
+    async insertTurnVerdict(verdict: TurnVerdict): Promise<TurnVerdict> {
+        const existing = this.turnVerdicts.get(verdict.traceId);
+        if (existing) return clone(existing);
+        const stored = clone(verdict);
+        this.turnVerdicts.set(stored.traceId, stored);
+        return clone(stored);
+    }
+
+    async getTurnVerdict(consumerId: string, traceId: string): Promise<TurnVerdict | null> {
+        const row = this.turnVerdicts.get(traceId);
+        if (!row || row.consumerId !== consumerId) return null;
+        return clone(row);
+    }
+
+    async insertReceipt(receipt: EvidenceReceipt): Promise<EvidenceReceipt> {
+        const existing = this.receipts.get(receipt.receiptId)
+            ?? [...this.receipts.values()].find(
+                (row) => row.consumerId === receipt.consumerId && row.traceId === receipt.traceId
+            );
+        if (existing) return clone(existing);
+        const stored = clone(receipt);
+        this.receipts.set(stored.receiptId, stored);
+        return clone(stored);
+    }
+
+    async getReceipt(consumerId: string, receiptId: string): Promise<EvidenceReceipt | null> {
+        const row = this.receipts.get(receiptId);
+        if (!row || row.consumerId !== consumerId) return null;
+        return clone(row);
+    }
+
+    async getReceiptByTrace(consumerId: string, traceId: string): Promise<EvidenceReceipt | null> {
+        const row = [...this.receipts.values()].find(
+            (item) => item.consumerId === consumerId && item.traceId === traceId
+        );
+        return row ? clone(row) : null;
+    }
+
+    async getLastReceipt(consumerId: string): Promise<EvidenceReceipt | null> {
+        let last: EvidenceReceipt | null = null;
+        for (const row of this.receipts.values()) {
+            if (row.consumerId === consumerId) last = row;
+        }
+        return last ? clone(last) : null;
+    }
+
+    async listReceipts(consumerId: string): Promise<EvidenceReceipt[]> {
+        return [...this.receipts.values()]
+            .filter((row) => row.consumerId === consumerId)
+            .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+            .map((row) => clone(row));
     }
 
     async listStackVersions(consumerId: string): Promise<StackVersionRecord[]> {
@@ -1310,6 +1391,103 @@ export class BunSqlPlatformStore implements PlatformStore {
             params
         );
         return rows.map(mapUiEvent);
+    }
+
+    async insertTurnVerdict(verdict: TurnVerdict): Promise<TurnVerdict> {
+        const rows = await this.sql.unsafe(
+            `INSERT INTO platform.turn_verdict
+             (trace_id, consumer_id, level, basis, actor, gaps, score, rule_refs, receipt_id, computed_at)
+             VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7,$8::jsonb,$9,COALESCE($10::timestamptz, now()))
+             ON CONFLICT (trace_id) DO NOTHING
+             RETURNING *`,
+            [
+                verdict.traceId,
+                verdict.consumerId,
+                verdict.level,
+                verdict.basis,
+                verdict.actor ?? null,
+                verdict.gaps ?? [],
+                verdict.score,
+                verdict.ruleRefs ?? [],
+                verdict.receiptId ?? null,
+                verdict.computedAt ?? null,
+            ]
+        );
+        if (rows.length) return mapTurnVerdict(rows[0]);
+        // Another writer won the race: the append-only row that exists is the verdict.
+        const existing = await this.getTurnVerdict(verdict.consumerId, verdict.traceId);
+        if (!existing) throw new Error(`TURN_VERDICT_CONFLICT:${verdict.traceId}`);
+        return existing;
+    }
+
+    async getTurnVerdict(consumerId: string, traceId: string): Promise<TurnVerdict | null> {
+        const rows = await this.sql.unsafe(
+            `SELECT * FROM platform.turn_verdict WHERE consumer_id = $1 AND trace_id = $2`,
+            [consumerId, traceId]
+        );
+        return rows.length ? mapTurnVerdict(rows[0]) : null;
+    }
+
+    async insertReceipt(receipt: EvidenceReceipt): Promise<EvidenceReceipt> {
+        const rows = await this.sql.unsafe(
+            `INSERT INTO platform.evidence_receipt
+             (receipt_id, consumer_id, trace_id, prev_hash, hash, hmac, spec_version, verdict_level, payload, created_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,COALESCE($10::timestamptz, now()))
+             ON CONFLICT DO NOTHING
+             RETURNING *`,
+            [
+                receipt.receiptId,
+                receipt.consumerId,
+                receipt.traceId,
+                receipt.prevHash,
+                receipt.hash,
+                receipt.hmac ?? null,
+                receipt.specVersion,
+                receipt.verdictLevel,
+                receipt.payload ?? {},
+                receipt.createdAt ?? null,
+            ]
+        );
+        if (rows.length) return mapReceipt(rows[0]);
+        // Another writer won the race: the append-only row that exists is the receipt.
+        const existing = await this.getReceiptByTrace(receipt.consumerId, receipt.traceId)
+            ?? await this.getReceipt(receipt.consumerId, receipt.receiptId);
+        if (!existing) throw new Error(`EVIDENCE_RECEIPT_CONFLICT:${receipt.receiptId}`);
+        return existing;
+    }
+
+    async getReceipt(consumerId: string, receiptId: string): Promise<EvidenceReceipt | null> {
+        const rows = await this.sql.unsafe(
+            `SELECT * FROM platform.evidence_receipt WHERE consumer_id = $1 AND receipt_id = $2`,
+            [consumerId, receiptId]
+        );
+        return rows.length ? mapReceipt(rows[0]) : null;
+    }
+
+    async getReceiptByTrace(consumerId: string, traceId: string): Promise<EvidenceReceipt | null> {
+        const rows = await this.sql.unsafe(
+            `SELECT * FROM platform.evidence_receipt WHERE consumer_id = $1 AND trace_id = $2`,
+            [consumerId, traceId]
+        );
+        return rows.length ? mapReceipt(rows[0]) : null;
+    }
+
+    async getLastReceipt(consumerId: string): Promise<EvidenceReceipt | null> {
+        const rows = await this.sql.unsafe(
+            `SELECT * FROM platform.evidence_receipt WHERE consumer_id = $1
+             ORDER BY created_at DESC, receipt_id DESC LIMIT 1`,
+            [consumerId]
+        );
+        return rows.length ? mapReceipt(rows[0]) : null;
+    }
+
+    async listReceipts(consumerId: string): Promise<EvidenceReceipt[]> {
+        const rows = await this.sql.unsafe(
+            `SELECT * FROM platform.evidence_receipt WHERE consumer_id = $1
+             ORDER BY created_at ASC, receipt_id ASC`,
+            [consumerId]
+        );
+        return rows.map(mapReceipt);
     }
 
     async listStackVersions(consumerId: string): Promise<StackVersionRecord[]> {
@@ -2287,8 +2465,50 @@ function mapUiEvent(row: any): UiEvent {
     };
 }
 
-function mapStackVersion(row: any): StackVersionRecord {
+/** Parse a jsonb value that Bun may hand back as an object or as JSON text. */
+function parseJsonbValue(value: unknown): any {
+    if (typeof value === 'string') {
+        try {
+            return JSON.parse(value);
+        } catch {
+            return null;
+        }
+    }
+    return value ?? null;
+}
+
+function mapTurnVerdict(row: any): TurnVerdict {
     return {
+        traceId: String(row.trace_id ?? row.traceId ?? ''),
+        consumerId: String(row.consumer_id ?? row.consumerId ?? ''),
+        level: String(row.level) as TurnVerdict['level'],
+        basis: String(row.basis ?? ''),
+        actor: parseJsonbValue(row.actor),
+        gaps: normalizeJsonArray(row.gaps) as TurnVerdict['gaps'],
+        score: Number(row.score ?? 0),
+        ruleRefs: normalizeJsonArray(row.rule_refs ?? row.ruleRefs) as TurnVerdict['ruleRefs'],
+        receiptId: (row.receipt_id ?? row.receiptId ?? null) as string | null,
+        computedAt: toIso(row.computed_at ?? row.computedAt),
+    };
+}
+
+/** P4 — one sealed receipt row. `payload` is jsonb, so Bun may hand it back as text. */
+function mapReceipt(row: any): EvidenceReceipt {
+    return {
+        receiptId: String(row.receipt_id ?? row.receiptId ?? ''),
+        consumerId: String(row.consumer_id ?? row.consumerId ?? ''),
+        traceId: String(row.trace_id ?? row.traceId ?? ''),
+        prevHash: String(row.prev_hash ?? row.prevHash ?? ''),
+        hash: String(row.hash ?? ''),
+        hmac: (row.hmac ?? null) as string | null,
+        specVersion: Number(row.spec_version ?? row.specVersion ?? 0),
+        verdictLevel: String(row.verdict_level ?? row.verdictLevel ?? 'unknown') as EvidenceReceipt['verdictLevel'],
+        payload: parseJsonbValue(row.payload) as EvidenceReceipt['payload'],
+        createdAt: toIso(row.created_at ?? row.createdAt),
+    };
+}
+
+function mapStackVersion(row: any): StackVersionRecord {    return {
         consumerId: row.consumer_id,
         version: Number(row.version),
         status: row.status,

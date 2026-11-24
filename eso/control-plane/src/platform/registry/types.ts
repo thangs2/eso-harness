@@ -131,3 +131,99 @@ export interface StackVersionRecord {
     publishedAt: string | null;
     createdAt: string;
 }
+
+/** P2 — the four levels ESO can adjudicate for a turn. */
+export const TURN_VERDICT_LEVELS = ['allow', 'deny', 'partial', 'unknown'] as const;
+export type TurnVerdictLevel = (typeof TURN_VERDICT_LEVELS)[number];
+
+/** One proof gap: what ESO could not establish, and why it matters. */
+export interface TurnVerdictGap {
+    code: string;
+    what: string;
+    consequence: string;
+}
+
+/** A reference the host cited as the rule/basis of its decision. */
+export interface TurnVerdictRuleRef {
+    kind: string;
+    path?: string;
+    line?: number;
+    [key: string]: unknown;
+}
+
+/** Adjudicated claim of one trace (`platform.turn_verdict`, append-only, 1 row / trace). */
+export interface TurnVerdict {
+    traceId: string;
+    consumerId: string;
+    level: TurnVerdictLevel;
+    basis: string;
+    actor: Record<string, unknown> | null;
+    gaps: TurnVerdictGap[];
+    score: number;
+    ruleRefs: TurnVerdictRuleRef[];
+    receiptId: string | null;
+    computedAt: string;
+}
+
+/** P4 — the sealed spec version of a receipt payload. Bumping it changes the hashed bytes. */
+export const RECEIPT_SPEC_VERSION = 1;
+
+/** Chain sentinel: the first receipt of a consumer has no predecessor hash. */
+export const RECEIPT_GENESIS_HASH = 'GENESIS';
+
+/**
+ * P4 — the only verdict fields a receipt seals. `ruleRefs`, `receiptId` and `computedAt` are
+ * deliberately excluded: they are either derived later or would make the payload self-referential.
+ */
+export interface ReceiptVerdictSummary {
+    level: TurnVerdictLevel;
+    basis: string;
+    actor: Record<string, unknown> | null;
+    gaps: TurnVerdictGap[];
+    score: number;
+}
+
+/**
+ * P4 — one observation reference. It names the raw observation; it never copies prompt text or
+ * evidence values, so a receipt can be shared without leaking the turn's content.
+ */
+export interface ReceiptEventDigest {
+    observationId: string;
+    event: string;
+    outcome: string | null;
+    at: string;
+}
+
+/** P4 — the canonical bytes a receipt hash commits to (see `receipt.service.ts`). */
+export interface ReceiptPayload {
+    specVersion: number;
+    consumerId: string;
+    traceId: string;
+    verdict: ReceiptVerdictSummary;
+    eventDigests: ReceiptEventDigest[];
+}
+
+/** One sealed receipt (`platform.evidence_receipt`, append-only, 1 row / trace). */
+export interface EvidenceReceipt {
+    receiptId: string;
+    consumerId: string;
+    traceId: string;
+    prevHash: string;
+    hash: string;
+    hmac: string | null;
+    specVersion: number;
+    verdictLevel: TurnVerdictLevel;
+    payload: ReceiptPayload;
+    createdAt: string;
+}
+
+/**
+ * P4 — verification result. `hmacMatches` is honest about capability: with no key configured it is
+ * only true when the receipt was stored with `hmac: null`.
+ */
+export interface ReceiptVerification {
+    ok: boolean;
+    hashMatches: boolean;
+    hmacMatches: boolean;
+    chained: boolean;
+}

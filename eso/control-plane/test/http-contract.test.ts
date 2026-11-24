@@ -187,6 +187,163 @@ describe('HTTP contract — CR-010/011 routes', () => {
         assert.equal(counts.bySurface['raw.evidence.expand'], 1);
     });
 
+    test('P1 — observations accept decision.recorded, invalid payload is 422 OBSERVATION_INVALID', async () => {
+        const { call } = await fixture();
+        const { mkdtempSync } = await import('node:fs');
+        const { tmpdir } = await import('node:os');
+        const { join } = await import('node:path');
+        const root = mkdtempSync(join(tmpdir(), 'eso-http-obs-'));
+        const consumer = await call('/api/v1/consumers', {
+            method: 'POST',
+            body: JSON.stringify({ id: 'fineso', name: 'Fineso', root }),
+        });
+        assert.ok([200, 201].includes(consumer.status), `create consumer: ${consumer.status}`);
+
+        const envelope = { traceId: 'trace-fineso-1', hostId: 'cursor', runtimeKey: 'cursor:cursor-agent', event: 'decision.recorded' };
+        const valid = await call('/api/v1/consumers/fineso/observations', {
+            method: 'POST',
+            body: JSON.stringify({
+                ...envelope,
+                outcome: 'PASS',
+                evidence: {
+                    winner: 'plan',
+                    verdict: 'allow',
+                    basis: 'rule core.slp says build then verify',
+                    refs: [{ kind: 'rule', path: 'agents/rules/core.slp.mdc', line: 42 }],
+                    actor: { kind: 'host', id: 'cursor', role: 'builder' },
+                    schemaVersion: 1,
+                },
+            }),
+        });
+        assert.ok([200, 201].includes(valid.status), `valid decision: ${valid.status}`);
+        assert.equal((await valid.json() as any).created, true);
+
+        // Contract validation never rewrites evidence: actor/schemaVersion stay in the stored JSONB.
+        const listed = await call('/api/v1/consumers/fineso/observations');
+        assert.equal(listed.status, 200);
+        const stored = (await listed.json() as any).items[0];
+        assert.equal(stored.evidence.actor.kind, 'host');
+        assert.equal(stored.evidence.schemaVersion, 1);
+
+        const invalid = await call('/api/v1/consumers/fineso/observations', {
+            method: 'POST',
+            body: JSON.stringify({
+                ...envelope,
+                traceId: 'trace-fineso-2',
+                evidence: { verdict: 'allow', basis: 'winner is missing' },
+            }),
+        });
+        assert.equal(invalid.status, 422);
+        const body = await invalid.json() as any;
+        assert.equal(body.code, 'OBSERVATION_INVALID');
+        assert.match(String(body.detail), /winner/);
+    });
+
+    test('P2 — detail carries verdict; verdict route matches; silent trace ⇒ unknown + HOST_SILENT', async () => {
+        const { call } = await fixture();
+        const { mkdtempSync } = await import('node:fs');
+        const { tmpdir } = await import('node:os');
+        const { join } = await import('node:path');
+        const root = mkdtempSync(join(tmpdir(), 'eso-http-verdict-'));
+        const consumer = await call('/api/v1/consumers', {
+            method: 'POST',
+            body: JSON.stringify({ id: 'verdicto', name: 'Verdicto', root }),
+        });
+        assert.ok([200, 201].includes(consumer.status), `create consumer: ${consumer.status}`);
+
+        const post = (traceId: string, event: string, evidence: Record<string, unknown>) =>
+            call('/api/v1/consumers/verdicto/observations', {
+                method: 'POST',
+                body: JSON.stringify({ traceId, hostId: 'cursor', runtimeKey: 'cursor:cursor-agent', event, evidence }),
+            });
+
+        const hostActor = { kind: 'host', id: 'cursor', role: 'builder' };
+        const allowTrace = 'trace-p2-allow';
+        for (const [event, evidence] of [
+            ['prompt.submitted', { userQuery: 'why did this turn proceed?' }],
+            ['decision.recorded', { winner: 'plan', verdict: 'allow', basis: 'core.slp build then verify', actor: hostActor, schemaVersion: 1 }],
+            ['evidence.packet', { hash: 'sha256:abc123', actor: hostActor }],
+            ['action.recorded', { tool: 'apply_patch', outcome: 'PASS', files: ['src/example.ts'], actor: hostActor }],
+        ] as Array<[string, Record<string, unknown>]>) {
+            const stored = await post(allowTrace, event, evidence);
+            assert.ok([200, 201].includes(stored.status), `${event}: ${stored.status}`);
+        }
+
+        const detail = await call(`/api/v1/consumers/verdicto/requests/${allowTrace}`);
+        assert.equal(detail.status, 200);
+        const detailBody = await detail.json() as any;
+        assert.equal(detailBody.verdict.level, 'allow');
+        assert.equal(detailBody.verdict.score, 100);
+        assert.equal(detailBody.verdict.actor.role, 'builder');
+
+        const verdictRoute = await call(`/api/v1/consumers/verdicto/requests/${allowTrace}/verdict`);
+        assert.equal(verdictRoute.status, 200);
+        assert.deepEqual(await verdictRoute.json(), detailBody.verdict);
+
+        const silentTrace = 'trace-p2-silent';
+        const silentPost = await post(silentTrace, 'prompt.submitted', { userQuery: 'no decision was recorded' });
+        assert.ok([200, 201].includes(silentPost.status));
+        const silent = await call(`/api/v1/consumers/verdicto/requests/${silentTrace}`);
+        assert.equal(silent.status, 200);
+        const silentBody = await silent.json() as any;
+        assert.equal(silentBody.verdict.level, 'unknown');
+        assert.equal(silentBody.verdict.score, 75);
+        assert.ok(silentBody.verdict.gaps.some((gap: any) => gap.code === 'HOST_SILENT' && /cannot prove why/.test(gap.consequence)));
+    });
+
+    test('P4 — receipt route returns the id; verify route returns ok true', async () => {
+        const { call } = await fixture();
+        const { mkdtempSync } = await import('node:fs');
+        const { tmpdir } = await import('node:os');
+        const { join } = await import('node:path');
+        const root = mkdtempSync(join(tmpdir(), 'eso-http-receipt-'));
+        const consumer = await call('/api/v1/consumers', {
+            method: 'POST',
+            body: JSON.stringify({ id: 'receipto', name: 'Receipto', root }),
+        });
+        assert.ok([200, 201].includes(consumer.status), `create consumer: ${consumer.status}`);
+
+        const traceId = 'trace-p4-receipt';
+        const post = (event: string, evidence: Record<string, unknown>) =>
+            call('/api/v1/consumers/receipto/observations', {
+                method: 'POST',
+                body: JSON.stringify({ traceId, hostId: 'cursor', runtimeKey: 'cursor:cursor-agent', event, evidence }),
+            });
+        const hostActor = { kind: 'host', id: 'cursor', role: 'builder' };
+        for (const [event, evidence] of [
+            ['prompt.submitted', { userQuery: 'why did this turn proceed?' }],
+            ['decision.recorded', { winner: 'plan', verdict: 'allow', basis: 'core.slp build then verify', actor: hostActor, schemaVersion: 1 }],
+            ['evidence.packet', { hash: 'sha256:abc123', actor: hostActor }],
+            ['action.recorded', { tool: 'apply_patch', outcome: 'PASS', files: ['src/example.ts'], actor: hostActor }],
+        ] as Array<[string, Record<string, unknown>]>) {
+            const stored = await post(event, evidence);
+            assert.ok([200, 201].includes(stored.status), `${event}: ${stored.status}`);
+        }
+
+        const detail = await call(`/api/v1/consumers/receipto/requests/${traceId}`);
+        assert.equal(detail.status, 200);
+        const detailBody = await detail.json() as any;
+        assert.equal(typeof detailBody.verdict.receiptId, 'string');
+        assert.ok(detailBody.verdict.receiptId.length > 0);
+
+        const receiptRoute = await call(`/api/v1/consumers/receipto/requests/${traceId}/receipt`);
+        assert.equal(receiptRoute.status, 200);
+        const receipt = await receiptRoute.json() as any;
+        assert.equal(receipt.receiptId, detailBody.verdict.receiptId);
+        assert.equal(receipt.traceId, traceId);
+        assert.equal(receipt.prevHash, 'GENESIS');
+        assert.match(receipt.hash, /^[0-9a-f]{64}$/);
+
+        // issue-or-get: the receipt route is idempotent per trace
+        const again = await call(`/api/v1/consumers/receipto/requests/${traceId}/receipt`);
+        assert.equal(again.status, 200);
+        assert.equal((await again.json() as any).receiptId, receipt.receiptId);
+
+        const verifyRoute = await call(`/api/v1/consumers/receipto/receipts/${receipt.receiptId}/verify`);
+        assert.equal(verifyRoute.status, 200);
+        assert.deepEqual(await verifyRoute.json(), { ok: true, hashMatches: true, hmacMatches: true, chained: true });
+    });
+
     test('V2 telemetry — summary requires auth', async () => {
         await fixture();
         // The fixture always adds authorization; call the server without it through a raw fetch.

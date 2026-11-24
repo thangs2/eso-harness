@@ -15,6 +15,8 @@ export const BRD_ERROR_CODES: ReadonlySet<string> = new Set([
     'DATABASE_UNAVAILABLE',
     'NOT_FOUND',
     'OBSERVATION_INVALID',
+    // P1 contract: registered in ERROR_STATUS and BRD/06, so the envelope set must know it too.
+    'SCHEMA_UNSUPPORTED',
     'EDGES_MOVED_TO_FLOW',
     'FLOW_INVALID',
     'FLOW_NO_DRAFT',

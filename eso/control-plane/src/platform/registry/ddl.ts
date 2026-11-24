@@ -98,6 +98,52 @@ export const UI_EVENT_AT_INDEX_DDL = `CREATE INDEX IF NOT EXISTS idx_ui_event_at
 export const UI_EVENT_CONSUMER_INDEX_DDL = `CREATE INDEX IF NOT EXISTS idx_ui_event_consumer_at
     ON platform.ui_event (consumer_id, at desc)`;
 
+/**
+ * P2 — adjudicated turn verdict. One row per trace, written once from the observations of that
+ * trace. Append-only: the store exposes insert/get only, never update/delete. `gaps` is the list
+ * `{code,what,consequence}` the verdict could not prove; `score` is 100 minus 25 per gap.
+ */
+export const TURN_VERDICT_TABLE = 'platform.turn_verdict';
+export const TURN_VERDICT_DDL = `CREATE TABLE IF NOT EXISTS platform.turn_verdict (
+    trace_id    text primary key,
+    consumer_id text not null,
+    level       text not null check (level in ('allow','deny','partial','unknown')),
+    basis       text not null,
+    actor       jsonb,
+    gaps        jsonb not null default '[]'::jsonb,
+    score       integer not null,
+    rule_refs   jsonb not null default '[]'::jsonb,
+    receipt_id  text,
+    computed_at timestamptz not null default now()
+)`;
+
+export const TURN_VERDICT_CONSUMER_INDEX_DDL = `CREATE INDEX IF NOT EXISTS idx_turn_verdict_consumer
+    ON platform.turn_verdict (consumer_id, computed_at desc)`;
+
+/**
+ * P4 — sealed evidence receipt. One row per trace, hash-chained per consumer
+ * (`prev_hash` = hash of the consumer's previous receipt, or `GENESIS`). Append-only: the store
+ * exposes insert/get/list only, never update/delete. `payload` is the canonical sealed body, kept
+ * so a verifier can recompute the hash without trusting any other table.
+ */
+export const EVIDENCE_RECEIPT_TABLE = 'platform.evidence_receipt';
+export const EVIDENCE_RECEIPT_DDL = `CREATE TABLE IF NOT EXISTS platform.evidence_receipt (
+    receipt_id    text primary key,
+    consumer_id   text not null,
+    trace_id      text not null,
+    prev_hash     text not null,
+    hash          text not null,
+    hmac          text,
+    spec_version  integer not null default 1,
+    verdict_level text not null check (verdict_level in ('allow','deny','partial','unknown')),
+    payload       jsonb not null default '{}'::jsonb,
+    created_at    timestamptz not null default now(),
+    unique (consumer_id, trace_id)
+)`;
+
+export const EVIDENCE_RECEIPT_CONSUMER_INDEX_DDL = `CREATE INDEX IF NOT EXISTS idx_evidence_receipt_consumer
+    ON platform.evidence_receipt (consumer_id, created_at asc, receipt_id asc)`;
+
 export const PLATFORM_DDL: readonly string[] = [
     `CREATE SCHEMA IF NOT EXISTS platform`,
     `CREATE TABLE IF NOT EXISTS platform.consumer (
@@ -187,6 +233,10 @@ export const PLATFORM_DDL: readonly string[] = [
     UI_EVENT_DDL,
     UI_EVENT_AT_INDEX_DDL,
     UI_EVENT_CONSUMER_INDEX_DDL,
+    TURN_VERDICT_DDL,
+    TURN_VERDICT_CONSUMER_INDEX_DDL,
+    EVIDENCE_RECEIPT_DDL,
+    EVIDENCE_RECEIPT_CONSUMER_INDEX_DDL,
 ];
 
 export const CONSUMER_ID_PATTERN = /^[a-z0-9][a-z0-9-]{1,31}$/;

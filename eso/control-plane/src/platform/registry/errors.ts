@@ -39,6 +39,7 @@ export const ERROR_STATUS: Readonly<Record<string, number>> = {
     WORKER_NOT_FOUND: 404,
     WORKER_PLACEMENT_INVALID: 422,
     OBSERVATION_INVALID: 422,
+    SCHEMA_UNSUPPORTED: 422,
     // F-28 evidence ingest (AC-36)
     INVALID_EVENT: 400,
     UNKNOWN_SCHEMA: 400,
@@ -92,6 +93,7 @@ export const ERROR_MESSAGE: Readonly<Record<string, string>> = {
     WORKER_NOT_FOUND: 'Worker not found',
     WORKER_PLACEMENT_INVALID: 'Worker host placement is invalid',
     OBSERVATION_INVALID: 'Observation is invalid',
+    SCHEMA_UNSUPPORTED: 'Observation schema version is not supported',
     INVALID_EVENT: 'Evidence event is invalid',
     UNKNOWN_SCHEMA: 'Event schema is not registered',
     PAYLOAD_TOO_LARGE: 'Batch or payload exceeds the ingest limit',

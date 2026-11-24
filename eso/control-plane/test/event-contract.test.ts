@@ -1,0 +1,181 @@
+/**
+ * P1 — evidence contract v1 validation.
+ *
+ * Run: `cd eso/control-plane && bun test test/event-contract.test.ts`
+ */
+import assert from 'node:assert/strict';
+import { describe, test } from 'node:test';
+
+import { PlatformError } from '../src/platform/registry/errors.js';
+import {
+    SCHEMA_VERSION,
+    SchemaUnsupportedError,
+    validateObservedEvent,
+} from '../src/modules/observations/event-contract.js';
+
+function caught(fn: () => unknown): any {
+    try {
+        fn();
+    } catch (error) {
+        return error;
+    }
+    assert.fail('expected validateObservedEvent to reject');
+}
+
+function expectInvalid(event: string, evidence: unknown, pattern: RegExp): PlatformError {
+    const error = caught(() => validateObservedEvent(event, evidence));
+    assert.ok(error instanceof PlatformError, `expected PlatformError, got ${String(error)}`);
+    assert.equal(error.code, 'OBSERVATION_INVALID');
+    assert.equal(error.status, 422);
+    assert.match(String(error.detail), pattern);
+    assert.match(String(error.message), pattern);
+    return error;
+}
+
+const validDecision = () => ({
+    winner: 'plan',
+    verdict: 'allow',
+    basis: 'rule core.slp says build then verify',
+});
+
+describe('P1 event contract — decision.recorded', () => {
+    test('accepts the minimal decision payload', () => {
+        assert.deepEqual(validateObservedEvent('decision.recorded', validDecision()), { ok: true });
+    });
+
+    test('accepts optional refs, latencyMs, jevMode, hil and actor', () => {
+        const evidence = {
+            ...validDecision(),
+            jevMode: 'shadow',
+            latencyMs: 12,
+            refs: [{ kind: 'rule', path: 'agents/rules/core.slp.mdc', line: 42 }, { kind: 'decision' }],
+            hil: false,
+            actor: { kind: 'host', id: 'cursor', role: 'builder' },
+            schemaVersion: 1,
+        };
+        assert.deepEqual(validateObservedEvent('decision.recorded', evidence), { ok: true });
+    });
+
+    test('rejects a missing winner and names the field', () => {
+        const { winner, ...rest } = validDecision();
+        expectInvalid('decision.recorded', rest, /winner/);
+    });
+
+    test('rejects an unknown verdict and names the field', () => {
+        expectInvalid('decision.recorded', { ...validDecision(), verdict: 'maybe' }, /verdict/);
+    });
+
+    test('rejects a missing basis and names the field', () => {
+        const { basis, ...rest } = validDecision();
+        expectInvalid('decision.recorded', rest, /basis/);
+    });
+
+    test('rejects malformed optional fields and names them', () => {
+        expectInvalid('decision.recorded', { ...validDecision(), latencyMs: 'fast' }, /latencyMs/);
+        expectInvalid('decision.recorded', { ...validDecision(), hil: 'yes' }, /hil/);
+        expectInvalid('decision.recorded', { ...validDecision(), refs: [{ kind: 'rule', line: 0 }] }, /line/);
+        expectInvalid('decision.recorded', { ...validDecision(), refs: {} }, /refs/);
+    });
+});
+
+describe('P1 event contract — action.recorded', () => {
+    const validAction = () => ({
+        tool: 'apply_patch',
+        outcome: 'PASS',
+        files: ['src/modules/observations/observation.service.ts'],
+        readBeforeEdit: true,
+        diffRef: 'diff-1',
+    });
+
+    test('accepts the minimal action payload', () => {
+        assert.deepEqual(validateObservedEvent('action.recorded', { tool: 'read_file', outcome: 'BLOCKED' }), { ok: true });
+    });
+
+    test('accepts the full action payload', () => {
+        assert.deepEqual(validateObservedEvent('action.recorded', validAction()), { ok: true });
+    });
+
+    test('rejects a missing tool and names the field', () => {
+        const { tool, ...rest } = validAction();
+        expectInvalid('action.recorded', rest, /tool/);
+    });
+
+    test('rejects an unknown outcome and names the field', () => {
+        expectInvalid('action.recorded', { ...validAction(), outcome: 'ok' }, /outcome/);
+    });
+
+    test('rejects non-string files and names the field', () => {
+        expectInvalid('action.recorded', { ...validAction(), files: ['ok', 3] }, /files/);
+    });
+});
+
+describe('P1 event contract — evidence.packet', () => {
+    test('accepts non-empty items', () => {
+        assert.deepEqual(
+            validateObservedEvent('evidence.packet', { items: [{ id: 'ev-1', kind: 'test-run' }], specVersion: '1' }),
+            { ok: true },
+        );
+    });
+
+    test('accepts a hash instead of items', () => {
+        assert.deepEqual(validateObservedEvent('evidence.packet', { hash: 'sha256:abc' }), { ok: true });
+    });
+
+    test('rejects empty items without a hash and names items/hash', () => {
+        expectInvalid('evidence.packet', { items: [] }, /items|hash/);
+    });
+
+    test('rejects an item without id and names the field', () => {
+        expectInvalid('evidence.packet', { items: [{ kind: 'test-run' }] }, /items\[0\]\.id/);
+    });
+
+    test('rejects a malformed specVersion and names the field', () => {
+        expectInvalid('evidence.packet', { hash: 'sha256:abc', specVersion: {} }, /specVersion/);
+    });
+});
+
+describe('P1 event contract — envelope', () => {
+    test('unknown event kinds pass through untouched', () => {
+        assert.deepEqual(validateObservedEvent('worker.build.done', { anything: true }), { ok: true });
+        assert.deepEqual(validateObservedEvent('turn.completed', [1, 2, 3]), { ok: true });
+        assert.deepEqual(validateObservedEvent('worker.build.done', undefined), { ok: true });
+    });
+
+    test('contract events require an object evidence payload', () => {
+        expectInvalid('decision.recorded', 'not-an-object', /evidence/);
+        expectInvalid('action.recorded', [{ tool: 'x' }], /evidence/);
+    });
+
+    test('rejects schemaVersion 2 with SCHEMA_UNSUPPORTED', () => {
+        const error = caught(() => validateObservedEvent('decision.recorded', { ...validDecision(), schemaVersion: 2 }));
+        assert.ok(error instanceof SchemaUnsupportedError);
+        assert.equal(error.code, 'SCHEMA_UNSUPPORTED');
+        assert.equal(error.status, 422);
+        assert.match(String(error.message), /schemaVersion 2/);
+        assert.equal(SCHEMA_VERSION, 1);
+    });
+
+    test('defaults to schemaVersion 1 and rejects a malformed version', () => {
+        assert.deepEqual(validateObservedEvent('decision.recorded', validDecision()), { ok: true });
+        assert.deepEqual(validateObservedEvent('decision.recorded', { ...validDecision(), schemaVersion: 1 }), { ok: true });
+        expectInvalid('decision.recorded', { ...validDecision(), schemaVersion: '1' }, /schemaVersion/);
+        expectInvalid('decision.recorded', { ...validDecision(), schemaVersion: 0 }, /schemaVersion/);
+    });
+
+    test('validates actor kind/id/role and names the field', () => {
+        assert.deepEqual(
+            validateObservedEvent('action.recorded', { tool: 'read_file', outcome: 'PASS', actor: { kind: 'agent', id: 'w-1', role: 'verify' } }),
+            { ok: true },
+        );
+        expectInvalid('action.recorded', { tool: 'read_file', outcome: 'PASS', actor: { kind: 'robot', id: 'w-1' } }, /actor\.kind/);
+        expectInvalid('action.recorded', { tool: 'read_file', outcome: 'PASS', actor: { kind: 'agent' } }, /actor\.id/);
+        expectInvalid('action.recorded', { tool: 'read_file', outcome: 'PASS', actor: { kind: 'agent', id: 'w-1', role: 7 } }, /actor\.role/);
+    });
+
+    test('does not mutate or add fields to the evidence it validates', () => {
+        const evidence = Object.freeze({ ...validDecision(), actor: Object.freeze({ kind: 'operator', id: 'op' }) });
+        validateObservedEvent('decision.recorded', evidence);
+        assert.deepEqual(evidence, { ...validDecision(), actor: { kind: 'operator', id: 'op' } });
+        assert.equal('schemaVersion' in evidence, false);
+    });
+});
