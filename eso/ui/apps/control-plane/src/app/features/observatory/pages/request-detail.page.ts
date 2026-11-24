@@ -58,7 +58,6 @@ const WORKER_LABEL: Record<string, string> = {
                 <nav class="detail-nav">
                     <div class="crumb"><a routerLink="/observatory" [queryParams]="{ consumer: consumerId() }">← Requests</a><span>/</span><code>{{ request.traceId }}</code></div>
                     <div class="detail-actions">
-                        <a class="pill" routerLink="/events" [queryParams]="{ consumer: consumerId(), trace: request.traceId }">Event stream</a>
                         <a class="pill" routerLink="/office" [queryParams]="{ consumer: consumerId() }">Office 3D</a>
                         <a class="pill" routerLink="/observatory" [queryParams]="{ consumer: consumerId() }">Observatory</a>
                     </div>
@@ -161,7 +160,7 @@ const WORKER_LABEL: Record<string, string> = {
                                     <div class="event-main">
                                         <div class="event-title"><code>{{ event.event }}</code><span class="badge">{{ event.outcome || '—' }}</span><span class="muted">{{ event.workerId || '—' }}</span><time>{{ formatAt(event.at) }}</time></div>
                                         <small>{{ event.runtimeKey }} · {{ event.hostId }}</small>
-                                        <details><summary>Evidence</summary><pre>{{ evidenceText(event.evidence) }}</pre></details>
+                                        <details (toggle)="trackEvidence($event)"><summary>Evidence</summary><pre>{{ evidenceText(event.evidence) }}</pre></details>
                                     </div>
                                 </article>
                             }
@@ -572,6 +571,13 @@ export class RequestDetailPage implements OnInit {
         if (!this.api) return;
         const consumerId = this.consumerId() || this.route.snapshot.queryParamMap.get('consumer') || null;
         void this.api.postUiEvent({ surface, consumerId, session: this.uiSession }).catch(() => undefined);
+    }
+
+    /** V2 raw proxy — expanding the raw evidence JSON is the "raw log" signal. */
+    private trackEvidence(event: Event): void {
+        if (!(event.target as HTMLDetailsElement)?.open) return;
+        if (!this.api) return;
+        void this.api.postUiEvent({ surface: 'raw.evidence.expand', consumerId: this.consumerId() || null, session: this.uiSession }).catch(() => undefined);
     }
 
     private async load(): Promise<void> {

@@ -94,7 +94,7 @@ export class ObservationPanelComponent {
     }
 
     /**
-     * BUG-36: same redaction convention as `/events` — prompt-bearing keys become `[redacted]`,
+     * BUG-36: same redaction convention as the request detail/evidence surfaces — prompt-bearing keys become `[redacted]`,
      * walked recursively because host evidence can nest its payload.
      */
     private redactEvidence(value: unknown): unknown {

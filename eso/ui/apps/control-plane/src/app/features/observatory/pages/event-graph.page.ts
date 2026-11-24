@@ -27,7 +27,7 @@ interface Point3D {
                     <p class="subtitle">x = time · y = worker · z = trace depth. Same event store as the 2D timeline. Read-only.</p>
                 </div>
                 <div class="header-actions">
-                    <a mat-stroked-button routerLink="/events">2D timeline</a>
+                    <a mat-stroked-button routerLink="/observatory">Observatory</a>
                     <button mat-stroked-button type="button" (click)="resetView()">Reset view</button>
                     <button mat-stroked-button type="button" (click)="load()" [disabled]="loading()">{{ loading() ? 'Loading…' : 'Refresh' }}</button>
                 </div>

@@ -49,7 +49,6 @@ interface TraceSummary {
                     <p class="subtitle">Live surface for a consumer: worker graph, traces, requests, and failures. Select a node or trace to drill in.</p>
                 </div>
                 <div class="header-actions">
-                    <a mat-flat-button color="primary" [routerLink]="['/events']" [queryParams]="{ consumer: consumerId() }">Live event stream</a>
                     <a mat-stroked-button [routerLink]="['/office']" [queryParams]="{ consumer: consumerId() }">3D graph</a>
                     <button mat-stroked-button type="button" [disabled]="loading()" (click)="load()">{{ loading() ? 'Refreshing…' : 'Refresh' }}</button>
                 </div>
@@ -628,7 +627,7 @@ export class ObservatoryPage implements OnInit, OnDestroy {
             void this.router.navigate(['/requests', event.traceId], { queryParams: { consumer: this.consumerId() } });
             return;
         }
-        void this.router.navigate(['/events'], { queryParams: { consumer: this.consumerId(), trace: event.traceId, event: event.event } });
+        void this.router.navigate(['/requests', event.traceId], { queryParams: { consumer: this.consumerId() } });
     }
 
     evidenceValue(event: ObservationDto, key: string): string {

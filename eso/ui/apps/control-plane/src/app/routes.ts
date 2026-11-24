@@ -36,11 +36,6 @@ export const APP_ROUTES: Routes = [
         loadChildren: () => import('./features/observatory/event-graph.routes.js').then((m) => m.EVENT_GRAPH_ROUTES),
     },
     {
-        path: 'events',
-        canActivate: [authGuard],
-        loadComponent: () => import('./features/observatory/pages/event-stream.page.js').then((m) => m.EventStreamPage),
-    },
-    {
         path: 'requests',
         redirectTo: 'observatory',
         pathMatch: 'full',
@@ -52,7 +47,7 @@ export const APP_ROUTES: Routes = [
     },
     {
         path: 'observatory/events',
-        redirectTo: 'events',
+        redirectTo: 'observatory',
         pathMatch: 'full',
     },
     {

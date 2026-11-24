@@ -75,7 +75,6 @@ const PAGE_LABELS: Record<string, string> = {
                             <p class="side-group">Operate</p>
                             <a routerLink="/consumers" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" class="side-link">Consumers</a>
                             <a routerLink="/observatory" class="side-link" [class.active]="onObservatory()">Observatory</a>
-                            <a routerLink="/events" class="side-link" [class.active]="onEvents()">Event stream</a>
                             <a routerLink="/office" class="side-link" [class.active]="onOffice()">Office 3D</a>
 
                             @if (consumerId(); as id) {
@@ -86,7 +85,6 @@ const PAGE_LABELS: Record<string, string> = {
                                 <a [routerLink]="['/consumers', id, 'plugins']" routerLinkActive="active" class="side-link">Providers</a>
                                 <a [routerLink]="['/consumers', id, 'architecture']" routerLinkActive="active" class="side-link">Architecture</a>
                                 <a [routerLink]="['/consumers', id, 'learning']" routerLinkActive="active" class="side-link">Learning</a>
-                                <a [routerLink]="['/events']" [queryParams]="{ consumer: id }" class="side-link" [class.active]="onEvents()">Events</a>
                                 <a [routerLink]="['/office']" [queryParams]="{ consumer: id }" class="side-link" [class.active]="onOffice()">Office 3D</a>
                             }
 
@@ -224,7 +222,6 @@ export class ShellComponent {
         return this.onObservatory() ? (new URLSearchParams(query).get('consumer') || new URLSearchParams(query).get('project')) : null;
     });
     readonly onObservatory = computed(() => this.url().startsWith('/observatory') || this.url().startsWith('/work-overview'));
-    readonly onEvents = computed(() => this.url().startsWith('/events'));
     readonly onGraph = computed(() => this.url().startsWith('/event-graph'));
     readonly onOffice = computed(() => this.url().startsWith('/office'));
     readonly onRequests = computed(() => this.url().startsWith('/requests'));
@@ -236,7 +233,6 @@ export class ShellComponent {
         const pages = [
             { label: 'Consumers', path: '/consumers', group: 'Operate' },
             { label: 'Observatory', path: '/observatory', group: 'Operate' },
-            { label: 'Event stream', path: '/events', group: 'Operate' },
             { label: 'Office 3D', path: '/office', group: 'Operate' },
             { label: 'Declaration', path: '/declaration', group: 'Governance' },
             { label: 'Hosts', path: '/hosts', group: 'System' },
@@ -251,7 +247,6 @@ export class ShellComponent {
                 { label: 'Providers', path: `/consumers/${id}/plugins`, group: 'Consumer' },
                 { label: 'Architecture', path: `/consumers/${id}/architecture`, group: 'Consumer' },
                 { label: 'Learning', path: `/consumers/${id}/learning`, group: 'Consumer' },
-                { label: 'Events', path: `/events?consumer=${id}`, group: 'Consumer' },
                 { label: 'Office 3D', path: `/office?consumer=${id}`, group: 'Consumer' },
             ]
             : [];

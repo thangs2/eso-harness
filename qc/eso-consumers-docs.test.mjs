@@ -38,10 +38,10 @@ test('AC-04-5 · filter client-side + empty khi không khớp', () => {
     assert.match(UI, /Status.*All|\bAll\b.*Ready/);
 });
 
-test('AC-04-6 · Details / Events / Create điều hướng đúng', () => {
+test('AC-04-6 · Details / Observatory / Create điều hướng đúng', () => {
     assert.match(PAGE, /routerLink="\/setup"/);
     assert.match(PAGE, /\['\/consumers', item\.id\]/);
-    assert.match(PAGE, /\['\/events'\]/);
+    assert.match(PAGE, /\['\/observatory'\]/);
     assert.match(PAGE, /\{ consumer: item\.id \}/);
 });
 

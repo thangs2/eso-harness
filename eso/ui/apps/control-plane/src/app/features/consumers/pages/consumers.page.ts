@@ -68,7 +68,7 @@ import type { ConsumerSummary } from '../../../../../../../libs/api-client/types
                                 <td data-label="Updated">{{ item.updatedAt | date: 'dd/MM/yyyy HH:mm' }}</td>
                                 <td class="col-actions" data-label="Actions">
                                     <a class="btn-why" [routerLink]="['/consumers', item.id]">Details</a>
-                                    <a class="btn-why" [routerLink]="['/events']" [queryParams]="{ consumer: item.id }">Events</a>
+                                    <a class="btn-why" [routerLink]="['/observatory']" [queryParams]="{ consumer: item.id }">Observatory</a>
                                 </td>
                             </tr>
                         }

@@ -3,7 +3,7 @@
  *
  * No Angular build/browser is available in this repo, so this reads the source the browser would
  * run and pins the contract:
- *   - the four observable call sites exist (3 surface opens + evidence expand);
+ *   - the observable call sites exist (2 surface opens + raw evidence expand);
  *   - the beacon is fire-and-forget (`.catch`, never awaited for render);
  *   - the request body carries ONLY surface/consumerId/session — no prompt, no evidence payload;
  *   - `raw.json.copy` is not emitted because the UI exposes no copy button.
@@ -19,7 +19,6 @@ import { readFileSync } from 'node:fs';
 const src = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8');
 
 const OBSERVATORY = src('eso/ui/apps/control-plane/src/app/features/observatory/pages/observatory.page.ts');
-const EVENTS = src('eso/ui/apps/control-plane/src/app/features/observatory/pages/event-stream.page.ts');
 const REQUEST = src('eso/ui/apps/control-plane/src/app/features/observatory/pages/request-detail.page.ts');
 const CLIENT = src('eso/ui/libs/api-client/client.ts');
 const SERVER = src('eso/control-plane/src/common/http/server.ts');
@@ -28,7 +27,7 @@ const DDL = src('eso/control-plane/src/platform/registry/ddl.ts');
 const TYPES = src('eso/control-plane/src/platform/registry/types.ts');
 const STORE = src('eso/control-plane/src/platform/registry/store.ts');
 
-const UI_SOURCES = [OBSERVATORY, EVENTS, REQUEST, CLIENT];
+const UI_SOURCES = [OBSERVATORY, REQUEST, CLIENT];
 
 test('SCN-V2-1 — platform.ui_event is an append-only platform table', () => {
     assert.match(DDL, /CREATE TABLE IF NOT EXISTS platform\.ui_event/);
@@ -42,19 +41,18 @@ test('SCN-V2-1 — platform.ui_event is an append-only platform table', () => {
     assert.doesNotMatch(STORE, /deleteUiEvent|updateUiEvent/);
 });
 
-test('SCN-V2-2 — the three surface opens and the evidence expand are wired', () => {
+test('SCN-V2-2 — the two surface opens and the evidence expand are wired', () => {
     assert.match(OBSERVATORY, /'surface\.observatory\.open'/);
-    assert.match(EVENTS, /'surface\.events\.open'/);
     assert.match(REQUEST, /'surface\.request\.open'/);
-    assert.match(EVENTS, /'raw\.evidence\.expand'/);
+    assert.match(REQUEST, /'raw\.evidence\.expand'/);
 
-    // Events evidence is a real <details> toggle, and only an opening counts.
-    assert.match(EVENTS, /<details \(toggle\)="onEvidenceToggle\(\$event\)">/);
-    assert.match(EVENTS, /onEvidenceToggle\(event: Event\): void \{/);
-    assert.match(EVENTS, /details\?\.open/);
+    // Request-detail evidence is a real <details> toggle, and only an opening counts.
+    assert.match(REQUEST, /<details \(toggle\)="trackEvidence\(\$event\)">/);
+    assert.match(REQUEST, /trackEvidence\(event: Event\): void \{/);
+    assert.match(REQUEST, /open\) return/);
 
-    // Every page calls the client method (4 call sites incl. the toggle handler).
-    for (const page of [OBSERVATORY, EVENTS, REQUEST]) {
+    // Every page calls the client method (3 call sites incl. the toggle handler).
+    for (const page of [OBSERVATORY, REQUEST]) {
         assert.match(page, /this\.api\.postUiEvent\(\{ surface, consumerId, session: this\.uiSession \}\)/);
         assert.match(page, /private readonly uiSession = crypto\.randomUUID\(\)/);
     }
@@ -62,7 +60,7 @@ test('SCN-V2-2 — the three surface opens and the evidence expand are wired', (
 
 test('SCN-V2-3 — beacons are fire-and-forget and never block or fail the render', () => {
     assert.match(CLIENT, /async postUiEvent\(event: \{ surface: string; consumerId\?: string \| null; session\?: string \| null \}\): Promise<void>/);
-    for (const page of [OBSERVATORY, EVENTS, REQUEST]) {
+    for (const page of [OBSERVATORY, REQUEST]) {
         // `void …catch(...)` means the beacon is not awaited by ngOnInit/init.
         assert.match(page, /void this\.api\.postUiEvent\([^)]*\)\.catch\(\(\) => undefined\)/);
         assert.doesNotMatch(page, /await this\.api\.postUiEvent/);

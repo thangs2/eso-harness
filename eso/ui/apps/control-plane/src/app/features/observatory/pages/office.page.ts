@@ -42,7 +42,7 @@ const WORKERS: WorkerDef[] = [
                             @for (consumer of consumers(); track consumer.id) { <option [value]="consumer.id" [selected]="consumer.id === consumerId()">{{ consumer.id }}</option> }
                         </select>
                     </label>
-                    <a mat-stroked-button routerLink="/events" [queryParams]="{ consumer: consumerId() }">2D stream</a>
+                    <a mat-stroked-button [routerLink]="['/observatory']" [queryParams]="{ consumer: consumerId() }">Observatory</a>
                     <button mat-stroked-button type="button" (click)="toggleAutoRefresh()">{{ autoRefresh() ? 'Stop live' : 'Start live' }}</button>
                     <button mat-stroked-button type="button" (click)="resetCamera()">Reset camera</button>
                     <button mat-stroked-button type="button" [disabled]="loading()" (click)="load()">{{ loading() ? 'Refreshing…' : 'Refresh' }}</button>
@@ -71,7 +71,7 @@ const WORKERS: WorkerDef[] = [
                             <p class="eyebrow">Selected</p>
                             <strong>{{ workerById(id)?.label }}</strong>
                             <span>{{ workerById(id)?.lastEvent || 'no event' }}</span>
-                            <a [routerLink]="['/events']" [queryParams]="{ consumer: consumerId(), trace: workerById(id)?.traceId }">Open evidence →</a>
+                            <a [routerLink]="['/requests', workerById(id)?.traceId || '']" [queryParams]="{ consumer: consumerId() }">Open evidence →</a>
                         </section>
                     }
                 </aside>
@@ -99,7 +99,7 @@ const WORKERS: WorkerDef[] = [
                     </section>
 
                     <section class="activity-card">
-                        <header class="panel-head"><div><p class="eyebrow">Activity</p><h2>Event pulse</h2></div><a mat-button routerLink="/events" [queryParams]="{ consumer: consumerId() }">all</a></header>
+                        <header class="panel-head"><div><p class="eyebrow">Activity</p><h2>Event pulse</h2></div><a mat-button [routerLink]="['/observatory']" [queryParams]="{ consumer: consumerId() }">all</a></header>
                         @if (activity().length === 0) {
                             <p class="muted">No event in window.</p>
                         } @else {

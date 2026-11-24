@@ -19,7 +19,7 @@ type: scenario-matrix
 | `SCN-04-4` | `AC-04-4` | happy | 3 consumer (2 ready, 1 retired) | tải trang | 3 số = 3 · 2 · max(updatedAt) | yes | `planned` |
 | `SCN-04-5` | `AC-04-5` | happy | 1 ready + 1 retired | chọn `ready` | chỉ còn 1 dòng ready | yes | `planned` |
 | `SCN-04-6` | `AC-04-5` | edge | 2 consumer, không có `retired` | chọn `retired` | empty "No consumers match this filter"; 3 số **không** đổi | yes | `planned` |
-| `SCN-04-7` | `AC-04-6` | happy | 1 consumer ready | xem dòng | có `Details` + `Events`; `Create consumer` → `/setup` | yes | `planned` |
+| `SCN-04-7` | `AC-04-6` | happy | 1 consumer ready | xem dòng | có `Details` + `Observatory`; `Create consumer` → `/setup` | yes | `planned` |
 | `SCN-04-8` | `AC-04-7` | failure | API 500 | tải trang | `CONS_UPSTREAM_FAILED` + message | yes | `planned` |
 | `SCN-04-9` | `AC-04-7` | rbac | 401/403 | tải trang | `CONS_DENIED` + message | yes | `planned` |
 | `SCN-04-RBAC-OUT` | — | rbac | — | — | — | — | `OUT` — baseline chỉ một operator |
