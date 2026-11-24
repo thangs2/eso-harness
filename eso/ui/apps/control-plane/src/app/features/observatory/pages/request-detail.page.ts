@@ -151,12 +151,48 @@ interface WriteGateView {
     actor: Record<string, unknown> | null;
 }
 
-/** The shared detail DTO predates P2/P6c/B0-9 and the write gate; those fields ride on the same payload, so they are added here. */
+/**
+ * Pipeline v2 — `detail.effectiveness`: the backend's own tally of this request. Every field is
+ * read as sent; the page never recomputes, defaults or rounds one of them.
+ */
+interface EffectivenessView {
+    stepsTotal: number;
+    stepsWithEvidence: number;
+    rolesAssigned: number;
+    rolesObserved: number;
+    workersTotal: number;
+    workersObserved: number;
+    failures: number;
+    durationMs: number;
+    writeGateChecked: boolean;
+    receiptSealed: boolean;
+    gaps: number;
+}
+
+/**
+ * Pipeline v2 — `detail.jev`: the decision recorded at the `decision-jev` stage. `null` means no
+ * JEV ran for this request; the page never derives one from the verdict.
+ */
+interface JevView {
+    mode: string;
+    consent: boolean;
+    confidence: number;
+    band: string;
+    decision: string;
+    reason: string;
+    expectedBand: string;
+    match: boolean;
+    at: string;
+}
+
+/** The shared detail DTO predates P2/P6c/B0-9, the write gate and pipeline v2; those fields ride on the same payload, so they are added here. */
 type RequestDetailWithVerdict = RequestDetailDto & {
     verdict?: TurnVerdictView | null;
     signals?: HostSignalsView | null;
     spec?: SpecRefView | null;
     writeGate?: WriteGateView | null;
+    effectiveness?: EffectivenessView | null;
+    jev?: JevView | null;
 };
 
 /**
@@ -230,6 +266,26 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
                     } @else {
                         <div class="verdict-head"><span class="verdict-level-badge level-unknown">not returned</span></div>
                         <p class="verdict-basis">The API response for this request carried no verdict.</p>
+                    }
+                </section>
+
+                <section class="effectiveness" aria-label="Orchestration effectiveness (pipeline v2)">
+                    <header class="effectiveness-head">
+                        <div><p class="eyebrow">Pipeline v2</p><h2>Orchestration effectiveness</h2></div>
+                        <span class="badge muted">backend tally</span>
+                    </header>
+                    @if (effectiveness(); as e) {
+                        <div class="kpi-strip">
+                            <div class="kpi-tile"><span>Pipeline steps evidenced</span><strong>{{ countOrDash(e.stepsWithEvidence) }}/{{ countOrDash(e.stepsTotal) }}</strong><small>with host evidence</small></div>
+                            <div class="kpi-tile"><span>Roles &amp; workers</span><strong>{{ countOrDash(e.rolesObserved) }}/{{ countOrDash(e.rolesAssigned) }} roles</strong><small>{{ countOrDash(e.workersObserved) }}/{{ countOrDash(e.workersTotal) }} workers</small></div>
+                            <div class="kpi-tile"><span>Failures</span><strong>{{ countOrDash(e.failures) }}</strong><small>recorded failures</small></div>
+                            <div class="kpi-tile"><span>Duration</span><strong>{{ humanDuration(e.durationMs) }}</strong><small>pipeline elapsed</small></div>
+                            <div class="kpi-tile"><span>Write gate checked</span><strong>{{ yesNo(e.writeGateChecked) }}</strong><small>scope decision</small></div>
+                            <div class="kpi-tile"><span>Receipt sealed</span><strong>{{ yesNo(e.receiptSealed) }}</strong><small>receipt seal</small></div>
+                            <div class="kpi-tile"><span>Gaps</span><strong>{{ countOrDash(e.gaps) }}</strong><small>open proof gaps</small></div>
+                        </div>
+                    } @else {
+                        <p class="hint">No effectiveness data for this request</p>
                     }
                 </section>
 
@@ -474,6 +530,19 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
                         } @else {
                             <p class="hint">The API response for this request carried no verdict.</p>
                         }
+                        <div class="verdict-block jev-block" aria-label="JEV decision (pipeline v2)">
+                            <h3><span class="q-no">JEV</span> Decision &amp; JEV</h3>
+                            @if (jev(); as j) {
+                                <p class="jev-line">
+                                    <span class="jev-summary">JEV {{ j.mode }} · band {{ j.band }} · confidence {{ j.confidence }}</span>
+                                    @if (j.match === false) {
+                                        <span class="jev-mismatch">Band mismatch — reported {{ j.band }}, expected {{ j.expectedBand }}</span>
+                                    }
+                                </p>
+                            } @else {
+                                <p class="jev-line hint">No JEV decision was recorded</p>
+                            }
+                        </div>
                     </section>
 
                     <section class="panel change-panel">
@@ -815,6 +884,17 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
         .copy-path { padding: var(--space-1) var(--space-2); border: 1px solid #253047; border-radius: var(--radius-sm); background: #131722; color: #8b97ab; font: inherit; font-size: .5625rem; cursor: pointer; }
         .copy-path:hover { background: #162235; color: #e2e8f0; }
         .host-signals { display: grid; gap: var(--space-2); padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-left: 3px solid #c084fc; border-radius: var(--radius-md); background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.35); }
+        .effectiveness { --card-accent: var(--brand); display: grid; gap: var(--space-2); padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-left: 3px solid var(--card-accent); border-radius: var(--radius-md); background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.35); }
+        .effectiveness-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+        .effectiveness-head h2 { margin: 0; font-size: var(--text-md); }
+        .kpi-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap: var(--space-2); }
+        .kpi-tile { display: grid; gap: .0625rem; padding: var(--space-2) var(--space-3); border: 1px solid #1e2a3e; border-radius: var(--radius-sm); background: var(--surface-2); }
+        .kpi-tile span { color: #64748b; font-size: .5625rem; letter-spacing: .06em; text-transform: uppercase; }
+        .kpi-tile strong { color: var(--ink); font-size: var(--text-sm); font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+        .kpi-tile small { color: #64748b; font-size: .5625rem; overflow-wrap: anywhere; }
+        .jev-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-3); margin: 0; color: #cbd5e1; font-size: var(--text-sm); overflow-wrap: anywhere; }
+        .jev-summary { color: var(--ink); }
+        .jev-mismatch { padding: var(--space-1) var(--space-2); border: 1px solid rgba(224,179,65,.45); border-radius: var(--radius-sm); background: rgba(224,179,65,.12); color: var(--warn-ink); font-size: var(--text-xs); }
         .host-signals-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
         .host-signals-head h2 { margin: 0; font-size: var(--text-md); }
         .signal-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--space-2); }
@@ -1024,6 +1104,12 @@ export class RequestDetailPage implements OnInit {
 
     /** P6c — host-reported signals; `null` means the host reported nothing for this turn. */
     readonly signals = computed<HostSignalsView | null>(() => this.detail()?.signals ?? null);
+
+    /** Pipeline v2 — the backend tally; `null` means this payload predates or omits the field. */
+    readonly effectiveness = computed<EffectivenessView | null>(() => this.detail()?.effectiveness ?? null);
+
+    /** Pipeline v2 — the JEV decision recorded for this turn; never derived from the verdict. */
+    readonly jev = computed<JevView | null>(() => this.detail()?.jev ?? null);
 
     /** Write gate — the latest recorded scope decision; `null` means no decision was recorded for this turn. */
     readonly writeGate = computed<WriteGateView | null>(() => this.detail()?.writeGate ?? null);
@@ -1301,5 +1387,27 @@ export class RequestDetailPage implements OnInit {
             decision: evidence['decision'] ?? 'not recorded',
             payload: evidence,
         }, null, 2);
+    }
+
+    /** Pipeline v2 — a counter is shown only when the API actually sent a finite number. */
+    countOrDash(value: number | null | undefined): string {
+        return typeof value === 'number' && Number.isFinite(value) ? String(value) : '—';
+    }
+
+    /** Pipeline v2 — booleans read as plain words; an absent flag is "—", never a green badge. */
+    yesNo(value: boolean | null | undefined): string {
+        return value === true ? 'yes' : value === false ? 'no' : '—';
+    }
+
+    /** Pipeline v2 — `durationMs` humanised; nothing is invented when the backend sent no duration. */
+    humanDuration(ms: number | null | undefined): string {
+        if (typeof ms !== 'number' || !Number.isFinite(ms)) return '—';
+        const total = Math.max(0, ms);
+        if (total < 1000) return `${total} ms`;
+        const seconds = total / 1000;
+        if (seconds < 60) return `${seconds.toFixed(1)} s`;
+        const minutes = Math.floor(seconds / 60);
+        const rest = Math.round(seconds % 60);
+        return `${minutes}m ${rest}s`;
     }
 }

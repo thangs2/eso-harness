@@ -40,6 +40,8 @@ export const ERROR_STATUS: Readonly<Record<string, number>> = {
     WORKER_PLACEMENT_INVALID: 422,
     OBSERVATION_INVALID: 422,
     SCHEMA_UNSUPPORTED: 422,
+    // P8 pipeline v2 — a JEV report in shadow/active must carry the confidence it came from (B0-3).
+    JEV_CONFIDENCE_REQUIRED: 422,
     // F-28 evidence ingest (AC-36)
     INVALID_EVENT: 400,
     UNKNOWN_SCHEMA: 400,
@@ -94,6 +96,7 @@ export const ERROR_MESSAGE: Readonly<Record<string, string>> = {
     WORKER_PLACEMENT_INVALID: 'Worker host placement is invalid',
     OBSERVATION_INVALID: 'Observation is invalid',
     SCHEMA_UNSUPPORTED: 'Observation schema version is not supported',
+    JEV_CONFIDENCE_REQUIRED: 'JEV report requires a confidence when mode is shadow or active',
     INVALID_EVENT: 'Evidence event is invalid',
     UNKNOWN_SCHEMA: 'Event schema is not registered',
     PAYLOAD_TOO_LARGE: 'Batch or payload exceeds the ingest limit',

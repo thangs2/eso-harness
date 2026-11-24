@@ -17,6 +17,8 @@ export const BRD_ERROR_CODES: ReadonlySet<string> = new Set([
     'OBSERVATION_INVALID',
     // P1 contract: registered in ERROR_STATUS and BRD/06, so the envelope set must know it too.
     'SCHEMA_UNSUPPORTED',
+    // P8 pipeline v2: JEV report without confidence ⇒ 422, added to BRD/06 with the contract.
+    'JEV_CONFIDENCE_REQUIRED',
     'EDGES_MOVED_TO_FLOW',
     'FLOW_INVALID',
     'FLOW_NO_DRAFT',

@@ -496,6 +496,174 @@ describe('HTTP contract — CR-010/011 routes', () => {
         assert.notEqual(secondGate.decisionId, firstGate.decisionId, 'latest decision wins');
     });
 
+    test('P8 — detail has the 8 pipeline-v2 stages in fixed order + effectiveness', async () => {
+        const { call } = await fixture();
+        const { mkdtempSync } = await import('node:fs');
+        const { tmpdir } = await import('node:os');
+        const { join } = await import('node:path');
+        const root = mkdtempSync(join(tmpdir(), 'eso-http-pipeline-v2-'));
+        const consumer = await call('/api/v1/consumers', {
+            method: 'POST',
+            body: JSON.stringify({ id: 'pipelineo', name: 'Pipelineo', root }),
+        });
+        assert.ok([200, 201].includes(consumer.status), `create consumer: ${consumer.status}`);
+
+        const traceId = 'trace-p8-stages';
+        const seed = async (event: string, evidence: Record<string, unknown>, at: string, outcome?: string) => {
+            const res = await call('/api/v1/consumers/pipelineo/observations', {
+                method: 'POST',
+                body: JSON.stringify({
+                    traceId, hostId: 'cursor', runtimeKey: 'cursor:cursor-agent', event, evidence, at,
+                    ...(outcome ? { outcome } : {}),
+                }),
+            });
+            assert.ok([200, 201].includes(res.status), `${event}: ${res.status}`);
+        };
+        await seed('prompt.submitted', { userQuery: 'why did this turn proceed?' }, '2026-11-24T10:00:00.000Z');
+        await seed('decision.recorded', {
+            winner: 'plan',
+            verdict: 'allow',
+            basis: 'core.slp says build then verify',
+            refs: [{ kind: 'law', path: 'AGENTS.md' }],
+            recon: [{ adapter: 'codegraph', calls: 2 }],
+            distill: { memorySaved: true, lessons: 1 },
+            actor: { kind: 'host', id: 'cursor', role: 'builder' },
+        }, '2026-11-24T10:00:02.000Z');
+        await seed('action.recorded', {
+            tool: 'apply_patch', outcome: 'PASS', files: ['src/a.ts'], actor: { kind: 'host', id: 'cursor' },
+        }, '2026-11-24T10:00:03.000Z', 'PASS');
+        await seed('evidence.packet', { hash: 'sha256:abc', actor: { kind: 'host', id: 'cursor' } }, '2026-11-24T10:00:05.000Z');
+
+        const res = await call(`/api/v1/consumers/pipelineo/requests/${traceId}`);
+        assert.equal(res.status, 200);
+        const body = await res.json() as any;
+        const stages = body.systemStages;
+        assert.deepEqual(stages.map((stage: any) => stage.id), [
+            'intake-law', 'decision-jev', 'evidence-recon', 'sufficiency', 'slp', 'execution', 'seal', 'report',
+        ]);
+        assert.deepEqual(stages.map((stage: any) => stage.stepNumber), [1, 2, 3, 4, 5, 6, 7, 8]);
+        assert.deepEqual(stages.map((stage: any) => stage.title), [
+            'Intake & Law Gate', 'Decision & JEV', 'Evidence Recon', 'Sufficiency Gate',
+            'SLP Orchestration', 'Execution & Write Gate', 'Seal & Distill', 'Report & Audit',
+        ]);
+        for (const stage of stages) {
+            assert.ok(['waterfall', 'rules', 'decisions', 'telemetry'].includes(stage.tab), `${stage.id} tab`);
+            assert.ok(stage.details.length <= 3, `${stage.id} has at most 3 details`);
+            for (const detail of stage.details) {
+                assert.equal(typeof detail.value, 'string');
+                assert.ok(detail.value.length > 0, `${stage.id} detail value is never empty`);
+                assert.equal(typeof detail.detail, 'string');
+            }
+        }
+        // Stage 1 reads verdict.ruleRefs; stage 2 has no JEV on this trace; stage 3 reads signals.recon.
+        assert.equal(stages[0].status, 'ok');
+        assert.match(String(stages[0].details[2].value), /AGENTS\.md/);
+        assert.equal(stages[1].status, 'info');
+        assert.equal(stages[1].details[1].value, 'not reported');
+        assert.equal(stages[2].status, 'ok');
+
+        // Effectiveness: same data, no new table — 8 steps and every field a count/boolean.
+        const keys = [
+            'stepsTotal', 'stepsWithEvidence', 'rolesAssigned', 'rolesObserved', 'workersTotal',
+            'workersObserved', 'failures', 'durationMs', 'writeGateChecked', 'receiptSealed', 'gaps',
+        ];
+        assert.deepEqual(Object.keys(body.effectiveness).sort(), [...keys].sort());
+        assert.equal(body.effectiveness.stepsTotal, 8);
+        assert.equal(body.effectiveness.stepsTotal, stages.length);
+        assert.equal(
+            body.effectiveness.stepsWithEvidence,
+            stages.filter((stage: any) => stage.status === 'ok' || stage.status === 'warn').length,
+        );
+        assert.equal(body.effectiveness.workersTotal, body.pipeline.length);
+        assert.equal(typeof body.effectiveness.workersObserved, 'number');
+        assert.equal(body.effectiveness.failures, 0);
+        assert.equal(body.effectiveness.durationMs, 5000);
+        assert.equal(body.effectiveness.writeGateChecked, false);
+        assert.equal(body.effectiveness.receiptSealed, true);
+        assert.equal(body.effectiveness.gaps, body.verdict.gaps.length);
+        assert.equal(typeof body.effectiveness.writeGateChecked, 'boolean');
+        assert.equal(typeof body.effectiveness.receiptSealed, 'boolean');
+        assert.equal(typeof body.effectiveness.gaps, 'number');
+    });
+
+    test('P8 — detail.jev: null for a legacy decision, echo + match, mismatch ⇒ JEV_BAND_MISMATCH', async () => {
+        const { call } = await fixture();
+        const { mkdtempSync } = await import('node:fs');
+        const { tmpdir } = await import('node:os');
+        const { join } = await import('node:path');
+        const root = mkdtempSync(join(tmpdir(), 'eso-http-jev-'));
+        const consumer = await call('/api/v1/consumers', {
+            method: 'POST',
+            body: JSON.stringify({ id: 'jevvo', name: 'Jevvo', root }),
+        });
+        assert.ok([200, 201].includes(consumer.status), `create consumer: ${consumer.status}`);
+
+        const seed = async (traceId: string, event: string, evidence: Record<string, unknown>, at: string) => {
+            const res = await call('/api/v1/consumers/jevvo/observations', {
+                method: 'POST',
+                body: JSON.stringify({ traceId, hostId: 'cursor', runtimeKey: 'cursor:cursor-agent', event, evidence, at }),
+            });
+            assert.ok([200, 201].includes(res.status), `${traceId} ${event}: ${res.status}`);
+        };
+        const detail = async (traceId: string) => {
+            const res = await call(`/api/v1/consumers/jevvo/requests/${traceId}`);
+            assert.equal(res.status, 200);
+            return res.json() as any;
+        };
+
+        // The contract refusal reaches the HTTP surface as its own 422 code.
+        const noConfidence = await call('/api/v1/consumers/jevvo/observations', {
+            method: 'POST',
+            body: JSON.stringify({
+                traceId: 'trace-p8-no-confidence', hostId: 'cursor', runtimeKey: 'cursor:cursor-agent',
+                event: 'decision.recorded', at: '2026-11-24T08:59:00.000Z',
+                evidence: { winner: 'plan', verdict: 'allow', basis: 'core.slp', jev: { mode: 'active', consent: true } },
+            }),
+        });
+        assert.equal(noConfidence.status, 422);
+        assert.equal((await noConfidence.json() as any).code, 'JEV_CONFIDENCE_REQUIRED');
+
+        // A decision without evidence.jev ⇒ detail.jev is null; B0-3 stays valid, nothing is inferred.
+        await seed('trace-p8-legacy', 'prompt.submitted', { userQuery: 'legacy' }, '2026-11-24T09:00:00.000Z');
+        await seed('trace-p8-legacy', 'decision.recorded', { winner: 'plan', verdict: 'allow', basis: 'core.slp' }, '2026-11-24T09:00:01.000Z');
+        assert.equal((await detail('trace-p8-legacy')).jev, null);
+
+        // A matching report: confidence 0.9 ≥ the default 0.8 auto threshold ⇒ expected band auto.
+        const jev = { mode: 'active', consent: true, confidence: 0.9, band: 'auto', decision: 'auto', reason: 'active: auto' };
+        await seed('trace-p8-match', 'prompt.submitted', { userQuery: 'jev' }, '2026-11-24T09:10:00.000Z');
+        await seed('trace-p8-match', 'decision.recorded', { winner: 'plan', verdict: 'allow', basis: 'core.slp', jev }, '2026-11-24T09:10:02.000Z');
+        // A later decision without jev must not erase the earlier report (latest *carrier* wins).
+        await seed('trace-p8-match', 'decision.recorded', { winner: 'plan', verdict: 'allow', basis: 'later, no jev' }, '2026-11-24T09:10:03.000Z');
+        const matched = await detail('trace-p8-match');
+        assert.deepEqual(matched.jev, { ...jev, expectedBand: 'auto', match: true, at: '2026-11-24T09:10:02.000Z' });
+        assert.equal(matched.checks.some((check: any) => check.checkId === 'JEV_BAND_MISMATCH'), false);
+        assert.equal(matched.verdict.gaps.some((gap: any) => gap.code === 'JEV_BAND_MISMATCH'), false);
+
+        // A contradicted band is recorded as a check; the verdict is left exactly as adjudicated.
+        await seed('trace-p8-mismatch', 'prompt.submitted', { userQuery: 'mismatch' }, '2026-11-24T09:20:00.000Z');
+        await seed('trace-p8-mismatch', 'decision.recorded', {
+            winner: 'plan', verdict: 'allow', basis: 'core.slp',
+            jev: { mode: 'active', consent: true, confidence: 0.9, band: 'confirm', decision: 'confirm' },
+        }, '2026-11-24T09:20:01.000Z');
+        const mismatched = await detail('trace-p8-mismatch');
+        assert.equal(mismatched.jev.mode, 'active');
+        assert.equal(mismatched.jev.confidence, 0.9);
+        assert.equal(mismatched.jev.band, 'confirm');
+        assert.equal(mismatched.jev.expectedBand, 'auto');
+        assert.equal(mismatched.jev.match, false);
+        const check = mismatched.checks.find((item: any) => item.checkId === 'JEV_BAND_MISMATCH');
+        assert.ok(check, 'JEV_BAND_MISMATCH check is present');
+        assert.equal(check.status, 'warn');
+        assert.match(String(check.detail), /confirm/);
+        assert.match(String(check.detail), /auto/);
+        // The mismatch does not overwrite (or add to) the adjudicated verdict.
+        assert.equal(mismatched.verdict.level, 'partial');
+        assert.deepEqual(mismatched.verdict.gaps.map((gap: any) => gap.code).sort(), [
+            'ACTION_MISSING', 'ACTOR_MISSING', 'EVIDENCE_MISSING',
+        ]);
+        assert.equal(mismatched.effectiveness.receiptSealed, true);
+    });
+
     test('V2 telemetry — summary requires auth', async () => {
         await fixture();
         // The fixture always adds authorization; call the server without it through a raw fetch.

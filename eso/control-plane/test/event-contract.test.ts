@@ -32,6 +32,15 @@ function expectInvalid(event: string, evidence: unknown, pattern: RegExp): Platf
     return error;
 }
 
+function expectCode(event: string, evidence: unknown, code: string, pattern: RegExp): PlatformError {
+    const error = caught(() => validateObservedEvent(event, evidence));
+    assert.ok(error instanceof PlatformError, `expected PlatformError, got ${String(error)}`);
+    assert.equal(error.code, code);
+    assert.equal(error.status, 422);
+    assert.match(String(error.detail), pattern);
+    return error;
+}
+
 const validDecision = () => ({
     winner: 'plan',
     verdict: 'allow',
@@ -148,6 +157,69 @@ describe('P6a event contract — decision signals', () => {
         const evidence = signalEvidence();
         validateObservedEvent('decision.recorded', evidence);
         assert.deepEqual(evidence, signalEvidence());
+    });
+});
+
+describe('P8 event contract — decision jev (B0-3)', () => {
+    const validJev = () => ({ mode: 'active', consent: true, confidence: 0.91, band: 'auto', decision: 'auto', reason: 'active: auto' });
+
+    test('accepts a full jev report', () => {
+        assert.deepEqual(validateObservedEvent('decision.recorded', { ...validDecision(), jev: validJev() }), { ok: true });
+    });
+
+    test('accepts shadow with confidence and a minimal report', () => {
+        assert.deepEqual(
+            validateObservedEvent('decision.recorded', { ...validDecision(), jev: { mode: 'shadow', consent: true, confidence: 0.4, band: 'open' } }),
+            { ok: true },
+        );
+        assert.deepEqual(
+            validateObservedEvent('decision.recorded', { ...validDecision(), jev: { mode: 'off', consent: false } }),
+            { ok: true },
+        );
+    });
+
+    test('B0-3 stays valid without jev and without confidence when mode is off', () => {
+        assert.deepEqual(validateObservedEvent('decision.recorded', validDecision()), { ok: true });
+        assert.deepEqual(validateObservedEvent('decision.recorded', { ...validDecision(), jev: { mode: 'off', consent: true } }), { ok: true });
+    });
+
+    test('mode shadow/active without confidence ⇒ JEV_CONFIDENCE_REQUIRED (422)', () => {
+        const { confidence, ...noConfidence } = validJev();
+        void confidence;
+        const error = expectCode('decision.recorded', { ...validDecision(), jev: noConfidence }, 'JEV_CONFIDENCE_REQUIRED', /evidence\.jev\.confidence/);
+        assert.match(String(error.message), /confidence/);
+        expectCode('decision.recorded', { ...validDecision(), jev: { mode: 'shadow', consent: true } }, 'JEV_CONFIDENCE_REQUIRED', /evidence\.jev\.confidence/);
+    });
+
+    test('rejects a non-boolean consent and names evidence.jev.consent', () => {
+        expectInvalid('decision.recorded', { ...validDecision(), jev: { ...validJev(), consent: 'yes' } }, /evidence\.jev\.consent/);
+        expectInvalid('decision.recorded', { ...validDecision(), jev: { mode: 'active', confidence: 0.9 } }, /evidence\.jev\.consent/);
+    });
+
+    test('rejects an unknown mode and names evidence.jev.mode', () => {
+        expectInvalid('decision.recorded', { ...validDecision(), jev: { ...validJev(), mode: 'on' } }, /evidence\.jev\.mode/);
+        expectInvalid('decision.recorded', { ...validDecision(), jev: { consent: true } }, /evidence\.jev\.mode/);
+    });
+
+    test('rejects a wrong-typed band and names evidence.jev.band', () => {
+        expectInvalid('decision.recorded', { ...validDecision(), jev: { ...validJev(), band: 3 } }, /evidence\.jev\.band/);
+        expectInvalid('decision.recorded', { ...validDecision(), jev: { ...validJev(), band: 'hot' } }, /evidence\.jev\.band/);
+    });
+
+    test('rejects malformed confidence, decision, reason and jev container', () => {
+        expectInvalid('decision.recorded', { ...validDecision(), jev: { ...validJev(), confidence: '0.9' } }, /evidence\.jev\.confidence/);
+        expectInvalid('decision.recorded', { ...validDecision(), jev: { ...validJev(), confidence: 1.5 } }, /evidence\.jev\.confidence/);
+        expectInvalid('decision.recorded', { ...validDecision(), jev: { ...validJev(), decision: 'maybe' } }, /evidence\.jev\.decision/);
+        expectInvalid('decision.recorded', { ...validDecision(), jev: { ...validJev(), reason: 7 } }, /evidence\.jev\.reason/);
+        expectInvalid('decision.recorded', { ...validDecision(), jev: 'active' }, /evidence\.jev/);
+        expectInvalid('decision.recorded', { ...validDecision(), jev: ['active'] }, /evidence\.jev/);
+    });
+
+    test('does not rewrite the jev report it validates', () => {
+        const jev = validJev();
+        const evidence = { ...validDecision(), jev };
+        validateObservedEvent('decision.recorded', evidence);
+        assert.deepEqual(evidence.jev, validJev());
     });
 });
 

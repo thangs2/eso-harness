@@ -5,17 +5,24 @@ import {
     type EvidenceReceipt,
     type TurnVerdict,
     type TurnVerdictLevel,
+    type TurnVerdictRuleRef,
 } from '../../platform/registry/types.js';
 import type { ConfigSnapshotService } from '../config-snapshot/config-snapshot.service.js';
 import {
     BRAIN_TIERS,
+    JEV_BANDS,
+    JEV_DECISIONS,
     PREFLIGHT_STATES,
     type BrainTier,
     type DecisionDistillSignal,
     type DecisionPreflightSignal,
     type DecisionReconSignal,
+    type JevBand,
+    type JevDecisionKind,
+    type JevMode,
     type PreflightState,
 } from '../observations/event-contract.js';
+import { adjudicateReported } from '../judgment/jev.service.js';
 import { GENESIS_HASH, ReceiptService } from '../receipt/receipt.service.js';
 import { VerdictService } from '../verdict/verdict.service.js';
 import { readFile } from 'node:fs/promises';
@@ -136,8 +143,21 @@ export interface RequestReconAdapter {
     calls: number;
 }
 
+/** P8 — the eight system stages of pipeline v2, in their fixed order (matrix `28`). */
+export const REQUEST_SYSTEM_STAGE_IDS = [
+    'intake-law',
+    'decision-jev',
+    'evidence-recon',
+    'sufficiency',
+    'slp',
+    'execution',
+    'seal',
+    'report',
+] as const;
+export type RequestSystemStageId = (typeof REQUEST_SYSTEM_STAGE_IDS)[number];
+
 export interface RequestSystemStage {
-    id: 'prompt' | 'law' | 'routing' | 'recon' | 'eso' | 'brain' | 'execution' | 'memory';
+    id: RequestSystemStageId;
     stepNumber: number;
     title: string;
     sub: string;
@@ -213,6 +233,42 @@ export interface RequestSpecRef {
     anchor: string;
 }
 
+/**
+ * P8 — the host-reported JEV block of the latest `decision.recorded` carrying one, with ESO's
+ * adjudication appended (`expectedBand`/`match`). `null` when no decision reported JEV at all —
+ * B0-3 stays valid without it, so the detail never fabricates a mode or a band.
+ */
+export interface RequestJev {
+    mode: JevMode;
+    consent: boolean;
+    confidence: number | null;
+    band: JevBand | null;
+    decision: JevDecisionKind | null;
+    reason: string | null;
+    expectedBand: JevBand | null;
+    match: boolean;
+    at: string;
+}
+
+/**
+ * P8 — one-row effectiveness summary over the same detail data. No new table and no new
+ * observation: every field is a count/boolean derived from the trace, the stages and the verdict.
+ */
+export interface RequestEffectiveness {
+    stepsTotal: number;
+    stepsWithEvidence: number;
+    rolesAssigned: number;
+    rolesObserved: number;
+    workersTotal: number;
+    workersObserved: number;
+    failures: number;
+    durationMs: number;
+    writeGateChecked: boolean;
+    receiptSealed: boolean;
+    /** How many proof gaps the verdict carries — the codes stay on `verdict.gaps`, not here. */
+    gaps: number;
+}
+
 export interface RequestDetail {
     request: {
         id: string;
@@ -258,6 +314,10 @@ export interface RequestDetail {
     receipt: RequestReceiptSummary;
     /** P6a: host-reported preflight/recon/brainTier/distill, or `null` when no decision reported one. */
     signals: RequestSignals | null;
+    /** P8: the latest host-reported JEV block (adjudicated), or `null` when none was reported. */
+    jev: RequestJev | null;
+    /** P8: effectiveness of the turn, derived from this same detail — no extra storage. */
+    effectiveness: RequestEffectiveness;
     /** P6b: configured pipeline vs observed worker path, so design↔runtime divergence is machine-readable. */
     graph: RequestRuntimeGraph;
     /** B0-9: normative page spec this surface is built against — a pointer, not a copy of the doc. */
@@ -288,8 +348,8 @@ export interface RequestRuntimeGraph {
     divergence: 'matches' | 'missing' | 'extra' | 'reordered' | 'empty';
 }
 
-/** Everything `buildRequest` can compute from observations alone; verdict, receipt and signals are appended in `get`. */
-type RequestDetailBase = Omit<RequestDetail, 'verdict' | 'receipt' | 'signals' | 'graph' | 'spec' | 'writeGate'>;
+/** Everything `buildRequest` can compute from observations alone; verdict, receipt, signals, jev, stages and effectiveness are appended in `get`. */
+type RequestDetailBase = Omit<RequestDetail, 'verdict' | 'receipt' | 'signals' | 'jev' | 'effectiveness' | 'graph' | 'spec' | 'writeGate'>;
 
 function rowField(row: any, ...keys: string[]): any {
     for (const key of keys) {
@@ -398,6 +458,77 @@ function signalsOf(events: RequestEvent[]): RequestSignals | null {
         recon: pickRecon(latest.evidence['recon']),
         brainTier: pickBrainTier(latest.evidence['brainTier']),
         distill: pickDistill(latest.evidence['distill']),
+    };
+}
+
+/**
+ * P8 — the latest `decision.recorded` row that carries an `evidence.jev` object, adjudicated
+ * against the consumer's JEV thresholds. A later decision without `jev` does not erase the
+ * earlier report (the latest *carrier* wins), and nothing is inferred from `jevMode` or verdict.
+ */
+export function jevOf(events: RequestEvent[], consumerRoot: string): RequestJev | null {
+    let latest: RequestEvent | undefined;
+    for (const event of events) {
+        if (event.event !== 'decision.recorded') continue;
+        if (!isPlainRecord(event.evidence['jev'])) continue;
+        latest = event;
+    }
+    if (!latest) return null;
+    const reported = latest.evidence['jev'] as Record<string, unknown>;
+    const adjudication = adjudicateReported(consumerRoot, reported);
+    const band = reported['band'];
+    const decision = reported['decision'];
+    const reason = reported['reason'];
+    const confidence = reported['confidence'];
+    return {
+        mode: adjudication.mode,
+        consent: adjudication.consent,
+        confidence: typeof confidence === 'number' && Number.isFinite(confidence) ? confidence : null,
+        band: typeof band === 'string' && (JEV_BANDS as readonly string[]).includes(band) ? band as JevBand : null,
+        decision: typeof decision === 'string' && (JEV_DECISIONS as readonly string[]).includes(decision)
+            ? decision as JevDecisionKind
+            : null,
+        reason: typeof reason === 'string' && reason.trim() ? reason.trim() : null,
+        expectedBand: adjudication.expectedBand,
+        match: adjudication.match,
+        at: latest.at,
+    };
+}
+
+/** The refs the host cited as law: a path ending in `AGENTS.md` or `CLAUDE.md`. */
+const LAW_REF_PATTERN = /(?:^|[/\\])(?:agents|claude)\.md$/i;
+
+export function lawRefsOf(verdict: TurnVerdict): TurnVerdictRuleRef[] {
+    return (verdict.ruleRefs || []).filter((ref) => LAW_REF_PATTERN.test(String(ref.path || '')));
+}
+
+function durationMsOf(request: RequestDetailBase['request']): number {
+    const start = Date.parse(request.startedAt);
+    const end = Date.parse(request.endedAt);
+    return Number.isFinite(start) && Number.isFinite(end) ? Math.max(0, end - start) : 0;
+}
+
+/**
+ * P8 — effectiveness from the detail that was just assembled. `stepsWithEvidence` counts stages
+ * that found a real value (`ok`/`warn`); `muted`/`info` stages are the ones that reported
+ * `not captured`, so they must not inflate the count.
+ */
+export function effectivenessOf(detail: RequestDetail, events: RequestEvent[]): RequestEffectiveness {
+    const observed = detail.pipeline.filter((stage) => stage.status !== 'PENDING');
+    const rolesObserved = new Set(observed.map((stage) => stage.role).filter(Boolean));
+    const rolesAssigned = new Set(detail.pipeline.map((stage) => stage.role).filter(Boolean));
+    return {
+        stepsTotal: detail.systemStages.length,
+        stepsWithEvidence: detail.systemStages.filter((stage) => stage.status === 'ok' || stage.status === 'warn').length,
+        rolesAssigned: rolesAssigned.size,
+        rolesObserved: rolesObserved.size,
+        workersTotal: detail.pipeline.length,
+        workersObserved: observed.length,
+        failures: events.filter((event) => event.outcome === 'FAIL' || event.outcome === 'BLOCKED').length,
+        durationMs: durationMsOf(detail.request),
+        writeGateChecked: detail.writeGate !== null,
+        receiptSealed: Boolean(detail.receipt?.receiptId && detail.receipt?.hashPrefix),
+        gaps: (detail.verdict.gaps || []).length,
     };
 }
 
@@ -630,79 +761,189 @@ export class RequestService {
         }
     }
 
-    private async buildSystemStages(consumerId: string, detail: RequestDetailBase): Promise<RequestSystemStage[]> {
-        const recon = detail.recon;
-        const lawLayer = recon.find((item) => item.kind === 'law');
-        const memoryLayer = recon.find((item) => item.kind === 'memory');
-        const reconLayers = recon.filter((item) => item.kind !== 'law' && item.kind !== 'memory');
-        const observedRecon = reconLayers.reduce((sum, item) => sum + item.calls, 0);
-        const passChecks = detail.checks.filter((item) => item.status === 'pass').length;
-        const warnChecks = detail.checks.filter((item) => item.status === 'warn').length;
-        const observedStages = detail.pipeline.filter((stage) => stage.status !== 'PENDING');
-        const failedStages = detail.pipeline.filter((stage) => stage.status === 'FAIL' || stage.status === 'BLOCKED');
+    /**
+     * P8 / matrix 28 — the eight stages of pipeline v2, in fixed order 1..8.
+     *
+     * Every stage reads one source and says `not captured` when that source reported nothing:
+     * stage 2 reads `detail.jev`, stage 3 `signals.recon`, stage 4 the verdict, stage 5 the
+     * pipeline, stage 6 `action.recorded` + `writeGate`, stage 7 receipt/spec/distill, stage 8
+     * the six readiness questions. No stage is ticked green because another stage looked fine.
+     */
+    private async buildSystemStages(
+        consumerId: string,
+        detail: RequestDetail,
+        events: RequestEvent[]
+    ): Promise<RequestSystemStage[]> {
+        const verdict = detail.verdict;
+        const jev = detail.jev;
+        const recon = detail.signals?.recon ?? null;
+        const reconCalls = recon ? recon.reduce((sum, item) => sum + item.calls, 0) : 0;
+        const lawRefs = lawRefsOf(verdict);
+        const decisions = events.filter((event) => event.event === 'decision.recorded');
+        const decision = decisions[decisions.length - 1];
+        const winner = typeof decision?.evidence['winner'] === 'string' ? String(decision.evidence['winner']) : null;
+        const basis = typeof decision?.evidence['basis'] === 'string' ? String(decision.evidence['basis']) : null;
         const roleNames = [...new Set(detail.pipeline.map((stage) => stage.role).filter(Boolean))];
-        const calls = detail.telemetry.llmCalls.length;
-        const tools = detail.telemetry.tools.length;
+        const observedWorkers = detail.pipeline.filter((stage) => stage.status !== 'PENDING');
+        const actions = events.filter((event) => event.event === 'action.recorded');
+        const actionTools = actions.map((event) => String(event.evidence['tool'] || '')).filter(Boolean);
+        const writeGate = detail.writeGate;
+        const gate = writeGate ? (writeGate.allowed ? 'allowed' : 'blocked') : 'none';
+        const receipt = detail.receipt;
+        const spec = detail.spec;
+        const distill = detail.signals?.distill ?? null;
+        const gaps = verdict.gaps;
         const models = [...new Set(detail.telemetry.llmCalls.map((call) => call.model).filter((value) => value && value !== '—'))];
-        const model = String(detail.routing['model'] || detail.request.model || '—');
-        const adapter = String(detail.routing['adapter'] || detail.request.adapter || '—');
+        // Q1–Q6 readiness: six data-driven booleans, never a judgement about the turn's quality.
+        const questions = {
+            Q1: detail.events.length > 0,
+            Q2: Boolean(decision),
+            Q3: Boolean(recon && reconCalls > 0),
+            Q4: gaps.length === 0,
+            Q5: Boolean(receipt?.hashPrefix),
+            Q6: Boolean(spec?.doc),
+        };
+        const answered = Object.values(questions).filter(Boolean).length;
+        const missing = Object.entries(questions).filter(([, ready]) => !ready).map(([key]) => key);
         return [
             {
-                id: 'prompt', stepNumber: 1, title: 'Prompt Ingest', sub: `${detail.request.userQuery.length} chars`, status: 'ok', tab: 'waterfall',
+                id: 'intake-law', stepNumber: 1, title: 'Intake & Law Gate',
+                sub: `${detail.request.userQuery.length} chars · ${lawRefs.length ? `${lawRefs.length} law ref(s)` : 'law not captured'}`,
+                status: lawRefs.length ? 'ok' : 'info', tab: 'rules',
                 details: [
-                    { label: 'Query', value: `${detail.request.userQuery.length} chars`, detail: `hash ${detail.request.promptHash}` },
-                    { label: 'Task', value: detail.request.taskType || '—', detail: detail.request.flowId || 'no flow' },
-                    { label: 'Trace', value: detail.request.traceId, detail: detail.request.hostId },
+                    { label: 'Prompt', value: `${detail.request.userQuery.length} chars`, detail: `hash ${detail.request.promptHash}` },
+                    {
+                        label: 'Actor',
+                        value: verdict.actor && typeof verdict.actor['id'] === 'string' ? String(verdict.actor['id']) : 'not captured',
+                        detail: verdict.actor && typeof verdict.actor['role'] === 'string' ? String(verdict.actor['role']) : 'no actor role on the claim',
+                    },
+                    {
+                        label: 'Law',
+                        value: lawRefs.length ? lawRefs.slice(0, 2).map((ref) => ref.path || ref.kind).join(', ') : 'not captured',
+                        detail: lawRefs.length ? 'verdict.ruleRefs' : 'LAW_MISSING — no AGENTS.md/CLAUDE.md ref in verdict.ruleRefs',
+                    },
                 ],
             },
             {
-                id: 'law', stepNumber: 2, title: 'Law Gate', sub: lawLayer ? lawLayer.id : 'not configured', status: lawLayer ? 'ok' : 'info', tab: 'rules',
+                id: 'decision-jev', stepNumber: 2, title: 'Decision & JEV',
+                sub: jev
+                    ? `${winner ?? 'not captured'} · ${jev.mode} · ${jev.band ?? 'band not reported'} · confidence ${jev.confidence ?? 'not captured'}`
+                    : `${winner ?? 'not captured'} · JEV not reported`,
+                status: jev ? (jev.match ? 'ok' : 'warn') : 'info', tab: 'decisions',
                 details: [
-                    { label: 'Layer', value: lawLayer?.label || 'not configured', detail: lawLayer?.id || 'no rules layer' },
-                    { label: 'Source', value: lawLayer?.source || '—', detail: lawLayer?.required ? 'required' : 'optional' },
-                    { label: 'Worker', value: detail.context['workerId'] ? String(detail.context['workerId']) : '—', detail: String(detail.context['role'] || 'no worker context') },
+                    { label: 'Decision', value: winner ?? 'not captured', detail: basis ?? 'no basis recorded by host' },
+                    {
+                        label: 'JEV',
+                        value: jev ? `${jev.mode} · ${jev.band ?? 'band not reported'}` : 'not reported',
+                        detail: jev
+                            ? `confidence ${jev.confidence ?? 'not captured'} · decision ${jev.decision ?? 'not captured'}`
+                            : 'no decision.recorded carried evidence.jev',
+                    },
+                    {
+                        label: 'Band check',
+                        value: jev ? (jev.match ? 'match' : 'mismatch') : 'not reported',
+                        detail: jev ? `expected ${jev.expectedBand ?? 'not computable'}` : 'no expected band',
+                    },
                 ],
             },
             {
-                id: 'routing', stepNumber: 3, title: 'L0/Jev Route', sub: `${adapter} · ${String(detail.routing['tier'] || 'tier —')}`, status: 'ok', tab: 'decisions',
+                id: 'evidence-recon', stepNumber: 3, title: 'Evidence Recon',
+                sub: recon ? `${recon.length} adapter(s) · ${reconCalls} call(s)` : 'not captured',
+                status: recon && reconCalls > 0 ? 'ok' : 'muted', tab: 'rules',
+                details: recon && recon.length
+                    ? recon.slice(0, 3).map((item) => ({ label: item.adapter, value: `${item.calls} call(s)`, detail: 'signals.recon' }))
+                    : [{ label: 'Recon', value: 'not captured', detail: 'no evidence.recon on decision.recorded' }],
+            },
+            {
+                id: 'sufficiency', stepNumber: 4, title: 'Sufficiency Gate',
+                sub: `score ${verdict.score} · ${gaps.length} gap(s)`,
+                status: gaps.length ? 'warn' : 'ok', tab: 'decisions',
                 details: [
-                    { label: 'Adapter', value: adapter, detail: String(detail.routing['modelSource'] || 'source —') },
-                    { label: 'Model', value: model, detail: String(detail.routing['effort'] || 'default effort') },
-                    { label: 'Task', value: String(detail.routing['taskType'] || '—'), detail: 'host-owned routing' },
+                    { label: 'Level', value: verdict.level, detail: 'ESO adjudication of the host claim' },
+                    { label: 'Score', value: String(verdict.score), detail: '100 − 25 × proof gap' },
+                    {
+                        label: 'Gaps',
+                        value: gaps.length ? gaps.map((gap) => gap.code).join(', ') : 'none',
+                        detail: gaps[0]?.consequence ?? 'no proof gap recorded',
+                    },
                 ],
-            },
-            {
-                id: 'recon', stepNumber: 4, title: 'Recon Context', sub: `${reconLayers.length} configured · ${observedRecon} called`, status: observedRecon > 0 ? 'ok' : 'muted', tab: 'rules',
-                details: reconLayers.slice(0, 3).map((item) => ({ label: item.label, value: item.calls ? `${item.calls} call(s)` : 'not captured', detail: item.source })),
-            },
-            {
-                id: 'eso', stepNumber: 5, title: 'ESO Gate', sub: `${passChecks}/${detail.checks.length} checks pass`, status: warnChecks ? 'warn' : 'ok', tab: 'decisions',
-                details: detail.checks.slice(0, 3).map((item) => ({ label: item.checkId, value: item.status, detail: item.detail })),
             },
             {
                 // SLP replaces the legacy brain tier (flash/pro): who does what is a role assignment,
                 // not a model-routing decision. The stage reports the assigned roles, not a tier claim.
-                id: 'brain', stepNumber: 6, title: 'SLP Roles', sub: `${roleNames.length} role(s) · ${detail.pipeline.length} worker(s)`, status: roleNames.length >= 3 ? 'ok' : 'info', tab: 'telemetry',
+                id: 'slp', stepNumber: 5, title: 'SLP Orchestration',
+                sub: `${roleNames.length} role(s) · ${observedWorkers.length}/${detail.pipeline.length} worker(s)`,
+                status: roleNames.length >= 3 ? 'ok' : 'info', tab: 'telemetry',
                 details: [
-                    { label: 'Roles', value: roleNames.length ? roleNames.join(', ') : 'no role assignment', detail: 'scout · plan · build · verify · audit · qc · fixbug' },
-                    { label: 'Lead', value: String(detail.context['role'] || '—'), detail: String(detail.context['workerId'] || 'no worker context') },
-                    { label: 'Model calls', value: `${calls} · ${models.length || 1} model(s)`, detail: `${detail.requestMetrics.inputTokens ?? '—'} in / ${detail.requestMetrics.outputTokens ?? '—'} out` },
+                    { label: 'Roles', value: roleNames.length ? roleNames.slice(0, 3).join(', ') : 'not captured', detail: 'config worker.role assignment' },
+                    { label: 'Workers', value: `${observedWorkers.length}/${detail.pipeline.length} observed`, detail: `${detail.events.length} event(s) in trace` },
+                    {
+                        label: 'Lead',
+                        value: detail.context['role'] ? String(detail.context['role']) : 'not captured',
+                        detail: detail.context['workerId'] ? String(detail.context['workerId']) : 'no worker context',
+                    },
                 ],
             },
             {
-                id: 'execution', stepNumber: 7, title: 'Execution', sub: `${calls} calls · ${tools} tools`, status: failedStages.length ? 'warn' : 'ok', tab: 'waterfall',
+                id: 'execution', stepNumber: 6, title: 'Execution & Write Gate',
+                sub: `${actions.length} action(s) · write gate ${gate}`,
+                status: writeGate && !writeGate.allowed ? 'warn' : actions.length ? 'ok' : 'info', tab: 'waterfall',
                 details: [
-                    { label: 'Workers', value: `${observedStages.length}/${detail.pipeline.length} observed`, detail: `${detail.events.length} events` },
-                    { label: 'Tools', value: String(tools), detail: 'agent-reported only' },
-                    { label: 'Models', value: models.length ? models.join(', ') : '—', detail: 'same host / per-worker tier' },
+                    {
+                        label: 'Actions',
+                        value: actions.length ? `${actions.length} recorded` : 'not captured',
+                        detail: actionTools.length ? actionTools.slice(0, 3).join(', ') : 'no action.recorded tool in trace',
+                    },
+                    {
+                        label: 'Write gate',
+                        value: gate,
+                        detail: writeGate ? `${writeGate.target} · ${writeGate.code ?? 'no refusal code'}` : 'no scope decision for this trace',
+                    },
+                    {
+                        label: 'Tools',
+                        value: `${detail.telemetry.tools.length} tool(s) · ${models.length} model(s)`,
+                        detail: `${detail.telemetry.files.length} file(s) · host-reported`,
+                    },
                 ],
             },
             {
-                id: 'memory', stepNumber: 8, title: 'Distill & Memory', sub: memoryLayer ? memoryLayer.id : 'pass-through', status: memoryLayer ? 'ok' : 'muted', tab: 'waterfall',
+                id: 'seal', stepNumber: 7, title: 'Seal & Distill',
+                sub: `${receipt.hashPrefix} · ${receipt.chained ? 'chained' : 'genesis'}`,
+                status: receipt.hashPrefix ? 'ok' : 'warn', tab: 'telemetry',
                 details: [
-                    { label: 'Layer', value: memoryLayer?.label || 'not configured', detail: memoryLayer?.id || 'no memory layer' },
-                    { label: 'Source', value: memoryLayer?.source || '—', detail: memoryLayer?.required ? 'required' : 'optional' },
-                    { label: 'Events', value: String(detail.events.length), detail: 'observations in trace' },
+                    { label: 'Receipt', value: receipt.hashPrefix || 'not captured', detail: receipt.chained ? 'prev hash linked' : 'genesis (no predecessor)' },
+                    { label: 'Spec', value: `${spec.doc} v${spec.version}`, detail: spec.section },
+                    {
+                        label: 'Distill',
+                        value: distill
+                            ? distill.memorySaved
+                                ? `saved${typeof distill.lessons === 'number' ? ` · ${distill.lessons} lesson(s)` : ''}`
+                                : 'not saved'
+                            : 'not captured',
+                        detail: distill ? 'signals.distill' : 'no evidence.distill on decision.recorded',
+                    },
+                ],
+            },
+            {
+                id: 'report', stepNumber: 8, title: 'Report & Audit',
+                sub: `${answered}/6 questions ready`,
+                status: answered === 6 ? 'ok' : 'warn', tab: 'decisions',
+                details: [
+                    {
+                        label: 'Answered',
+                        value: `${answered}/6`,
+                        detail: missing.length ? `missing ${missing.join(', ')}` : 'all six questions answered',
+                    },
+                    {
+                        label: 'Verdict · receipt · spec',
+                        value: `${verdict ? 'present' : 'missing'} · ${receipt ? 'present' : 'missing'} · ${spec ? 'present' : 'missing'}`,
+                        detail: 'presence only, never inferred',
+                    },
+                    {
+                        label: 'Gaps',
+                        value: gaps.length ? gaps.map((gap) => gap.code).join(', ') : 'none',
+                        detail: gaps[0]?.consequence ?? 'no proof gap recorded',
+                    },
                 ],
             },
         ];
@@ -839,11 +1080,16 @@ export class RequestService {
         // verdict and the gate are independent claims; neither is derived from the other.
         const decisions = await this.store.listScopeDecisionsByTrace(consumerId, base.request.traceId);
         const latest = decisions[0] ?? null;
+        // P8 — JEV is adjudicated against the consumer's own thresholds, so the reported band is
+        // checked against what those thresholds imply for the reported confidence.
+        const consumer = await this.store.getConsumer(assertConsumerId(consumerId));
+        const jev = jevOf(traceEvents, consumer?.root || '');
         const detail: RequestDetail = {
             ...base,
             verdict: sealed.verdict,
             receipt: receiptSummary(sealed.receipt),
             signals: signalsOf(traceEvents),
+            jev,
             graph: runtimeGraphOf(traceEvents, base.pipeline),
             // B0-9 — a constant pointer, identical for every request; see REQUEST_SPEC_REF.
             spec: REQUEST_SPEC_REF,
@@ -857,10 +1103,34 @@ export class RequestService {
                     actor: latest.actor,
                 }
                 : null,
+            // Filled below, once every stage has read its own data source.
+            effectiveness: {
+                stepsTotal: 0,
+                stepsWithEvidence: 0,
+                rolesAssigned: 0,
+                rolesObserved: 0,
+                workersTotal: 0,
+                workersObserved: 0,
+                failures: 0,
+                durationMs: 0,
+                writeGateChecked: false,
+                receiptSealed: false,
+                gaps: 0,
+            },
         };
+        // A reported band that contradicts the expected one is a check on the request, never a
+        // rewrite of the verdict: ESO records what it could not reconcile and keeps the claim.
+        if (detail.jev && !detail.jev.match) {
+            detail.checks.push({
+                checkId: 'JEV_BAND_MISMATCH',
+                status: 'warn',
+                detail: `reported band ${detail.jev.band ?? 'none'} but confidence ${detail.jev.confidence ?? 'none'} expects ${detail.jev.expectedBand ?? 'none'}`,
+            });
+        }
         detail.recon = await this.reconAdaptersFor(consumerId, detail);
         await this.enrichPipeline(consumerId, detail);
-        detail.systemStages = await this.buildSystemStages(consumerId, detail);
+        detail.systemStages = await this.buildSystemStages(consumerId, detail, traceEvents);
+        detail.effectiveness = effectivenessOf(detail, traceEvents);
         return detail;
     }
 

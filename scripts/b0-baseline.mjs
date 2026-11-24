@@ -174,7 +174,7 @@ function detectLawProof(detail) {
         return { present: true, evidence: `${files.length} rule file(s) attached: ${files.slice(0, 2).map((file) => path.basename(file)).join(', ')}` };
     }
     const layers = arr(detail?.recon).filter((adapter) => /law/i.test(str(adapter?.kind)) || /law/i.test(str(adapter?.id)));
-    const stage = arr(detail?.systemStages).find((item) => str(item?.id) === 'law');
+    const stage = arr(detail?.systemStages).find((item) => ['law', 'intake-law'].includes(str(item?.id)));
     const configured = layers.length > 0 || Boolean(stage);
     return {
         present: false,

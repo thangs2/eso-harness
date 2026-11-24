@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { describe, test } from 'node:test';
 
 import { MemoryPlatformStore, RegistryService, type Actor } from '../src/platform/registry/index.js';
+import { REQUEST_SPEC_REF } from '../src/platform/registry/types.js';
 import {
     GENESIS_HASH,
     ReceiptService,
@@ -141,10 +142,11 @@ describe('P4 — receipt issue', () => {
             ['consumerId', 'eventDigests', 'specRef', 'specVersion', 'traceId', 'verdict']
         );
         // B0-9 — the sealed spec reference is a pointer only: doc · version · section, no anchor, no prose.
+        // Read the single constant so a doc bump cannot leave the test pinned to a stale version.
         assert.deepEqual(receipt.payload.specRef, {
-            doc: 'sdlc/08.ui-design/20.pages/20.request-detail.md',
-            version: '1.7.0',
-            section: '§6 Behavior spec',
+            doc: REQUEST_SPEC_REF.doc,
+            version: REQUEST_SPEC_REF.version,
+            section: REQUEST_SPEC_REF.section,
         });
         assert.deepEqual(Object.keys(receipt.payload.specRef ?? {}).sort(), ['doc', 'section', 'version']);
         assert.deepEqual(

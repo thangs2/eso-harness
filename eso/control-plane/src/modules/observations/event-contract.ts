@@ -28,6 +28,32 @@ export type PreflightState = (typeof PREFLIGHT_STATES)[number];
 export const BRAIN_TIERS = ['zero', 'flash', 'pro'] as const;
 export type BrainTier = (typeof BRAIN_TIERS)[number];
 
+/**
+ * P8 — JEV (judgment evidence verification) the host reports on its own decision (B0-3).
+ *
+ * The host states the mode it ran, whether observation consent was granted, and — whenever the
+ * mode is not `off` — the confidence the band was derived from. ESO does not take the band on
+ * trust: `jev.service.adjudicateReported` recomputes it from the consumer's thresholds.
+ */
+export const JEV_MODES = ['off', 'shadow', 'active'] as const;
+export type JevMode = (typeof JEV_MODES)[number];
+
+export const JEV_BANDS = ['auto', 'confirm', 'open'] as const;
+export type JevBand = (typeof JEV_BANDS)[number];
+
+export const JEV_DECISIONS = ['auto', 'confirm', 'ask', 'observe'] as const;
+export type JevDecisionKind = (typeof JEV_DECISIONS)[number];
+
+export interface DecisionJev {
+    mode: JevMode;
+    consent: boolean;
+    /** Required by the contract whenever `mode !== 'off'` — the band is never guessed. */
+    confidence?: number;
+    band?: JevBand;
+    decision?: JevDecisionKind;
+    reason?: string;
+}
+
 export const ACTION_OUTCOMES = ['PASS', 'FAIL', 'BLOCKED'] as const;
 export type ActionOutcome = (typeof ACTION_OUTCOMES)[number];
 
@@ -83,6 +109,8 @@ export interface DecisionEvidence {
     brainTier?: BrainTier;
     /** P6a — B0-8: whether distillation saved a memory. */
     distill?: DecisionDistillSignal;
+    /** P8 — B0-3: the JEV mode/band the host ran, adjudicated (not trusted) by ESO. */
+    jev?: DecisionJev;
 }
 
 export interface ActionEvidence {
@@ -255,6 +283,42 @@ function validateDecisionSignals(evidence: UnknownRecord): void {
     }
 }
 
+/**
+ * `JEV_CONFIDENCE_REQUIRED` is a contract error of its own (not `OBSERVATION_INVALID`): the
+ * payload shape is right, the JEV report is simply unverifiable without the confidence behind
+ * the band. Registered in `ERROR_STATUS`/`BRD_ERROR_CODES`, so the envelope maps it to 422.
+ */
+function jevConfidenceRequired(detail: string): never {
+    const error = new PlatformError('JEV_CONFIDENCE_REQUIRED', detail);
+    error.message = `${error.message}: ${detail}`;
+    throw error;
+}
+
+/** P8 — validate the optional `evidence.jev` block of `decision.recorded`. */
+function validateJev(value: unknown): void {
+    const field = 'evidence.jev';
+    const jev = asObject(value, field);
+    if (typeof jev.mode !== 'string' || !(JEV_MODES as readonly string[]).includes(jev.mode)) {
+        invalid(`${field}.mode must be one of ${JEV_MODES.join('|')}`);
+    }
+    if (typeof jev.consent !== 'boolean') invalid(`${field}.consent must be a boolean`);
+    if (hasValue(jev.confidence)) {
+        const confidence = jev.confidence;
+        if (typeof confidence !== 'number' || !Number.isFinite(confidence)) {
+            invalid(`${field}.confidence must be a number`);
+        }
+        if (confidence < 0 || confidence > 1) invalid(`${field}.confidence must be between 0 and 1`);
+    }
+    // B0-3: a shadow/active report without its confidence cannot be adjudicated — refuse it
+    // instead of inventing a band. `off` stays valid with no JEV confidence at all.
+    if (jev.mode !== 'off' && !hasValue(jev.confidence)) {
+        jevConfidenceRequired(`${field}.confidence is required when mode is ${jev.mode}`);
+    }
+    optionalEnum(jev, 'band', field, JEV_BANDS);
+    optionalEnum(jev, 'decision', field, JEV_DECISIONS);
+    optionalString(jev, 'reason', field);
+}
+
 function validateDecisionRecorded(evidence: UnknownRecord): void {
     requiredString(evidence, 'winner', 'evidence');
     if (typeof evidence.verdict !== 'string' || !(DECISION_VERDICTS as readonly string[]).includes(evidence.verdict)) {
@@ -274,6 +338,7 @@ function validateDecisionRecorded(evidence: UnknownRecord): void {
         });
     }
     validateDecisionSignals(evidence);
+    if (hasValue(evidence.jev)) validateJev(evidence.jev);
 }
 
 function validateActionRecorded(evidence: UnknownRecord): void {
