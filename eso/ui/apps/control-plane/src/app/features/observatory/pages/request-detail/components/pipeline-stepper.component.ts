@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, ElementRef, computed, inject, input, output } from '@angular/core';
+import { SectionHintComponent, type SectionHintItem } from '../../../../../shared/section-hint.component.js';
 import type { StepperStageView } from '../request-detail.models.js';
 
 /**
@@ -9,6 +10,7 @@ import type { StepperStageView } from '../request-detail.models.js';
 @Component({
     selector: 'eso-pipeline-stepper',
     standalone: true,
+    imports: [SectionHintComponent],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <header class="stepper-head">
@@ -16,10 +18,13 @@ import type { StepperStageView } from '../request-detail.models.js';
                 <p class="stepper-eyebrow">Pipeline v2</p>
                 <p class="stepper-hint">Select a step to open its evidence</p>
             </div>
-            <p class="stepper-count">
-                <span class="count-value">{{ evidenced() }}/{{ stages().length }}</span>
-                <span class="count-label">steps with evidence</span>
-            </p>
+            <div class="stepper-actions">
+                <p class="stepper-count">
+                    <span class="count-value">{{ evidenced() }}/{{ stages().length }}</span>
+                    <span class="count-label">steps with evidence</span>
+                </p>
+                <eso-section-hint [summary]="hint.summary" [items]="hint.items" />
+            </div>
         </header>
         <nav class="pipeline-stepper" aria-label="Pipeline stages">
             @for (stage of stages(); track stage.id; let index = $index) {
@@ -77,6 +82,7 @@ import type { StepperStageView } from '../request-detail.models.js';
         .stepper-heading { display: grid; gap: .125rem; }
         .stepper-eyebrow { margin: 0; color: var(--dim); font-size: .6875rem; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
         .stepper-hint { margin: 0; color: var(--muted); font-size: .75rem; }
+        .stepper-actions { display: inline-flex; align-items: center; gap: var(--space-2); }
         .stepper-count { margin: 0; display: flex; align-items: baseline; gap: .375rem; color: var(--dim); font-size: .6875rem; }
         .count-value { color: #cbd5e1; font-weight: 700; font-variant-numeric: tabular-nums; }
         .stepper-legend { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--line-soft, #1e2a3e); color: var(--dim); font-size: .6875rem; }
@@ -147,6 +153,19 @@ export class PipelineStepperComponent {
     readonly stepSelected = output<string>();
 
     private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+
+    readonly hint: { summary: string; items: SectionHintItem[] } = {
+        summary: 'Eight fixed ESO v2 stages. The ring colour is the evidence status of that stage for THIS trace; selecting a step opens its evidence without switching the tab.',
+        items: [
+            { label: 'emerald', text: 'At least one OK observation proves the stage ran.' },
+            { label: 'amber', text: 'The stage ran but a gap/attention signal is recorded (for example score below 100).' },
+            { label: 'sky', text: 'Informational: something was observed, but no pass/fail proof is attached.' },
+            { label: 'slate', text: 'No observation for this stage in this trace — not recorded, not zero.' },
+            { label: 'count', text: 'Stages with OK or WARN evidence. 4/8 means the other four stages have no proof.' },
+            { label: 'number', text: 'The stage order (1→8), fixed by the pipeline; it is not a turn sequence.' },
+            { label: 'sub-line', text: 'The stage\'s own metric. "not recorded" means the host sent no value; ESO never fills it in.' },
+        ],
+    };
 
     readonly evidenced = computed(() => {
         const reported = this.evidencedSteps();

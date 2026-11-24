@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
+import { SectionHintComponent, type SectionHintItem } from '../../../../../shared/section-hint.component.js';
 import type { PipelineStepView, TabKey } from '../request-detail.models.js';
 
 type FlowTone = 'ok' | 'decision' | 'recon' | 'warn' | 'muted';
@@ -15,6 +16,7 @@ type FlowTone = 'ok' | 'decision' | 'recon' | 'warn' | 'muted';
 @Component({
     selector: 'eso-pipeline-flow',
     standalone: true,
+    imports: [SectionHintComponent],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <section class="endflow">
@@ -23,7 +25,10 @@ type FlowTone = 'ok' | 'decision' | 'recon' | 'warn' | 'muted';
                     <span class="endflow-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h8l-1 8 11-14h-8l1-6z" /></svg></span>
                     <div><p class="eyebrow">Pipeline v2 · data flow</p><h2>End-to-End Pipeline Data Flow</h2><p>Prompt ingest → worker handoff → evidence → telemetry</p></div>
                 </div>
-                <button type="button" class="ghost-btn" (click)="flowExpanded.set(!flowExpanded())">{{ flowExpanded() ? '▲ Hide' : '▼ Show flow' }}</button>
+                <div class="endflow-actions">
+                    <eso-section-hint [summary]="hint.summary" [items]="hint.items" />
+                    <button type="button" class="ghost-btn" (click)="flowExpanded.set(!flowExpanded())">{{ flowExpanded() ? '▲ Hide' : '▼ Show flow' }}</button>
+                </div>
             </header>
             @if (flowExpanded()) {
                 <div class="endflow-body">
@@ -80,6 +85,7 @@ type FlowTone = 'ok' | 'decision' | 'recon' | 'warn' | 'muted';
         h2 { font-size: 1rem; font-weight: 650; color: #f1f5f9; }
         .eyebrow { color: var(--dim); font-size: var(--fs-label); font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
         .endflow { border: 1px solid var(--line); border-radius: .75rem; background: var(--surface); overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.35); color: var(--ink); font-size: var(--fs-body); line-height: var(--lh); }
+        .endflow-actions { display: inline-flex; align-items: center; gap: var(--space-2); }
         .endflow-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: .875rem 1.25rem; border-bottom: 1px solid var(--line); background: #0d1118; }
         .endflow-title { display: flex; align-items: center; gap: .625rem; min-width: 0; }
         .endflow-icon { display: grid; place-items: center; flex: 0 0 auto; width: 2rem; height: 2rem; border: 1px solid rgba(56,189,248,.35); border-radius: .5rem; background: rgba(56,189,248,.1); color: var(--recon-ink); }
@@ -133,6 +139,16 @@ type FlowTone = 'ok' | 'decision' | 'recon' | 'warn' | 'muted';
     `],
 })
 export class PipelineFlowComponent {
+    readonly hint: { summary: string; items: SectionHintItem[] } = {
+        summary: 'One card per handoff. An empty step collapses to one row; MISSING is a missing proof, not a UI error.',
+        items: [
+            { label: 'STEP n', text: 'Pipeline order (1→8), the same order as the stepper above.' },
+            { label: 'missing', text: 'No observation for this handoff in the trace. Expand it to see what evidence would be required.' },
+            { label: 'OK / WARN', text: 'OK: evidence present. WARN: evidence present but a required field or proof is absent.' },
+            { label: 'Open …', text: 'Opens the related tab (waterfall, verdict, rules, telemetry). It does not select the stepper step.' },
+            { label: 'row', text: 'Click the row to toggle its evidence details; the sub-cards show what the host actually reported.' },
+        ],
+    };
     readonly steps = input<PipelineStepView[]>([]);
     readonly selectedStepId = input<string | null>(null);
     readonly expandedIds = input<ReadonlySet<string>>(new Set<string>());

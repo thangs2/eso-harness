@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, signal } from '@angular/core';
+import { SectionHintComponent, type SectionHintItem } from '../../../../../shared/section-hint.component.js';
 import {
     relativeTime,
     writeGateActorOf,
@@ -21,13 +22,17 @@ import {
 @Component({
     selector: 'eso-glance-cards',
     standalone: true,
+    imports: [SectionHintComponent],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <section class="glance-grid top-grid" aria-label="Request at a glance">
             <section class="verdict-hero" [attr.data-level]="verdict()?.level || 'unknown'" aria-label="Turn verdict (Q1)">
                 <header class="verdict-hero-head">
                     <h2>Turn verdict</h2>
-                    @if (verdict(); as v) { <span class="verdict-level-badge" [class]="'level-' + v.level">{{ v.level }}</span> }
+                    <div class="card-actions">
+                        <eso-section-hint [summary]="hintVerdict.summary" [items]="hintVerdict.items" />
+                        @if (verdict(); as v) { <span class="verdict-level-badge" [class]="'level-' + v.level">{{ v.level }}</span> }
+                    </div>
                 </header>
                 @if (verdict(); as v) {
                     <p class="verdict-meaning">{{ levelMeaning(v) }}</p>
@@ -70,6 +75,7 @@ import {
                 <header class="panel-head">
                     <div class="card-head-main"><span class="icon-chip gate-chip" aria-hidden="true">⛨</span><div><p class="eyebrow">Scope guard</p><h2>Write gate</h2></div></div>
                     <div class="card-actions">
+                        <eso-section-hint [summary]="hintGate.summary" [items]="hintGate.items" />
                         @if (writeGate()) { <button type="button" class="mini-btn" (click)="copyGate()">{{ gateCopied() ? 'Copied' : 'Copy' }}</button> }
                         <span class="gate-badge" [attr.data-state]="writeGate()?.allowed === true ? 'allowed' : writeGate() ? 'blocked' : 'none'">{{ writeGate() ? gateLabel() : 'not recorded' }}</span>
                     </div>
@@ -100,7 +106,10 @@ import {
             <section class="effectiveness" aria-label="Orchestration effectiveness (pipeline v2)">
                 <header class="effectiveness-head">
                     <div class="card-head-main"><span class="icon-chip effectiveness-chip" aria-hidden="true">◱</span><div><p class="eyebrow">Pipeline v2</p><h2>Orchestration effectiveness</h2></div></div>
-                    <span class="badge muted">backend tally</span>
+                    <div class="card-actions">
+                        <eso-section-hint [summary]="hintEffectiveness.summary" [items]="hintEffectiveness.items" />
+                        <span class="badge muted">backend tally</span>
+                    </div>
                 </header>
                 @if (effectiveness(); as e) {
                     <div class="kpi-strip">
@@ -137,6 +146,7 @@ import {
                 <header class="panel-head">
                     <div class="card-head-main"><span class="icon-chip tokens-chip" aria-hidden="true">◎</span><div><p class="eyebrow">Cost</p><h2>Tokens &amp; model</h2></div></div>
                     <div class="card-actions">
+                        <eso-section-hint [summary]="hintCost.summary" [items]="hintCost.items" />
                         <details class="inline-details">
                             <summary class="mini-btn">Show</summary>
                             <div class="inline-note">Calls {{ llmCallCount() }} · Tools {{ toolCount() }} · Files {{ fileCount() }}. {{ tokens().estimated ? 'Token counts are estimated chars/4, not provider-reported.' : 'Token counts are read from the recorded metrics.' }}</div>
@@ -331,6 +341,54 @@ export class GlanceCardsComponent {
     readonly gateCopied = signal(false);
     readonly tokenCopied = signal(false);
 
+    readonly hintVerdict: { summary: string; items: SectionHintItem[] } = {
+        summary: 'Q1 — does the trace prove this turn was justified? ESO adjudicates the host claim from observations; it does not rerun the host.',
+        items: [
+            { label: 'allow', text: 'The host claim is sustained: decision.recorded says allow, and evidence.packet, actor and action.recorded are all present. Score 100.' },
+            { label: 'partial', text: 'A proof is missing (evidence packet, actor, or action). The turn may have run, but the claim cannot be sustained as allow.' },
+            { label: 'deny', text: 'A recorded decision or rule rejected the turn; ESO does not need gaps to explain a denial.' },
+            { label: 'unknown', text: 'No decision.recorded, or the host itself reported unknown. This is NOT deny: nothing rejected the turn. It is NOT allow: nothing sustains it. The turn is unproven.' },
+            { label: 'score', text: 'max(0, 100 − 25 × gaps). It measures evidence completeness, not model quality. The value is sealed into the receipt as evidenceScore; it does not block writes by itself.' },
+            { label: 'gaps', text: 'Each code names one missing proof. The ledger subtracts 25 per gap and prints that code\'s meaning, so the score is reproducible.' },
+            { label: 'basis', text: 'The host\'s own claim string (claim=...: basis). ESO copies it; it never rewrites the host\'s reason.' },
+        ],
+    };
+
+    readonly hintGate: { summary: string; items: SectionHintItem[] } = {
+        summary: 'Scope guard — did ESO accept this write target before the host wrote? It is a separate decision from the turn verdict.',
+        items: [
+            { label: 'allowed', text: 'scope/check returned allowed for the target; decision id, target, actor and time are recorded.' },
+            { label: 'blocked', text: 'A scope rule rejected the target. The code names the rule that failed.' },
+            { label: 'not recorded', text: 'The host wrote (or could write) without calling scope/check with a traceId. Permission is unverified, not granted.' },
+            { label: 'BLOCKED_SCOPE', text: 'The target is outside the consumer\'s allowed_files scope.' },
+            { label: 'DANGLING_SCOPE', text: 'The target directory does not exist, so scope cannot be evaluated.' },
+            { label: 'criteria', text: 'Three checks: target inside the consumer root, target listed in allowed_files, target directory exists.' },
+        ],
+    };
+
+    readonly hintEffectiveness: { summary: string; items: SectionHintItem[] } = {
+        summary: 'Backend tally of the eight-stage pipeline for this trace. Every number is a count of observed evidence, not a quality grade.',
+        items: [
+            { label: 'steps evidenced', text: 'Stages with an OK or WARN signal. A count of 8 means every stage has proof; a lower count names how many do not.' },
+            { label: 'roles & workers', text: 'Distinct roles named by observations vs roles assigned; workers observed in the trace vs expected.' },
+            { label: 'failures', text: 'Observations with a FAIL outcome. 0 can also mean no failure event was reported — absence is not proof of success.' },
+            { label: 'duration', text: 'First-to-last observed event. It is not wall-clock runtime if the host sent no events.' },
+            { label: 'write gate checked', text: 'True only when a scope decision was recorded with this traceId.' },
+            { label: 'receipt sealed', text: 'True when the verdict/receipt hash chain exists for this turn.' },
+            { label: 'gaps', text: 'Unproven checks; the same gap codes the verdict uses.' },
+        ],
+    };
+
+    readonly hintCost: { summary: string; items: SectionHintItem[] } = {
+        summary: 'Token and call accounting from worker observations only. "Not captured" means the host sent no usage data — it is not zero and it is not estimated.',
+        items: [
+            { label: 'input / output', text: 'Sum of tokenSummary.input/output across worker events. A trailing ~ marks a host estimate.' },
+            { label: 'calls', text: 'Worker observations carrying model/usage. It is not the number of internal LLM retries.' },
+            { label: 'tools', text: 'Distinct tool names reported in tool evidence. 0 means no tool call was recorded for this trace.' },
+            { label: 'not captured', text: 'No usage evidence exists. ESO never guesses tokens or calls.' },
+        ],
+    };
+
     actorId(actor: VerdictActor | null): string {
         const id = actor && typeof actor['id'] === 'string' ? actor['id'].trim() : '';
         return id || 'unknown actor';
@@ -431,8 +489,8 @@ export class GlanceCardsComponent {
             case 'deny': return 'A recorded rule or decision blocked this turn.';
             case 'partial': return gap ? `Evidence is incomplete: ${gap} means the claim cannot be fully supported.` : 'Evidence is incomplete for this turn.';
             default: return gap === 'HOST_SILENT'
-                ? 'The host reported no decision, so ESO cannot prove why this turn proceeded.'
-                : 'No decision evidence was recorded for this turn.';
+                ? 'Not allow: the host claim was never sustained. Not deny: no rule rejected it. The prompt ran, but no decision.recorded states why — the turn is unproven.'
+                : 'Not allow and not deny: no decision evidence was recorded, so ESO cannot judge the turn either way.';
         }
     }
 

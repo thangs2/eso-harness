@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
+import { SectionHintComponent, type SectionHintItem } from '../../../../../shared/section-hint.component.js';
 import {
     formatAt as formatDateAt,
     workerLabel as labelForWorker,
@@ -34,12 +35,14 @@ interface LlmRow {
 @Component({
     selector: 'eso-waterfall-panel',
     standalone: true,
+    imports: [SectionHintComponent],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <section class="panel waterfall">
             <div class="waterfall-toolbar">
                 <div class="chips"><button type="button" class="chip" [class.on]="!eventQuery()" (click)="eventQuery.set('')">All</button><button type="button" class="chip" [class.on]="eventQuery() === 'FAIL'" (click)="eventQuery.set('FAIL')">Failures</button><button type="button" class="chip" [class.on]="eventQuery() === 'prompt.submitted'" (click)="eventQuery.set('prompt.submitted')">Requests</button></div>
                 <div class="wf-summary"><span class="summary-chip">Files <strong>{{ fileRows().length }}</strong></span><span class="summary-chip">Tool calls <strong>{{ toolRows().length }}</strong></span><span class="summary-chip">LLM calls <strong>{{ llmRows().length }}</strong></span></div>
+                <eso-section-hint [summary]="hint.summary" [items]="hint.items" />
                 <input class="search" [value]="eventQuery()" (input)="onQueryInput($event)" placeholder="Filter event / worker…">
             </div>
             <div class="wf-layout" [class.no-rail]="!hasRail()">
@@ -161,6 +164,17 @@ interface LlmRow {
     `],
 })
 export class WaterfallPanelComponent {
+    readonly hint: { summary: string; items: SectionHintItem[] } = {
+        summary: 'The raw event ledger for this trace, plus side rails for files, tool calls and LLM emissions. Every row is an observation the host sent.',
+        items: [
+            { label: 'All / Failures / Requests', text: 'Filter chips. Requests keeps only prompt.submitted; Failures keeps FAIL/BLOCKED outcomes.' },
+            { label: 'Files / Tool calls / LLM calls', text: 'Counts of what the host reported. The right rail only renders when at least one of these exists.' },
+            { label: 'Time / Event / Worker', text: 'When the observation was recorded, its event name, and which worker reported it. "—" means not reported.' },
+            { label: 'Outcome', text: 'PASS/COMPLETED are green; FAIL/BLOCKED are red. An empty outcome means the host sent none.' },
+            { label: 'Evidence', text: 'Expand to see the exact JSON the host sent. ESO does not rewrite it; missing keys stay missing.' },
+            { label: 'duration', text: 'The duration carried by the observation. It is not recomputed from timestamps.' },
+        ],
+    };
     readonly events = input<ObservationDto[]>([]);
     readonly files = input<unknown[]>([]);
     readonly tools = input<unknown[]>([]);

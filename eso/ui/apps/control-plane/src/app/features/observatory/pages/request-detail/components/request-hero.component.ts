@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
+import { SectionHintComponent, type SectionHintItem } from '../../../../../shared/section-hint.component.js';
 import { actorIdOf, formatAt, shortIdOf, type RequestDetailWithVerdict, type TurnVerdictView } from '../request-detail.models.js';
 
 /**
@@ -8,6 +9,7 @@ import { actorIdOf, formatAt, shortIdOf, type RequestDetailWithVerdict, type Tur
 @Component({
     selector: 'eso-request-hero',
     standalone: true,
+    imports: [SectionHintComponent],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         @if (request(); as request) {
@@ -23,6 +25,7 @@ import { actorIdOf, formatAt, shortIdOf, type RequestDetailWithVerdict, type Tur
                         <span class="badge muted">{{ value('taskType') }}</span>
                         <span class="badge muted">{{ eventCount() }} events</span>
                         @if (failureKind()) { <span class="badge warn">{{ failureKind() }}</span> }
+                        <eso-section-hint [summary]="hint.summary" [items]="hint.items" />
                     </div>
                 </div>
                 <p class="hero-meta">
@@ -108,6 +111,16 @@ import { actorIdOf, formatAt, shortIdOf, type RequestDetailWithVerdict, type Tur
     `],
 })
 export class RequestHeroComponent {
+    readonly hint: { summary: string; items: SectionHintItem[] } = {
+        summary: 'One immutable request/trace: the prompt, its host facts, and the badges that summarise what ESO could observe.',
+        items: [
+            { label: 'status', text: 'submitted: only the prompt exists. completed: a completion event exists. failed/blocked: the host reported a failure or a scope block.' },
+            { label: 'verdict badge', text: 'The Q1 verdict level. It is explained in Turn verdict below; the badge is a shortcut, not a second rule.' },
+            { label: 'events', text: 'How many observations belong to this trace. More events usually means richer evidence.' },
+            { label: 'meta line', text: 'Started / duration / host / runtime / model / actor come from observations. "not captured" means the host sent no value; ESO does not estimate.' },
+            { label: 'identity', text: 'Observation id, request hash and length prove which bytes were observed. The prompt body is shown read-only and may be sensitive.' },
+        ],
+    };
     readonly detail = input.required<RequestDetailWithVerdict>();
     readonly verdict = input<TurnVerdictView | null>(null);
 
