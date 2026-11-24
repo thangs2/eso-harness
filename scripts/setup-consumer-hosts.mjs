@@ -97,6 +97,7 @@ const input = await readStdin();
 let payload = {};
 try { payload = input ? JSON.parse(input) : {}; } catch { payload = {}; }
 
+let transcriptModel = '';
 let prompt = payload.prompt ?? payload.user_message ?? payload.message ?? payload.userQuery ?? payload.user_query ?? '';
 if (!prompt && typeof payload.transcriptPath === 'string' && existsSync(payload.transcriptPath)) {
     try {
@@ -107,6 +108,16 @@ if (!prompt && typeof payload.transcriptPath === 'string' && existsSync(payload.
             const step = JSON.parse(line);
             if (step.type === 'USER_INPUT' && step.content) { prompt = step.content; break; }
         }
+        // AGY transcript steps may carry the model of the invocation; take the latest one so
+        // the observation keeps the rich schema instead of degrading to prompt-only metadata.
+        if (!transcriptModel) {
+            for (let i = lines.length - 1; i >= Math.max(0, lines.length - 60); i -= 1) {
+                let step;
+                try { step = JSON.parse(lines[i].trim()); } catch { continue; }
+                const candidate = step.model ?? step.model_name ?? step.model_id ?? step.modelName;
+                if (typeof candidate === 'string' && candidate.trim()) { transcriptModel = candidate.trim(); break; }
+            }
+        }
     } catch { /* ignore */ }
 }
 const text = strip(prompt).slice(0, 4000);
@@ -116,6 +127,16 @@ const conversationId = String(payload.conversation_id ?? payload.conversationId 
 const generationId = String(payload.generation_id ?? payload.generationId ?? '');
 const boundaryIndex = Number(payload.boundary_index ?? payload.boundaryIndex ?? 0) || 0;
 const hash = createHash('sha256').update(conversationId + '|' + generationId + '|' + text).digest('hex').slice(0, 24);
+const pick = (...values) => values.map((value) => (typeof value === 'string' ? value.trim() : value)).find((value) => value !== undefined && value !== null && value !== '') ?? '';
+const model = pick(payload.model, payload.model_id, payload.modelId, payload.model_name, payload.modelName, transcriptModel);
+const usage = payload.usage && typeof payload.usage === 'object' ? payload.usage : null;
+const tokenSummary = usage && (Number.isFinite(Number(usage.input_tokens ?? usage.inputTokens)) || Number.isFinite(Number(usage.output_tokens ?? usage.outputTokens)))
+    ? {
+        input: Number(usage.input_tokens ?? usage.inputTokens ?? 0),
+        output: Number(usage.output_tokens ?? usage.outputTokens ?? 0),
+        estimated: false,
+    }
+    : null;
 // A conversation is not a request. One turn/prompt must have its own trace, otherwise
 // every prompt in the same AGY conversation collapses into the first request row.
 const traceId = String(payload.traceId ?? payload.trace_id ?? '') || (conversationId ? conversationId + ':' + hash.slice(0, 8) : generationId || ('host-' + host + '-' + new Date().toISOString().slice(0, 10)));
@@ -146,6 +167,19 @@ const observation = {
         conversationId,
         generationId,
         boundaryIndex,
+        // Rich schema (same keys the worker bridge sends) so the observation is not prompt-only.
+        hostStep: boundaryIndex,
+        workerId: 'worker-lead',
+        adapter: pick(payload.adapter, payload.host_adapter) || host,
+        model: model || null,
+        modelSource: model ? (payload.model || payload.model_id || payload.modelName ? 'host-payload' : 'transcript') : 'not-reported',
+        tier: pick(payload.tier, payload.model_tier, payload.thinking_level) || null,
+        taskType: pick(payload.task_type, payload.taskType) || '',
+        flowId: pick(payload.flow_id, payload.flowId) || '',
+        requestHash: hash,
+        requestLength: text.length,
+        ...(payload.context && typeof payload.context === 'object' ? { context: payload.context } : {}),
+        ...(tokenSummary ? { tokenSummary } : {}),
     },
 };
 
