@@ -459,7 +459,19 @@ export class ObservatoryPage implements OnInit, OnDestroy {
             this.failWith('OBS_CONSUMER_UNKNOWN', `Consumer "${requested}" not found`);
             return;
         }
-        this.consumerId.set(requested || fallback);
+        const selected = requested || fallback;
+        this.consumerId.set(selected);
+        // BUG: the dropdown defaulted to a consumer while the URL stayed /observatory — a copied
+        // URL opened a different consumer. Keep URL and selection in sync: defaulting or an old
+        // `?project=` alias is normalised to `?consumer=<id>` (replaceUrl, no history entry).
+        if (selected && (!requested || query.has('project'))) {
+            void this.router.navigate([], {
+                relativeTo: this.route,
+                queryParams: { consumer: selected, project: null },
+                queryParamsHandling: 'merge',
+                replaceUrl: true,
+            });
+        }
         if (this.consumerId()) await this.load();
         if (requestedTrace) {
             this.pulseQuery.set(requestedTrace);
