@@ -54,6 +54,11 @@
         },
         "serve": {
           "builder": "@angular/build:dev-server",
+          "options": {
+            "headers": {
+              "Cache-Control": "no-store, no-cache, must-revalidate"
+            }
+          },
           "configurations": {
             "production": {
               "buildTarget": "control-plane:build:production"
