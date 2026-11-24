@@ -29,11 +29,12 @@ export async function electCapabilityProvider({
     existingElections = [],
     turnAuditLog = [],
     db = null,
+    root = process.cwd(),
 } = {}) {
     if (!project) throw new Error('Project is required');
     if (!turnId) throw new Error('turnId is required');
     if (!capabilityKind) throw new Error('capabilityKind is required');
-    assertCapabilityKind(capabilityKind);
+    assertCapabilityKind(capabilityKind, root);
 
     // AC-HOST-01-08: Host not declared in matrix
     if (!KNOWN_HOSTS.includes(host)) {

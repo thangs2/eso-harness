@@ -43,7 +43,7 @@ test('Angular state frame: denied never renders the empty copy', () => {
     const deniedBlock = source.match(/@case \('ST4_DENIED'\) \{[\s\S]*?\n {16}\}/)[0];
 
     assert.match(deniedBlock, /frame-denied/);
-    assert.match(deniedBlock, /Truy cập bị từ chối hoặc tài nguyên không tìm thấy\./);
+    assert.match(deniedBlock, /Access denied or resource not found\./);
     assert.equal(deniedBlock.includes('emptyMessage()'), false, 'denied must not reuse the ST1 sentence');
 });
 
@@ -55,7 +55,7 @@ test('Angular state frame: counts and coverage are data, never fixture defaults'
     assert.equal(/input<number>\(1\.0\)/.test(source), false);
     assert.equal(/\b0\.62\b/.test(source), false, 'fixture ratio 0.62 must not live in product code');
     // ST6 must show the ratio when it is recorded…
-    assert.match(source, /Graph phủ \$\{coverage\}/);
+    assert.match(source, /Graph coverage \$\{coverage\}/);
     // …and must not claim one when it is not.
     assert.match(source, /coverage === null/);
 });
