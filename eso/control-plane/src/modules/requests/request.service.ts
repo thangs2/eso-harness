@@ -1,8 +1,8 @@
 import { PlatformError } from '../../platform/registry/errors.js';
 import { assertConsumerId, type PlatformStore } from '../../platform/registry/store.js';
-import type { EvidenceReceipt, TurnVerdict } from '../../platform/registry/types.js';
+import type { EvidenceReceipt, TurnVerdict, TurnVerdictLevel } from '../../platform/registry/types.js';
 import type { ConfigSnapshotService } from '../config-snapshot/config-snapshot.service.js';
-import { ReceiptService } from '../receipt/receipt.service.js';
+import { GENESIS_HASH, ReceiptService } from '../receipt/receipt.service.js';
 import { VerdictService } from '../verdict/verdict.service.js';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -142,6 +142,39 @@ export interface PromptSummary {
     status: string;
 }
 
+/**
+ * P5a — receipt summary for the detail proof surface (Q5). The full digest stays on
+ * GET /consumers/:id/requests/:requestId/receipt; the prefix only points at the sealed record.
+ */
+export interface RequestReceiptSummary {
+    receiptId: string;
+    /** Full sealed digest — not a secret; a third party must be able to recompute/verify it. */
+    hash: string;
+    hashPrefix: string;
+    hmacPresent: boolean;
+    chained: boolean;
+    specVersion: number;
+    verdictLevel: TurnVerdictLevel;
+    createdAt: string;
+}
+
+/** First 12 hex chars: enough to identify the receipt, not enough to be the sealed digest. */
+const RECEIPT_HASH_PREFIX_LENGTH = 12;
+
+/** Project a stored receipt into the summary the detail route may expose. */
+export function receiptSummary(receipt: EvidenceReceipt): RequestReceiptSummary {
+    return {
+        receiptId: receipt.receiptId,
+        hash: receipt.hash,
+        hashPrefix: String(receipt.hash ?? '').slice(0, RECEIPT_HASH_PREFIX_LENGTH),
+        hmacPresent: typeof receipt.hmac === 'string' && receipt.hmac.length > 0,
+        chained: receipt.prevHash !== GENESIS_HASH,
+        specVersion: receipt.specVersion,
+        verdictLevel: receipt.verdictLevel,
+        createdAt: receipt.createdAt,
+    };
+}
+
 export interface RequestDetail {
     request: {
         id: string;
@@ -183,10 +216,12 @@ export interface RequestDetail {
     };
     /** P2: ESO's adjudication of the host claim — always present on an HTTP detail response. */
     verdict: TurnVerdict;
+    /** P5a: summary of the receipt sealing that verdict; the full hash is never on the detail. */
+    receipt: RequestReceiptSummary;
 }
 
-/** Everything `buildRequest` can compute from observations alone; the verdict is appended in `get`. */
-type RequestDetailBase = Omit<RequestDetail, 'verdict'>;
+/** Everything `buildRequest` can compute from observations alone; the verdict and receipt are appended in `get`. */
+type RequestDetailBase = Omit<RequestDetail, 'verdict' | 'receipt'>;
 
 function rowField(row: any, ...keys: string[]): any {
     for (const key of keys) {
@@ -622,11 +657,13 @@ export class RequestService {
         }
         const base = buildRequest(consumerId, traceEvents);
         if (!base) throw new PlatformError('NOT_FOUND', `Request not found: ${decoded}`);
-        // P2/P4 — the detail is the proof surface: every detail response carries ESO's verdict and
-        // the id of the receipt that seals it.
+        // P2/P4/P5a — the detail is the proof surface: every detail response carries ESO's verdict,
+        // the id of the receipt that seals it, and a summary of that receipt (never its full hash).
+        const sealed = await this.sealed(consumerId, base.request.traceId);
         const detail: RequestDetail = {
             ...base,
-            verdict: await this.adjudicated(consumerId, base.request.traceId),
+            verdict: sealed.verdict,
+            receipt: receiptSummary(sealed.receipt),
         };
         detail.recon = await this.reconAdaptersFor(consumerId, detail);
         await this.enrichPipeline(consumerId, detail);
@@ -654,9 +691,20 @@ export class RequestService {
 
     /** The stored verdict plus the id of the receipt that seals it (`verdict.receiptId`). */
     private async adjudicated(consumerId: string, traceId: string): Promise<TurnVerdict> {
+        return (await this.sealed(consumerId, traceId)).verdict;
+    }
+
+    /**
+     * Issue-or-get the receipt once per request and reuse it for both the verdict link and the
+     * detail summary, so `detail.receipt.receiptId` and `detail.verdict.receiptId` cannot diverge.
+     */
+    private async sealed(
+        consumerId: string,
+        traceId: string
+    ): Promise<{ receipt: EvidenceReceipt; verdict: TurnVerdict }> {
         const receipt = await this.receipt.issue(consumerId, traceId);
         const verdict = await this.verdict.ensureVerdict(consumerId, traceId);
-        return { ...verdict, receiptId: receipt.receiptId };
+        return { receipt, verdict: { ...verdict, receiptId: receipt.receiptId } };
     }
 
     private async resolveTraceId(consumerId: string, requestId: string): Promise<string> {

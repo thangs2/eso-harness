@@ -153,7 +153,7 @@ test('SCN-IAM-04-06 (AC-IAM-04-06): Cycle in flow (A->B->A or direct loop) rejec
     });
 });
 
-test('SCN-IAM-04-07 (AC-IAM-07-03): Flow reading flags retired worker as DANGLING_FLOW requiring edit or OPEN risk', () => {
+test('SCN-IAM-04-07 (legacy IAM AC retired): Flow reading flags retired worker as DANGLING_FLOW requiring edit or OPEN risk', () => {
     const flow = {
         id: 'flow-with-worker',
         project: 'baplatform',

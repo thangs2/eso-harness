@@ -325,6 +325,18 @@ describe('HTTP contract — CR-010/011 routes', () => {
         const detailBody = await detail.json() as any;
         assert.equal(typeof detailBody.verdict.receiptId, 'string');
         assert.ok(detailBody.verdict.receiptId.length > 0);
+        // P5a — the detail exposes a receipt summary, not the sealed digest.
+        assert.deepEqual(
+            Object.keys(detailBody.receipt).sort(),
+            ['chained', 'createdAt', 'hash', 'hashPrefix', 'hmacPresent', 'receiptId', 'specVersion', 'verdictLevel']
+        );
+        assert.equal(detailBody.receipt.receiptId, detailBody.verdict.receiptId);
+        assert.match(detailBody.receipt.hashPrefix, /^[0-9a-f]{12}$/);
+        assert.equal(detailBody.receipt.chained, false, 'first receipt is genesis, not chained');
+        assert.equal(typeof detailBody.receipt.hmacPresent, 'boolean');
+        assert.equal(detailBody.receipt.specVersion, 1);
+        assert.equal(detailBody.receipt.verdictLevel, 'allow');
+        assert.equal(typeof detailBody.receipt.createdAt, 'string');
 
         const receiptRoute = await call(`/api/v1/consumers/receipto/requests/${traceId}/receipt`);
         assert.equal(receiptRoute.status, 200);
@@ -333,6 +345,10 @@ describe('HTTP contract — CR-010/011 routes', () => {
         assert.equal(receipt.traceId, traceId);
         assert.equal(receipt.prevHash, 'GENESIS');
         assert.match(receipt.hash, /^[0-9a-f]{64}$/);
+        assert.equal(detailBody.receipt.hashPrefix, receipt.hash.slice(0, 12));
+        // The digest is not a secret: a third party must be able to recompute/verify it (V3).
+        assert.equal(detailBody.receipt.hash, receipt.hash);
+        assert.equal(detailBody.receipt.hmacPresent, receipt.hmac !== null && receipt.hmac !== '');
 
         // issue-or-get: the receipt route is idempotent per trace
         const again = await call(`/api/v1/consumers/receipto/requests/${traceId}/receipt`);

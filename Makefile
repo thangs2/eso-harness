@@ -66,7 +66,8 @@ verify: ## Provider-neutral full verification (host gates + CP/host/UI tests)
 cross-host-smoke: ## Repeatable cross-host flow smoke (dry by default)
 	node scripts/ci/cross-host-smoke.mjs
 
-check: ## Static checks only: shell syntax, compose config, build dry-run
+check: ## Static checks only: shell syntax, compose config, build dry-run, sdlc gate
 	find deploy/bin -name "*.sh" -exec bash -n {} +
 	$(COMPOSE) --env-file $(CHECK_ENV_FILE) -f $(COMPOSE_FILE) config -q
 	@$(MAKE) --no-print-directory -n build
+	node scripts/check-sdlc-gate.mjs

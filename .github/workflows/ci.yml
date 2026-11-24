@@ -30,6 +30,26 @@ jobs:
       - name: Dual harness invariant
         run: node scripts/check-dual-harness.mjs
 
+  sdlc:
+    name: sdlc gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Generated host trees are in sync
+        run: node scripts/build-host-trees.mjs --check
+      - name: Dual harness invariant
+        run: node scripts/check-dual-harness.mjs
+      - name: SDLC gate (X16 artifact contract)
+        run: node scripts/check-sdlc-gate.mjs
+      - name: Non-DB qc tests
+        run: node --test qc/eso-request-detail-layout.test.mjs qc/eso-request-verdict-ui.test.mjs qc/eso-observatory-behaviors.test.mjs qc/eso-events-ui.test.mjs qc/eso-surfaces.test.mjs
+
   shell:
     name: deploy shell
     runs-on: ubuntu-latest

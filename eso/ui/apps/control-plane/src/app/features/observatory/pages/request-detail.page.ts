@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } 
 import { MatButtonModule } from '@angular/material/button';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { CONTROL_PLANE_API_CLIENT } from '../../../core/tokens.js';
-import type { ObservationDto, RequestDetailDto } from '../../../../../../../libs/api-client/types.js';
+import type { ObservationDto, RequestDetailDto, RequestReceiptSummaryDto } from '../../../../../../../libs/api-client/types.js';
 
 type TabKey = 'waterfall' | 'topology' | 'decisions' | 'rules' | 'telemetry';
 
@@ -81,6 +81,12 @@ interface TurnVerdictView {
 
 /** The shared detail DTO predates P2; the verdict rides on the same payload, so it is added here. */
 type RequestDetailWithVerdict = RequestDetailDto & { verdict?: TurnVerdictView | null };
+
+/**
+ * Q5 — the only three states the page may report for server-side verification. It starts at
+ * `unavailable`: nothing is called verified until the verify route itself said so.
+ */
+type ReceiptVerificationState = 'verified' | 'failed' | 'unavailable';
 
 interface ActionEventView {
     id: string;
@@ -312,8 +318,27 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
                         @if (verdict(); as v) {
                             <div class="verdict-block">
                                 <h3><span class="q-no">Q5</span> Integrity</h3>
-                                <p class="receipt-line">Receipt <code>{{ receiptLabel(v.receiptId) }}</code></p>
-                                @if (!v.receiptId) { <p class="hint">No receipt was issued for this turn; nothing is claimed to be signed.</p> }
+                                @if (receipt(); as r) {
+                                    <p class="receipt-line">Receipt <code>{{ r.receiptId }}</code></p>
+                                    <dl class="receipt-facts">
+                                        <div><dt>Hash</dt><dd>@if (r.hashPrefix) { <code>{{ r.hashPrefix }}</code>… } @else { not returned }</dd></div>
+                                        <div><dt>Chain</dt><dd>{{ r.chained ? 'chained' : 'genesis' }}</dd></div>
+                                        <div><dt>HMAC</dt><dd>{{ r.hmacPresent ? 'HMAC present' : 'HMAC absent' }}</dd></div>
+                                        <div><dt>Spec</dt><dd>v{{ r.specVersion }} · {{ r.verdictLevel }}</dd></div>
+                                        <div><dt>Issued</dt><dd><time>{{ relative(r.createdAt) }}</time></dd></div>
+                                    </dl>
+                                    @if (receiptVerification() === 'verified') {
+                                        <p class="receipt-verify" data-state="verified"><span class="badge ok">Verified · hash ok</span></p>
+                                    } @else if (receiptVerification() === 'failed') {
+                                        <p class="receipt-verify" data-state="failed"><span class="badge bad">Verification failed</span></p>
+                                    } @else {
+                                        <p class="receipt-verify" data-state="unavailable"><span class="badge muted">Verification unavailable</span></p>
+                                    }
+                                } @else {
+                                    <p class="receipt-line">Receipt <code>{{ receiptLabel(v.receiptId) }}</code></p>
+                                    @if (!v.receiptId) { <p class="hint">No receipt was issued for this turn; nothing is claimed to be signed.</p> }
+                                    <p class="hint">No receipt summary was returned, so integrity cannot be checked.</p>
+                                }
                             </div>
                             <div class="verdict-block">
                                 <h3><span class="q-no">Q6</span> What next</h3>
@@ -602,6 +627,12 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
         .action-row code { color: var(--brand); overflow-wrap: anywhere; }
         .receipt-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); margin: 0; font-size: var(--text-sm); color: var(--muted); }
         .receipt-line code { color: var(--brand); overflow-wrap: anywhere; }
+        .receipt-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--space-2) var(--space-4); margin: 0; }
+        .receipt-facts div { display: grid; gap: var(--space-1); min-width: 0; }
+        .receipt-facts dt { color: var(--muted); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .06em; }
+        .receipt-facts dd { margin: 0; color: var(--ink); font-size: var(--text-sm); overflow-wrap: anywhere; }
+        .receipt-facts code { color: var(--brand); }
+        .receipt-verify { margin: 0; }
         .next-step { margin: 0; padding: var(--space-3); border: 1px solid #1e2a3e; border-left: 3px solid var(--brand); border-radius: var(--radius-sm); background: #0d1118; color: var(--ink); font-size: var(--text-sm); }
         .next-codes { grid-auto-flow: column; justify-content: start; }
         .next-codes li { padding: var(--space-1) var(--space-2); border: 1px solid rgba(224,179,65,.4); border-radius: var(--radius-sm); background: rgba(224,179,65,.1); color: var(--warn-ink); font-size: var(--text-xs); }
@@ -613,6 +644,8 @@ export class RequestDetailPage implements OnInit {
     private readonly route = inject(ActivatedRoute);
     /** V2 telemetry: one in-memory session id per page load, never persisted. */
     private readonly uiSession = crypto.randomUUID();
+    /** Guards against double-load races (route + query subscriptions) re-verifying or overwriting. */
+    private loadSeq = 0;
 
     readonly loading = signal(true);
     readonly error = signal('');
@@ -734,6 +767,12 @@ export class RequestDetailPage implements OnInit {
     /** P2 — ESO's adjudication of this turn; never derived from prompt text or worker status. */
     readonly verdict = computed<TurnVerdictView | null>(() => this.detail()?.verdict ?? null);
 
+    /** P5a — receipt summary for Q5; absent on payloads that predate the field, never fabricated. */
+    readonly receipt = computed<RequestReceiptSummaryDto | null>(() => this.detail()?.receipt ?? null);
+
+    /** Q5 — starts "unavailable"; only the server verify route can move it to verified/failed. */
+    readonly receiptVerification = signal<ReceiptVerificationState>('unavailable');
+
     /** Q4 — only the events the host actually reported as actions, with no inferred fields. */
     readonly actionEvents = computed<ActionEventView[]>(() => (this.detail()?.events ?? [])
         .filter((event) => event.event === 'action.recorded')
@@ -787,15 +826,37 @@ export class RequestDetailPage implements OnInit {
     }
 
     private async load(): Promise<void> {
+        const seq = ++this.loadSeq;
         if (!this.api) { this.error.set('API client unavailable'); this.loading.set(false); return; }
         const query = this.route.snapshot.queryParamMap;
         this.consumerId.set(query.get('consumer') || 'fineso');
+        // Q5 — a new load invalidates the previous verdict; nothing is claimed verified until re-checked.
+        this.receiptVerification.set('unavailable');
+        let loaded: RequestDetailWithVerdict | null = null;
         try {
-            this.detail.set(await this.api.getRequestDetail(this.consumerId(), this.requestId()));
+            loaded = await this.api.getRequestDetail(this.consumerId(), this.requestId());
+            if (seq !== this.loadSeq) return;
+            this.detail.set(loaded);
         } catch (error) {
+            if (seq !== this.loadSeq) return;
             this.error.set((error as { detail?: string; message?: string })?.detail || (error as Error)?.message || 'Unable to load request');
         } finally {
-            this.loading.set(false);
+            if (seq === this.loadSeq) this.loading.set(false);
+        }
+        const receiptId = loaded?.receipt?.receiptId ?? loaded?.verdict?.receiptId ?? '';
+        if (receiptId) await this.verifyReceipt(seq, receiptId);
+    }
+
+    /** Q5 — one verify per loaded request; a failed call is "unavailable", never "verified". */
+    private async verifyReceipt(seq: number, receiptId: string): Promise<void> {
+        if (!this.api) return;
+        try {
+            const result = await this.api.verifyReceipt(this.consumerId(), receiptId);
+            if (seq !== this.loadSeq) return;
+            this.receiptVerification.set(result.ok && result.hashMatches ? 'verified' : 'failed');
+        } catch {
+            if (seq !== this.loadSeq) return;
+            this.receiptVerification.set('unavailable');
         }
     }
 

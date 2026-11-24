@@ -615,6 +615,28 @@ export interface RequestDetailDto {
         tools: unknown[];
         files: unknown[];
     };
+    /** P5a — receipt summary; absent on detail payloads produced before P5a. */
+    receipt?: RequestReceiptSummaryDto | null;
+}
+
+/** P5a — receipt summary on `detail.receipt`. The full hash is never part of this shape. */
+export interface RequestReceiptSummaryDto {
+    receiptId: string;
+    /** First 12 hex chars of the sealed digest. */
+    hashPrefix: string;
+    hmacPresent: boolean;
+    chained: boolean;
+    specVersion: number;
+    verdictLevel: 'allow' | 'deny' | 'partial' | 'unknown';
+    createdAt: string;
+}
+
+/** P4 — result of GET /consumers/:id/receipts/:receiptId/verify. */
+export interface ReceiptVerificationDto {
+    ok: boolean;
+    hashMatches: boolean;
+    hmacMatches: boolean;
+    chained: boolean;
 }
 
 export interface ConsumerListResponse {

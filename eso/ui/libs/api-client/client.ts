@@ -45,6 +45,7 @@ import type {
     ObservationDto,
     RequestSummaryDto,
     RequestDetailDto,
+    ReceiptVerificationDto,
     PromptSummaryDto,
     LegacyHarnessReportDto,
     LegacyHarnessArchiveDto,
@@ -488,6 +489,15 @@ export class ControlPlaneApiClient {
         });
         if (!res.ok) throw await this.problem(res);
         return await res.json() as RequestDetailDto;
+    }
+
+    /** P4/P5a — re-verify one sealed receipt; the server recomputes the hash, the client never does. */
+    async verifyReceipt(id: string, receiptId: string): Promise<ReceiptVerificationDto> {
+        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/receipts/${encodeURIComponent(receiptId)}/verify`, {
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return await res.json() as ReceiptVerificationDto;
     }
 
     async getConsumerObservations(id: string, limit = 100): Promise<ObservationDto[]> {

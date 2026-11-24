@@ -5,7 +5,7 @@ import {
     checkFlowDanglingWorkers,
 } from '../eso/iam/src/index.mjs';
 
-test('SCN-IAM-27 (AC-IAM-07-03): Active flow referencing retired worker surfaces DANGLING_FLOW (not silently ignored)', () => {
+test('SCN-IAM-27 (legacy IAM AC retired): Active flow referencing retired worker surfaces DANGLING_FLOW (not silently ignored)', () => {
     const workers = [
         { worker_id: 'worker-lead', state: 'active' },
         { worker_id: 'worker-retired-peer', state: 'retired' },
