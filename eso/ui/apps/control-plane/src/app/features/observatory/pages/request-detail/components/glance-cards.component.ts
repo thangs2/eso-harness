@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, signal } from '@angular/core';
 import { SectionHintComponent, type SectionHintItem } from '../../../../../shared/section-hint.component.js';
+import { VerdictGuideComponent } from './verdict-guide.component.js';
 import {
     relativeTime,
     writeGateActorOf,
@@ -22,7 +23,7 @@ import {
 @Component({
     selector: 'eso-glance-cards',
     standalone: true,
-    imports: [SectionHintComponent],
+    imports: [SectionHintComponent, VerdictGuideComponent],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <section class="glance-grid top-grid" aria-label="Request at a glance">
@@ -31,6 +32,7 @@ import {
                     <h2>Turn verdict</h2>
                     <div class="card-actions">
                         <eso-section-hint [summary]="hintVerdict.summary" [items]="hintVerdict.items" />
+                        <button type="button" class="mini-btn" (click)="guide.open()">Full explanation</button>
                         @if (verdict(); as v) { <span class="verdict-level-badge" [class]="'level-' + v.level">{{ v.level }}</span> }
                     </div>
                 </header>
@@ -70,6 +72,7 @@ import {
                     <p class="verdict-basis">The API response for this request carried no verdict.</p>
                 }
             </section>
+            <eso-verdict-guide #guide [verdict]="verdict()" />
 
             <section class="panel gate-card" aria-label="Write gate">
                 <header class="panel-head">
