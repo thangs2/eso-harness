@@ -125,6 +125,18 @@ function unique(values) {
 /* ------------------------------------------------------------------ */
 
 function detectPreflight(detail) {
+    // P6a: a host-reported `detail.signals.preflight.state` is direct proof (B0-1).
+    const reported = detail?.signals?.preflight;
+    if (reported && typeof reported === 'object') {
+        const state = str(reported.state);
+        if (/^(HOT|WARM|COLD)$/.test(state)) {
+            const fingerprint = str(reported.fingerprint);
+            return {
+                present: true,
+                evidence: `detail.signals.preflight.state=${state}${fingerprint ? ` · fingerprint ${clip(fingerprint, 40)}` : ''}`,
+            };
+        }
+    }
     const events = arr(detail?.events).filter((event) => /preflight|consent/i.test(str(event?.event)));
     const checks = arr(detail?.checks).filter(
         (check) => /preflight|consent|fingerprint/i.test(str(check?.checkId)) && /pass|ok/i.test(str(check?.status)),
@@ -229,6 +241,19 @@ function eventReconCalls(detail) {
 }
 
 function detectRecon(detail) {
+    // P6a: `detail.signals.recon` is the host's own call count for this turn (B0-4).
+    const reported = detail?.signals?.recon;
+    if (Array.isArray(reported)) {
+        const calls = reported.reduce((sum, entry) => sum + (num(entry?.calls) ?? 0), 0);
+        const names = unique(reported.map((entry) => str(entry?.adapter)));
+        if (calls > 0) {
+            return {
+                present: true,
+                evidence: `detail.signals.recon: ${names.length} adapter(s) · ${calls} call(s)${names.length ? ` (${names.slice(0, 2).join(', ')})` : ''}`,
+            };
+        }
+        return { present: false, evidence: 'detail.signals.recon reports 0 call(s) — adapters configured, none called' };
+    }
     const adapters = arr(detail?.recon);
     const configured = adapters.length;
     const calls = adapters.reduce((sum, adapter) => sum + (num(adapter?.calls) ?? 0), 0);
@@ -313,6 +338,12 @@ function detectSufficiencyAndReceipt(detail) {
 }
 
 function detectBrainTier(detail) {
+    // P6a: `detail.signals.brainTier` is the tier the host routed through (B0-6).
+    const reported = str(detail?.signals?.brainTier);
+    if (/^(zero|flash|pro)$/.test(reported)) {
+        const calls = arr(detail?.telemetry?.llmCalls).length;
+        return { present: true, evidence: `detail.signals.brainTier=${reported} · ${calls} call(s)` };
+    }
     const hits = collectKeyed(detail, ['tier', 'brainTier', 'brain_tier', 'brain']);
     const tiers = [];
     for (const { key, value } of hits) {
@@ -357,6 +388,18 @@ function detectActions(detail) {
 }
 
 function detectMemory(detail) {
+    // P6a: `detail.signals.distill.memorySaved === true` is the host's own distill proof (B0-8).
+    const reported = detail?.signals?.distill;
+    if (reported && typeof reported === 'object') {
+        const saved = reported.memorySaved === true;
+        const lessons = num(reported.lessons);
+        return {
+            present: saved,
+            evidence: saved
+                ? `detail.signals.distill.memorySaved=true${lessons != null ? ` · ${lessons} lesson(s)` : ''}`
+                : 'detail.signals.distill.memorySaved=false — memory not saved',
+        };
+    }
     const events = arr(detail?.events).filter((event) => /distill|memory/i.test(str(event?.event)));
     if (events.length > 0) {
         const sample = events[0];
@@ -595,6 +638,24 @@ export function fixtureDetail() {
 
 export function fixtureTurns() {
     return [{ turn_id: 'fixture-b0-01', at: '2026-11-24T00:00:00.000Z', detail: fixtureDetail() }];
+}
+
+/**
+ * P6a fixture: the same turn with `detail.signals` and the legacy recon evidence removed, so
+ * B0-1/B0-4/B0-6/B0-8 can only pass through the signals projection. Scoring this alongside
+ * `fixtureDetail()` proves the signal path raises B0 instead of relying on the old detectors.
+ */
+export function fixtureSignalDetail() {
+    const detail = fixtureDetail();
+    detail.recon = [];
+    for (const event of detail.events) delete event.evidence.recon;
+    detail.signals = {
+        preflight: { state: 'HOT', fingerprint: 'G1:fixture' },
+        recon: [{ adapter: 'codegraph', calls: 2 }, { adapter: 'docgraph', calls: 1 }],
+        brainTier: 'flash',
+        distill: { memorySaved: true, lessons: 2 },
+    };
+    return detail;
 }
 
 /* ------------------------------------------------------------------ */

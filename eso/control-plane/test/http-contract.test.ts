@@ -239,6 +239,66 @@ describe('HTTP contract — CR-010/011 routes', () => {
         assert.match(String(body.detail), /winner/);
     });
 
+    test('P6a — detail.signals: null for a legacy decision, echoes seeded signals, no back-fill', async () => {
+        const { call } = await fixture();
+        const { mkdtempSync } = await import('node:fs');
+        const { tmpdir } = await import('node:os');
+        const { join } = await import('node:path');
+        const root = mkdtempSync(join(tmpdir(), 'eso-http-signals-'));
+        const consumer = await call('/api/v1/consumers', {
+            method: 'POST',
+            body: JSON.stringify({ id: 'signalo', name: 'Signalo', root }),
+        });
+        assert.ok([200, 201].includes(consumer.status), `create consumer: ${consumer.status}`);
+
+        const post = (traceId: string, event: string, evidence: Record<string, unknown>, at: string) =>
+            call('/api/v1/consumers/signalo/observations', {
+                method: 'POST',
+                body: JSON.stringify({ traceId, hostId: 'cursor', runtimeKey: 'cursor:cursor-agent', event, evidence, at }),
+            });
+        const stored = async (traceId: string, event: string, evidence: Record<string, unknown>, at: string) => {
+            const res = await post(traceId, event, evidence, at);
+            assert.ok([200, 201].includes(res.status), `${event}: ${res.status}`);
+        };
+
+        // A decision that predates P6a reports no signal keys ⇒ signals is null, never inferred.
+        await stored('trace-p6-legacy', 'prompt.submitted', { userQuery: 'legacy turn' }, '2026-11-24T01:00:00.000Z');
+        await stored('trace-p6-legacy', 'decision.recorded', { winner: 'plan', verdict: 'allow', basis: 'core.slp' }, '2026-11-24T01:00:01.000Z');
+        const legacy = await call('/api/v1/consumers/signalo/requests/trace-p6-legacy');
+        assert.equal(legacy.status, 200);
+        assert.equal((await legacy.json() as any).signals, null);
+
+        // Seeded signals are echoed verbatim. A later decision without signals must not erase them:
+        // the latest *carrier* row wins.
+        const signals = {
+            preflight: { state: 'HOT', fingerprint: 'G1:abc' },
+            recon: [{ adapter: 'codegraph', calls: 2 }, { adapter: 'docgraph', calls: 1 }],
+            brainTier: 'flash',
+            distill: { memorySaved: true, lessons: 3 },
+        };
+        const traceId = 'trace-p6-signals';
+        await stored(traceId, 'prompt.submitted', { userQuery: 'signals please' }, '2026-11-24T02:00:00.000Z');
+        await stored(traceId, 'decision.recorded', { winner: 'plan', verdict: 'allow', basis: 'core.slp build then verify', ...signals }, '2026-11-24T02:00:01.000Z');
+        await stored(traceId, 'decision.recorded', { winner: 'plan', verdict: 'allow', basis: 'later decision without signals' }, '2026-11-24T02:00:02.000Z');
+
+        const detail = await call(`/api/v1/consumers/signalo/requests/${traceId}`);
+        assert.equal(detail.status, 200);
+        assert.deepEqual((await detail.json() as any).signals, signals);
+
+        // Partial carrier: sub-fields it omits are null, not back-filled from another row.
+        const partial = 'trace-p6-partial';
+        await stored(partial, 'prompt.submitted', { userQuery: 'partial signals' }, '2026-11-24T03:00:00.000Z');
+        await stored(partial, 'decision.recorded', { winner: 'plan', verdict: 'allow', basis: 'tier only', brainTier: 'zero' }, '2026-11-24T03:00:01.000Z');
+        const partialDetail = await call(`/api/v1/consumers/signalo/requests/${partial}`);
+        assert.equal(partialDetail.status, 200);
+        assert.deepEqual((await partialDetail.json() as any).signals, {
+            preflight: null,
+            recon: null,
+            brainTier: 'zero',
+            distill: null,
+        });
+    });
+
     test('P2 — detail carries verdict; verdict route matches; silent trace ⇒ unknown + HOST_SILENT', async () => {
         const { call } = await fixture();
         const { mkdtempSync } = await import('node:fs');

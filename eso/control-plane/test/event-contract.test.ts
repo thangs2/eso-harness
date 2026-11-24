@@ -78,6 +78,79 @@ describe('P1 event contract — decision.recorded', () => {
     });
 });
 
+describe('P6a event contract — decision signals', () => {
+    const signalEvidence = () => ({
+        ...validDecision(),
+        preflight: { state: 'HOT', fingerprint: 'G1:abc' },
+        recon: [{ adapter: 'codegraph', calls: 2 }, { adapter: 'docgraph', calls: 1 }],
+        brainTier: 'flash',
+        distill: { memorySaved: true, lessons: 2 },
+    });
+
+    test('accepts all four optional signals', () => {
+        assert.deepEqual(validateObservedEvent('decision.recorded', signalEvidence()), { ok: true });
+    });
+
+    test('accepts each signal on its own', () => {
+        for (const patch of [
+            { preflight: { state: 'COLD' } },
+            { preflight: { state: 'WARM', fingerprint: 'G2' } },
+            { recon: [] },
+            { recon: [{ adapter: 'codegraph', calls: 0 }] },
+            { brainTier: 'zero' },
+            { brainTier: 'pro' },
+            { distill: { memorySaved: false } },
+            { distill: { memorySaved: true, lessons: 0 } },
+        ]) {
+            assert.deepEqual(validateObservedEvent('decision.recorded', { ...validDecision(), ...patch }), { ok: true });
+        }
+    });
+
+    test('absent signals stay absent — no defaults are added', () => {
+        const { preflight, recon, brainTier, distill, ...rest } = signalEvidence();
+        void preflight;
+        void recon;
+        void brainTier;
+        void distill;
+        assert.deepEqual(rest, validDecision());
+        for (const key of ['preflight', 'recon', 'brainTier', 'distill']) assert.equal(key in rest, false);
+        assert.deepEqual(validateObservedEvent('decision.recorded', rest), { ok: true });
+    });
+
+    test('rejects a malformed preflight and names the field', () => {
+        expectInvalid('decision.recorded', { ...validDecision(), preflight: 'HOT' }, /preflight/);
+        expectInvalid('decision.recorded', { ...validDecision(), preflight: { state: 'warm' } }, /preflight\.state/);
+        expectInvalid('decision.recorded', { ...validDecision(), preflight: { state: 'HOT', fingerprint: 7 } }, /preflight\.fingerprint/);
+    });
+
+    test('rejects a malformed recon and names the field', () => {
+        expectInvalid('decision.recorded', { ...validDecision(), recon: {} }, /evidence\.recon/);
+        expectInvalid('decision.recorded', { ...validDecision(), recon: ['codegraph'] }, /recon\[0\]/);
+        expectInvalid('decision.recorded', { ...validDecision(), recon: [{ calls: 1 }] }, /recon\[0\]\.adapter/);
+        expectInvalid('decision.recorded', { ...validDecision(), recon: [{ adapter: 'codegraph' }] }, /recon\[0\]\.calls/);
+        expectInvalid('decision.recorded', { ...validDecision(), recon: [{ adapter: 'codegraph', calls: '2' }] }, /recon\[0\]\.calls/);
+        expectInvalid('decision.recorded', { ...validDecision(), recon: [{ adapter: 'codegraph', calls: -1 }] }, /recon\[0\]\.calls/);
+    });
+
+    test('rejects a malformed brainTier and names the field', () => {
+        expectInvalid('decision.recorded', { ...validDecision(), brainTier: 'turbo' }, /brainTier/);
+        expectInvalid('decision.recorded', { ...validDecision(), brainTier: 1 }, /brainTier/);
+    });
+
+    test('rejects a malformed distill and names the field', () => {
+        expectInvalid('decision.recorded', { ...validDecision(), distill: [] }, /distill/);
+        expectInvalid('decision.recorded', { ...validDecision(), distill: { memorySaved: 'yes' } }, /distill\.memorySaved/);
+        expectInvalid('decision.recorded', { ...validDecision(), distill: { memorySaved: true, lessons: -1 } }, /distill\.lessons/);
+        expectInvalid('decision.recorded', { ...validDecision(), distill: { memorySaved: true, lessons: 1.5 } }, /distill\.lessons/);
+    });
+
+    test('does not rewrite signal values', () => {
+        const evidence = signalEvidence();
+        validateObservedEvent('decision.recorded', evidence);
+        assert.deepEqual(evidence, signalEvidence());
+    });
+});
+
 describe('P1 event contract — action.recorded', () => {
     const validAction = () => ({
         tool: 'apply_patch',

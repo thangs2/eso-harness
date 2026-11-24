@@ -20,6 +20,14 @@ export type ContractEventKind = (typeof CONTRACT_EVENT_KINDS)[number];
 export const DECISION_VERDICTS = ['allow', 'deny', 'partial', 'unknown'] as const;
 export type DecisionVerdict = (typeof DECISION_VERDICTS)[number];
 
+/** P6a — host-reported preflight bucket on a decision (B0-1). */
+export const PREFLIGHT_STATES = ['HOT', 'WARM', 'COLD'] as const;
+export type PreflightState = (typeof PREFLIGHT_STATES)[number];
+
+/** P6a — host-reported brain tier on a decision (B0-6). */
+export const BRAIN_TIERS = ['zero', 'flash', 'pro'] as const;
+export type BrainTier = (typeof BRAIN_TIERS)[number];
+
 export const ACTION_OUTCOMES = ['PASS', 'FAIL', 'BLOCKED'] as const;
 export type ActionOutcome = (typeof ACTION_OUTCOMES)[number];
 
@@ -38,6 +46,25 @@ export interface EvidenceActor {
     role?: string;
 }
 
+/**
+ * P6a — optional host-reported signals on `decision.recorded`. Absent keys stay absent: the
+ * contract never defaults them, so a detail can tell "not reported" from "reported as X".
+ */
+export interface DecisionPreflightSignal {
+    state: PreflightState;
+    fingerprint?: string;
+}
+
+export interface DecisionReconSignal {
+    adapter: string;
+    calls: number;
+}
+
+export interface DecisionDistillSignal {
+    memorySaved: boolean;
+    lessons?: number;
+}
+
 export interface DecisionEvidence {
     winner: string;
     verdict: DecisionVerdict;
@@ -48,6 +75,14 @@ export interface DecisionEvidence {
     hil?: boolean;
     actor?: EvidenceActor;
     schemaVersion?: number;
+    /** P6a — B0-1: preflight bucket (and optional fingerprint) the host actually ran. */
+    preflight?: DecisionPreflightSignal;
+    /** P6a — B0-4: recon adapter calls the host actually made. */
+    recon?: DecisionReconSignal[];
+    /** P6a — B0-6: brain tier the host actually routed through. */
+    brainTier?: BrainTier;
+    /** P6a — B0-8: whether distillation saved a memory. */
+    distill?: DecisionDistillSignal;
 }
 
 export interface ActionEvidence {
@@ -159,6 +194,19 @@ function optionalStringArray(object: UnknownRecord, key: string, field: string):
     }
 }
 
+function requiredNumber(object: UnknownRecord, key: string, field: string, options: { integer?: boolean; min?: number } = {}): void {
+    if (!hasValue(object[key])) invalid(`${field}.${key} is required (number)`);
+    optionalNumber(object, key, field, options);
+}
+
+function optionalEnum(object: UnknownRecord, key: string, field: string, allowed: readonly string[]): void {
+    if (!hasValue(object[key])) return;
+    const value = object[key];
+    if (typeof value !== 'string' || !allowed.includes(value)) {
+        invalid(`${field}.${key} must be one of ${allowed.join('|')}`);
+    }
+}
+
 function validateSchemaVersionAndActor(evidence: UnknownRecord): void {
     if (hasValue(evidence.schemaVersion)) {
         const version = evidence.schemaVersion;
@@ -181,6 +229,32 @@ function validateSchemaVersionAndActor(evidence: UnknownRecord): void {
     }
 }
 
+function validateDecisionSignals(evidence: UnknownRecord): void {
+    if (hasValue(evidence.preflight)) {
+        const preflight = asObject(evidence.preflight, 'evidence.preflight');
+        if (typeof preflight.state !== 'string' || !(PREFLIGHT_STATES as readonly string[]).includes(preflight.state)) {
+            invalid(`evidence.preflight.state must be one of ${PREFLIGHT_STATES.join('|')}`);
+        }
+        optionalString(preflight, 'fingerprint', 'evidence.preflight');
+    }
+    if (hasValue(evidence.recon)) {
+        if (!Array.isArray(evidence.recon)) invalid('evidence.recon must be an array');
+        evidence.recon.forEach((entry, index) => {
+            const call = asObject(entry, `evidence.recon[${index}]`);
+            requiredString(call, 'adapter', `evidence.recon[${index}]`);
+            requiredNumber(call, 'calls', `evidence.recon[${index}]`, { integer: true, min: 0 });
+        });
+    }
+    optionalEnum(evidence, 'brainTier', 'evidence', BRAIN_TIERS);
+    if (hasValue(evidence.distill)) {
+        const distill = asObject(evidence.distill, 'evidence.distill');
+        if (typeof distill.memorySaved !== 'boolean') {
+            invalid('evidence.distill.memorySaved must be a boolean');
+        }
+        optionalNumber(distill, 'lessons', 'evidence.distill', { integer: true, min: 0 });
+    }
+}
+
 function validateDecisionRecorded(evidence: UnknownRecord): void {
     requiredString(evidence, 'winner', 'evidence');
     if (typeof evidence.verdict !== 'string' || !(DECISION_VERDICTS as readonly string[]).includes(evidence.verdict)) {
@@ -199,6 +273,7 @@ function validateDecisionRecorded(evidence: UnknownRecord): void {
             optionalNumber(ref, 'line', `evidence.refs[${index}]`, { integer: true, min: 1 });
         });
     }
+    validateDecisionSignals(evidence);
 }
 
 function validateActionRecorded(evidence: UnknownRecord): void {

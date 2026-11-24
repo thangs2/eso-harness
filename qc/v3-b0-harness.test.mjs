@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { FIXTURE_SECRETS, deriveTruth } from '../scripts/v3-replay.mjs';
+import { fixtureDetail, fixtureSignalDetail, scoreDetail } from '../scripts/b0-baseline.mjs';
 
 // P0.2 measurement harness: both scripts must run offline in fixture mode so CI never needs a
 // control plane, and the V3 scorer must gate on the 8/10 turn target. Every script invocation goes
@@ -145,6 +146,42 @@ test('b0 --fixture: ten items, numeric score, deterministic', (t) => {
 
     const strip = ({ generatedAt, ...rest }) => rest;
     assert.deepEqual(strip(readJson(second)), strip(report), 'same fixture must produce the same report');
+});
+
+test('b0 signals fixture: detail.signals raises B0-1/4/6/8 without legacy evidence', () => {
+    const row = (items, id) => items.find((item) => item.id === id);
+    const legacy = scoreDetail(fixtureDetail());
+    const signalled = scoreDetail(fixtureSignalDetail());
+
+    assert.ok(
+        signalled.filter((item) => item.present).length > legacy.filter((item) => item.present).length,
+        'signals must score higher than the legacy fixture',
+    );
+    assert.equal(row(legacy, 'B0-1').present, false);
+    assert.equal(row(legacy, 'B0-6').present, false);
+    assert.equal(row(legacy, 'B0-8').present, false);
+
+    const proofs = {
+        'B0-1': /detail\.signals\.preflight\.state=HOT/,
+        'B0-4': /detail\.signals\.recon: .*3 call\(s\)/,
+        'B0-6': /detail\.signals\.brainTier=flash/,
+        'B0-8': /detail\.signals\.distill\.memorySaved=true/,
+    };
+    for (const [id, pattern] of Object.entries(proofs)) {
+        const item = row(signalled, id);
+        assert.equal(item.present, true, `${id} should be proven by signals`);
+        assert.match(item.evidence, pattern, `${id} evidence must name the proving field`);
+    }
+
+    // A host that reports "not saved" / "0 calls" is not proof; the signal does not fall back.
+    const denied = fixtureSignalDetail();
+    denied.signals.distill = { memorySaved: false };
+    denied.signals.recon = [{ adapter: 'codegraph', calls: 0 }];
+    const deniedRows = scoreDetail(denied);
+    assert.equal(row(deniedRows, 'B0-8').present, false);
+    assert.match(row(deniedRows, 'B0-8').evidence, /memorySaved=false/);
+    assert.equal(row(deniedRows, 'B0-4').present, false);
+    assert.match(row(deniedRows, 'B0-4').evidence, /0 call\(s\)/);
 });
 
 test('v3 --score: 8/10 passes (0), 6/10 fails (1), malformed answers exit 2', (t) => {

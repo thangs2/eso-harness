@@ -30,7 +30,35 @@ interface Stage {
     errorCode: string;
 }
 
-const PIPELINE: string[] = ['worker-scout', 'worker-plan', 'worker-build', 'worker-verify', 'worker-audit', 'worker-qc', 'worker-qc-2', 'worker-fixbug'];
+/** B0-10 — a configured pipeline step, straight from `detail.pipeline` (never a local order). */
+interface ConfiguredGraphStep {
+    workerId: string;
+    label: string;
+    status: string;
+}
+
+/** B0-10 — one worker that actually reported a runtime event; ordered by first observation. */
+interface ObservedGraphStep {
+    workerId: string;
+    label: string;
+    outcome: string;
+    event: string;
+    at: string;
+}
+
+/** `missing` / `extra` win over `matches`; `reordered` = same workers, different order. */
+type DivergenceKind = 'matches' | 'missing' | 'extra' | 'reordered' | 'empty';
+
+interface RuntimeDivergence {
+    kind: DivergenceKind;
+    missing: string[];
+    extra: string[];
+    configuredCount: number;
+    observedCount: number;
+}
+
+/** Only these host events prove a worker joined the runtime path; nothing else is inferred. */
+const OBSERVED_WORKER_EVENTS: ReadonlySet<string> = new Set(['worker.remote.completed', 'worker.completed', 'prompt.submitted']);
 
 const WORKER_LABEL: Record<string, string> = {
     'worker-scout': 'Scout',
@@ -258,6 +286,62 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
                             @for (stage of stages(); track stage.workerId) {
                                 <span class="flow-arrow">→</span>
                                 <div class="flow-node" [class.ok]="stage.status === 'PASS'" [class.bad]="stage.status === 'FAIL' || stage.status === 'BLOCKED'"><strong>{{ stage.label }}</strong><small>{{ stage.status }}</small></div>
+                            }
+                        </div>
+
+                        <div class="runtime-compare">
+                            <section class="runtime-column" aria-label="Configured pipeline">
+                                <header class="runtime-column-head"><h3>Configured</h3><small>{{ configuredGraph().length }} step(s)</small></header>
+                                @for (step of configuredGraph(); track step.workerId; let index = $index) {
+                                    <div class="runtime-row">
+                                        <span class="runtime-no">{{ index + 1 }}</span>
+                                        <span class="runtime-name"><strong>{{ step.label }}</strong><small>{{ step.workerId }}</small></span>
+                                        <span class="badge" [class.ok]="step.status === 'PASS'" [class.warn]="step.status === 'FAIL' || step.status === 'BLOCKED'" [class.muted]="!step.status">{{ step.status || '—' }}</span>
+                                    </div>
+                                } @empty {
+                                    <p class="hint">No configured pipeline steps (host did not return a pipeline).</p>
+                                }
+                            </section>
+                            <section class="runtime-column" aria-label="Observed worker path">
+                                <header class="runtime-column-head"><h3>Observed</h3><small>{{ observedGraph().length }} worker(s)</small></header>
+                                @for (worker of observedGraph(); track worker.workerId; let index = $index) {
+                                    <div class="runtime-row">
+                                        <span class="runtime-no">{{ index + 1 }}</span>
+                                        <span class="runtime-name"><strong>{{ worker.label }}</strong><small>{{ worker.event }} · {{ formatAt(worker.at) }}</small></span>
+                                        <span class="badge" [class.ok]="worker.outcome === 'PASS'" [class.warn]="worker.outcome === 'FAIL' || worker.outcome === 'BLOCKED'" [class.muted]="!worker.outcome || worker.outcome === '—'">{{ worker.outcome }}</span>
+                                    </div>
+                                } @empty {
+                                    <p class="hint">No observed worker path (host did not report worker events)</p>
+                                }
+                            </section>
+                        </div>
+
+                        <div class="runtime-divergence" [attr.data-kind]="divergence().kind" aria-label="Configured vs observed divergence">
+                            <div class="divergence-head">
+                                <span class="eyebrow">Divergence</span>
+                                @switch (divergence().kind) {
+                                    @case ('matches') { <span class="badge ok">matches</span> }
+                                    @case ('missing') { <span class="badge warn">missing</span> }
+                                    @case ('extra') { <span class="badge bad">extra</span> }
+                                    @case ('reordered') { <span class="badge info">reordered</span> }
+                                    @default { <span class="badge muted">no data</span> }
+                                }
+                                <small class="hint">{{ divergence().configuredCount }} configured · {{ divergence().observedCount }} observed</small>
+                            </div>
+                            @if (divergence().kind === 'matches') {
+                                <p class="divergence-line">matches — configured order equals observed order.</p>
+                            } @else if (divergence().kind === 'empty') {
+                                <p class="divergence-line">No configured or observed worker path to compare.</p>
+                            } @else {
+                                @if (divergence().missing.length) {
+                                    <p class="divergence-line missing"><span class="divergence-key">missing</span> configured but never observed: {{ divergence().missing.join(', ') }}</p>
+                                }
+                                @if (divergence().extra.length) {
+                                    <p class="divergence-line extra"><span class="divergence-key">extra</span> observed but not configured: {{ divergence().extra.join(', ') }}</p>
+                                }
+                                @if (divergence().kind === 'reordered') {
+                                    <p class="divergence-line">Same workers, different order.</p>
+                                }
                             }
                         </div>
                     </section>
@@ -510,6 +594,25 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
         .flow-node.ok { border-color: #4ec97a; } .flow-node.bad { border-color: #e0b341; }
         .flow-node.prompt { border-color: var(--brand); }
         .flow-arrow { color: var(--muted); font-size: var(--text-xs); }
+        .runtime-compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+        .runtime-column { display: grid; align-content: start; gap: var(--space-2); min-width: 0; padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); }
+        .runtime-column-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+        .runtime-column-head h3 { margin: 0; font-size: var(--text-sm); }
+        .runtime-column-head small { color: var(--muted); font-size: var(--text-xs); }
+        .runtime-row { display: grid; grid-template-columns: 1.25rem minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; border-bottom: 1px solid #1e2a3e; }
+        .runtime-row:last-child { border-bottom: 0; }
+        .runtime-no { color: var(--muted); font-size: .5625rem; text-align: right; font-variant-numeric: tabular-nums; }
+        .runtime-name { display: grid; gap: .0625rem; min-width: 0; }
+        .runtime-name strong { color: var(--ink); font-size: var(--text-xs); overflow-wrap: anywhere; }
+        .runtime-name small { color: var(--muted); font-size: .5625rem; overflow-wrap: anywhere; }
+        .runtime-divergence { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--line); border-left: 3px solid var(--brand); border-radius: var(--radius-sm); background: var(--surface-2); }
+        .runtime-divergence[data-kind='missing'] { border-left-color: var(--warn-ink); }
+        .runtime-divergence[data-kind='extra'] { border-left-color: var(--danger-ink); }
+        .runtime-divergence[data-kind='matches'] { border-left-color: var(--ok-ink); }
+        .divergence-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+        .divergence-line { margin: 0; color: #cbd5e1; font-size: var(--text-xs); overflow-wrap: anywhere; }
+        .divergence-key { color: var(--warn-ink); font-weight: 700; }
+        .divergence-line.extra .divergence-key { color: var(--danger-ink); }
         .top-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); align-items: stretch; }
         .endflow { border: 1px solid #253047; border-radius: var(--radius-md); background: #131722; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.35); }
         .endflow-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-bottom: 1px solid #253047; background: #0f1a2b; }
@@ -636,7 +739,7 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
         .next-step { margin: 0; padding: var(--space-3); border: 1px solid #1e2a3e; border-left: 3px solid var(--brand); border-radius: var(--radius-sm); background: #0d1118; color: var(--ink); font-size: var(--text-sm); }
         .next-codes { grid-auto-flow: column; justify-content: start; }
         .next-codes li { padding: var(--space-1) var(--space-2); border: 1px solid rgba(224,179,65,.4); border-radius: var(--radius-sm); background: rgba(224,179,65,.1); color: var(--warn-ink); font-size: var(--text-xs); }
-        @media (max-width: 62.5rem) { .top-grid { grid-template-columns: 1fr; } .title-row { flex-direction: column; } }
+        @media (max-width: 62.5rem) { .top-grid { grid-template-columns: 1fr; } .runtime-compare { grid-template-columns: 1fr; } .title-row { flex-direction: column; } }
     `],
 })
 export class RequestDetailPage implements OnInit {
@@ -725,6 +828,49 @@ export class RequestDetailPage implements OnInit {
         durationMs: stage.durationMs,
         errorCode: stage.errorCode,
     })));
+
+    /** B0-10 — the configured path is exactly `detail.pipeline`, in the server's order. */
+    readonly configuredGraph = computed<ConfiguredGraphStep[]>(() => (this.detail()?.pipeline ?? []).map((step) => ({
+        workerId: step.workerId,
+        label: step.label,
+        status: step.status,
+    })));
+
+    /** B0-10 — the observed path is built from reported events only: first event per worker, in order. */
+    readonly observedGraph = computed<ObservedGraphStep[]>(() => {
+        const path: ObservedGraphStep[] = [];
+        const seen = new Set<string>();
+        for (const event of this.detail()?.events ?? []) {
+            if (!OBSERVED_WORKER_EVENTS.has(event.event)) continue;
+            const workerId = (event.workerId ?? '').trim();
+            if (!workerId || seen.has(workerId)) continue;
+            seen.add(workerId);
+            path.push({
+                workerId,
+                label: this.workerLabel(workerId),
+                outcome: event.outcome || '—',
+                event: event.event,
+                at: event.at,
+            });
+        }
+        return path;
+    });
+
+    /** B0-10 — set + order comparison; `missing`/`extra` are named, `matches` needs identical order. */
+    readonly divergence = computed<RuntimeDivergence>(() => {
+        const configured = this.configuredGraph().map((step) => step.workerId);
+        const observed = this.observedGraph().map((step) => step.workerId);
+        if (!configured.length && !observed.length) {
+            return { kind: 'empty', missing: [], extra: [], configuredCount: 0, observedCount: 0 };
+        }
+        const configuredSet = new Set(configured);
+        const observedSet = new Set(observed);
+        const missing = configured.filter((workerId) => !observedSet.has(workerId));
+        const extra = observed.filter((workerId) => !configuredSet.has(workerId));
+        const orderMatches = !missing.length && !extra.length && configured.length === observed.length && configured.every((workerId, index) => workerId === observed[index]);
+        const kind: DivergenceKind = missing.length ? 'missing' : extra.length ? 'extra' : orderMatches ? 'matches' : 'reordered';
+        return { kind, missing, extra, configuredCount: configured.length, observedCount: observed.length };
+    });
     readonly status = computed(() => this.detail()?.request.status || 'unknown');
     readonly failureKind = computed(() => {
         for (const event of this.traceEvents()) {

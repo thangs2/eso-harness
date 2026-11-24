@@ -2,6 +2,15 @@ import { PlatformError } from '../../platform/registry/errors.js';
 import { assertConsumerId, type PlatformStore } from '../../platform/registry/store.js';
 import type { EvidenceReceipt, TurnVerdict, TurnVerdictLevel } from '../../platform/registry/types.js';
 import type { ConfigSnapshotService } from '../config-snapshot/config-snapshot.service.js';
+import {
+    BRAIN_TIERS,
+    PREFLIGHT_STATES,
+    type BrainTier,
+    type DecisionDistillSignal,
+    type DecisionPreflightSignal,
+    type DecisionReconSignal,
+    type PreflightState,
+} from '../observations/event-contract.js';
 import { GENESIS_HASH, ReceiptService } from '../receipt/receipt.service.js';
 import { VerdictService } from '../verdict/verdict.service.js';
 import { readFile } from 'node:fs/promises';
@@ -98,6 +107,18 @@ export interface RequestCheck {
     checkId: string;
     status: 'pass' | 'warn' | 'skip';
     detail: string;
+}
+
+/**
+ * P6a — host-reported signals projected from the latest `decision.recorded` row that carries any
+ * of the four keys. A sub-field is `null` when that row did not report it; the service never
+ * infers one signal from another event or from a sibling field.
+ */
+export interface RequestSignals {
+    preflight: DecisionPreflightSignal | null;
+    recon: DecisionReconSignal[] | null;
+    brainTier: BrainTier | null;
+    distill: DecisionDistillSignal | null;
 }
 
 export interface RequestReconAdapter {
@@ -216,12 +237,25 @@ export interface RequestDetail {
     };
     /** P2: ESO's adjudication of the host claim — always present on an HTTP detail response. */
     verdict: TurnVerdict;
-    /** P5a: summary of the receipt sealing that verdict; the full hash is never on the detail. */
+    /** P5a: summary of the receipt sealing that verdict (full hash is public — it must be verifiable). */
     receipt: RequestReceiptSummary;
+    /** P6a: host-reported preflight/recon/brainTier/distill, or `null` when no decision reported one. */
+    signals: RequestSignals | null;
+    /** P6b: configured pipeline vs observed worker path, so design↔runtime divergence is machine-readable. */
+    graph: RequestRuntimeGraph;
 }
 
-/** Everything `buildRequest` can compute from observations alone; the verdict and receipt are appended in `get`. */
-type RequestDetailBase = Omit<RequestDetail, 'verdict' | 'receipt'>;
+export interface RequestRuntimeGraph {
+    nodes: Array<{ id: string; kind: 'configured' | 'observed' | 'both' }>;
+    edges: Array<{ from: string; to: string }>;
+    matched: number;
+    missing: string[];
+    extra: string[];
+    divergence: 'matches' | 'missing' | 'extra' | 'reordered' | 'empty';
+}
+
+/** Everything `buildRequest` can compute from observations alone; verdict, receipt and signals are appended in `get`. */
+type RequestDetailBase = Omit<RequestDetail, 'verdict' | 'receipt' | 'signals' | 'graph'>;
 
 function rowField(row: any, ...keys: string[]): any {
     for (const key of keys) {
@@ -263,6 +297,110 @@ function statusOf(events: RequestEvent[]): string {
     // submitted; worker events without PASS/FAIL/BLOCKED are still in progress.
     if (events.some((event) => event.event !== 'prompt.submitted')) return 'in_progress';
     return events.length > 0 ? 'submitted' : 'unknown';
+}
+
+const SIGNAL_KEYS = ['preflight', 'recon', 'brainTier', 'distill'] as const;
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+    return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+/** `null`/`undefined` mean "not reported"; only a real value makes the row a signal carrier. */
+function reportsSignals(evidence: Record<string, unknown>): boolean {
+    return SIGNAL_KEYS.some((key) => evidence[key] !== undefined && evidence[key] !== null);
+}
+
+function pickPreflight(value: unknown): DecisionPreflightSignal | null {
+    if (!isPlainRecord(value)) return null;
+    const state = value['state'];
+    if (typeof state !== 'string' || !(PREFLIGHT_STATES as readonly string[]).includes(state)) return null;
+    const fingerprint = value['fingerprint'];
+    return typeof fingerprint === 'string' && fingerprint.trim()
+        ? { state: state as PreflightState, fingerprint }
+        : { state: state as PreflightState };
+}
+
+function pickRecon(value: unknown): DecisionReconSignal[] | null {
+    if (!Array.isArray(value)) return null;
+    const calls: DecisionReconSignal[] = [];
+    for (const entry of value) {
+        if (!isPlainRecord(entry)) continue;
+        const adapter = entry['adapter'];
+        const count = entry['calls'];
+        if (typeof adapter !== 'string' || !adapter.trim()) continue;
+        if (typeof count !== 'number' || !Number.isFinite(count)) continue;
+        calls.push({ adapter, calls: count });
+    }
+    return calls;
+}
+
+function pickBrainTier(value: unknown): BrainTier | null {
+    return typeof value === 'string' && (BRAIN_TIERS as readonly string[]).includes(value) ? (value as BrainTier) : null;
+}
+
+function pickDistill(value: unknown): DecisionDistillSignal | null {
+    if (!isPlainRecord(value) || typeof value['memorySaved'] !== 'boolean') return null;
+    const lessons = value['lessons'];
+    return typeof lessons === 'number' && Number.isInteger(lessons) && lessons >= 0
+        ? { memorySaved: value['memorySaved'], lessons }
+        : { memorySaved: value['memorySaved'] };
+}
+
+/**
+ * Project the latest `decision.recorded` row that reports any P6a signal. Rows are already sorted
+ * oldest-first by `at`. Sub-fields the winning row omitted stay `null` — an earlier row's signal is
+ * not merged in, and no other event kind is consulted.
+ */
+function signalsOf(events: RequestEvent[]): RequestSignals | null {
+    let latest: RequestEvent | undefined;
+    for (const event of events) {
+        if (event.event !== 'decision.recorded') continue;
+        if (!reportsSignals(event.evidence)) continue;
+        latest = event;
+    }
+    if (!latest) return null;
+    return {
+        preflight: pickPreflight(latest.evidence['preflight']),
+        recon: pickRecon(latest.evidence['recon']),
+        brainTier: pickBrainTier(latest.evidence['brainTier']),
+        distill: pickDistill(latest.evidence['distill']),
+    };
+}
+
+function runtimeGraphOf(events: RequestEvent[], pipeline: RequestDetailBase['pipeline']): RequestRuntimeGraph {
+    const configured = [...new Set(pipeline.map((stage) => stage.workerId).filter(Boolean))];
+    const workerEvents = new Set(['prompt.submitted', 'worker.completed', 'worker.remote.completed', 'worker.failed', 'worker.remote.failed']);
+    const observed = [...new Set(
+        events
+            .filter((event) => workerEvents.has(event.event) && event.workerId)
+            .sort((left, right) => left.at.localeCompare(right.at))
+            .map((event) => String(event.workerId)),
+    )];
+    const missing = configured.filter((id) => !observed.includes(id));
+    const extra = observed.filter((id) => !configured.includes(id));
+    const matched = configured.filter((id) => observed.includes(id)).length;
+    const orderSame = configured.length > 0 && configured.every((id, index) => observed[index] === id);
+    const divergence: RequestRuntimeGraph['divergence'] = observed.length === 0
+        ? 'empty'
+        : missing.length === 0 && extra.length === 0 && orderSame
+            ? 'matches'
+            : missing.length > 0
+                ? 'missing'
+                : extra.length > 0
+                    ? 'extra'
+                    : 'reordered';
+    const ids = [...new Set([...configured, ...observed])];
+    return {
+        nodes: ids.map((id) => ({
+            id,
+            kind: configured.includes(id) && observed.includes(id) ? 'both' : configured.includes(id) ? 'configured' : 'observed',
+        })),
+        edges: observed.slice(1).map((id, index) => ({ from: observed[index], to: id })),
+        matched,
+        missing,
+        extra,
+        divergence,
+    };
 }
 
 function buildRequest(consumerId: string, events: RequestEvent[]): RequestDetailBase | null {
@@ -664,6 +802,8 @@ export class RequestService {
             ...base,
             verdict: sealed.verdict,
             receipt: receiptSummary(sealed.receipt),
+            signals: signalsOf(traceEvents),
+            graph: runtimeGraphOf(traceEvents, base.pipeline),
         };
         detail.recon = await this.reconAdaptersFor(consumerId, detail);
         await this.enrichPipeline(consumerId, detail);
