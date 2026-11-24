@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * X7 · X10 · X11 · X12 — the document gates that were defined but never scripted.
+ * X7 · X10 · X11 · X12 · X16 — the document gates that were defined but never scripted.
  *
  * Law: sdlc/02.governance/02.records/01.document-status.md §3 (definitions) + §I.5 (instance).
  * Decision: sdlc/03.inception/02.decision-log/10.vertical-slice-page.md (D-127).
@@ -9,15 +9,27 @@
  * so the register could report ✅ while 735 cited paths were dead and 84 checklists had no mark.
  * A check that nobody runs is a sentence, not a check.
  *
- * Usage: node scripts/check-sdlc-gate.mjs [--json]
+ * Usage: node scripts/check-sdlc-gate.mjs [--json] [--root <dir>]
  * Exit:  0 = all implemented checks pass · 2 = findings (measured) · 1 = internal error
+ *        X16 strict (= default) ⇒ exit 1 when the artifact contract has errors;
+ *        ESO_ARTIFACT_GATE=warn downgrades X16 to a warning line (exit unchanged by X16).
  */
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
-import { join, relative, dirname } from 'node:path';
+import { join, relative, dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { verify as verifyArtifactContract } from './check-artifact-contract.mjs';
 
-const ROOT = new URL('..', import.meta.url).pathname;
+const argv = process.argv.slice(2);
+const flagValue = (name) => {
+    const inline = argv.find((arg) => arg.startsWith(`${name}=`));
+    if (inline) return inline.slice(name.length + 1);
+    const index = argv.indexOf(name);
+    if (index >= 0 && argv[index + 1] && !argv[index + 1].startsWith('--')) return argv[index + 1];
+    return null;
+};
+const ROOT = resolve(flagValue('--root') ?? process.env.ESO_GATE_ROOT ?? fileURLToPath(new URL('..', import.meta.url)));
 const SDLC = join(ROOT, 'sdlc');
-const JSON_OUT = process.argv.includes('--json');
+const JSON_OUT = argv.includes('--json');
 
 const walk = (dir, out = []) => {
     for (const name of readdirSync(dir)) {
@@ -232,12 +244,31 @@ const x15 = () => {
     return { id: 'X15', total, dead: dead.length, sample: dead.slice(0, 4) };
 };
 
+/**
+ * X16 — artifact contract (human SoT vs agent projection) at the repo root.
+ * Phase: strict by default (errors ⇒ exit 1); `ESO_ARTIFACT_GATE=warn` downgrades to a warning line.
+ * Calls the gate's exported `verify()` — no shell, and the same module `/knowledge/mapping/check` uses.
+ */
+const ARTIFACT_PHASE = process.env.ESO_ARTIFACT_GATE === 'warn' ? 'warn' : 'strict';
+const x16 = () => {
+    const payload = verifyArtifactContract(ROOT);
+    return {
+        id: 'X16',
+        phase: ARTIFACT_PHASE,
+        errors: payload.counts.errors,
+        warnings: payload.counts.warnings,
+        docs: payload.checked.total,
+    };
+};
+
 const main = () => {
     try {
-        const results = [x7(), x10(), x11(), x12(), x13(), x14(), x15()];
+        const results = [x7(), x10(), x11(), x12(), x13(), x14(), x15(), x16()];
+        const x16r = results[7];
+        const x16Fails = x16r.phase === 'strict' && x16r.errors > 0;
         if (JSON_OUT) {
             console.log(JSON.stringify(results, null, 2));
-            process.exitCode = 0;
+            process.exitCode = x16Fails ? 1 : 0;
             return;
         }
         const x7r = results[0], x10r = results[1], x11r = results[2], x12r = results[3], x13r = results[4], x14r = results[5], x15r = results[6];
@@ -250,12 +281,19 @@ const main = () => {
         const filledPages = x14r.pages.filter((p) => p.filled);
         const blocked = filledPages.filter((p) => p.missing > 0).map((p) => `${p.page} (0/${p.rows} test)`);
         console.log(`X15 link markdown     ${x15r.dead}/${x15r.total} chết  ${x15r.dead ? '❌' : '✅'}`);
+        console.log(`X16 artifact contract  errors=${x16r.errors}  phase=${x16r.phase} (ESO_ARTIFACT_GATE=warn downgrades)  ${x16r.errors ? (x16Fails ? '❌' : '⚠️') : '✅'}`);
         console.log(`DONE (test = evidence)  ${x14r.done}/${filledPages.length} page · ${blocked.length ? 'thiếu test: ' + blocked.join(' · ') : 'không có page nào bị chặn'}`);
         if (x11r.top.length) console.log(`    X11 top: ${x11r.top.map(([p, n]) => `${p} (${n})`).join(' · ')}`);
         const failing = x7r.unmarked + (x10r.joined === x10r.acInTests ? 0 : 1) + x11r.dead + x12r.incomplete
             + (x13r.documented === x13r.pages ? 0 : x13r.pages - x13r.documented)
             + x14r.acWithoutSCN + x14r.missingAC + x14r.acWithoutRTM + x15r.dead;
         console.log('');
+        if (x16Fails) {
+            // Strict X16 outranks the measured-findings exit (2): the artifact contract is a hard gate.
+            console.log(`status measured · X16 artifact contract ${x16r.errors} error`);
+            process.exitCode = 1;
+            return;
+        }
         console.log(`status ${failing ? 'measured' : 'clean'}`);
         process.exitCode = failing ? 2 : 0;
     } catch (error) {

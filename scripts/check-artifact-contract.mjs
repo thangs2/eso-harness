@@ -20,6 +20,7 @@
  */
 import { existsSync, statSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { buildContractReport, collectDocuments, createBodyReader } from '../eso/knowledge/src/artifact-contract.mjs';
 
 const GATE = 'artifact-contract';
@@ -76,6 +77,38 @@ function table(report, root, manifestPresent) {
     return `${lines.join('\n')}\n`;
 }
 
+/**
+ * Measure one consumer root. Exported so other gates (`scripts/check-sdlc-gate.mjs` X16) can call the
+ * same rulebook in-process instead of spawning a CLI. Returns the stable `--json` payload.
+ * Throws when `root` is not a directory.
+ */
+export function verify(root) {
+    const resolved = resolve(root);
+    if (!existsSync(resolved) || !statSync(resolved).isDirectory()) {
+        throw new Error(`not a directory: ${resolved}`);
+    }
+
+    const { docs, summary, manifestPresent } = collectDocuments(resolved);
+    const report = buildContractReport({
+        consumerId: basename(resolved) || resolved,
+        docs,
+        summary,
+        bodyOf: createBodyReader(resolved),
+    });
+
+    return {
+        gate: GATE,
+        version: VERSION,
+        root: resolved,
+        consumerId: report.consumerId,
+        status: report.status,
+        manifestPresent,
+        checked: report.checked,
+        findings: report.findings,
+        counts: report.counts,
+    };
+}
+
 function main(argv) {
     const options = parseArgs(argv);
     if (options.help) {
@@ -91,38 +124,24 @@ function main(argv) {
         return 2;
     }
 
-    const root = resolve(options.root);
-    if (!existsSync(root) || !statSync(root).isDirectory()) {
-        process.stderr.write(`not a directory: ${root}\n`);
+    let payload;
+    try {
+        payload = verify(options.root);
+    } catch (error) {
+        process.stderr.write(`${error.message}\n`);
         return 2;
     }
 
-    const { docs, summary, manifestPresent } = collectDocuments(root);
-    const report = buildContractReport({
-        consumerId: basename(root) || root,
-        docs,
-        summary,
-        bodyOf: createBodyReader(root),
-    });
-
     if (options.json) {
-        const payload = {
-            gate: GATE,
-            version: VERSION,
-            root,
-            consumerId: report.consumerId,
-            status: report.status,
-            manifestPresent,
-            checked: report.checked,
-            findings: report.findings,
-            counts: report.counts,
-        };
         process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
     } else {
-        process.stdout.write(table(report, root, manifestPresent));
+        process.stdout.write(table(payload, payload.root, payload.manifestPresent));
     }
 
-    return report.counts.errors > 0 ? 1 : 0;
+    return payload.counts.errors > 0 ? 1 : 0;
 }
 
-process.exitCode = main(process.argv.slice(2));
+// Run only when invoked as a CLI (`node scripts/check-artifact-contract.mjs`), not when imported by X16.
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+    process.exitCode = main(process.argv.slice(2));
+}
