@@ -14,7 +14,6 @@ const PAGE_LABELS: Record<string, string> = {
     architecture: 'Architecture',
     learning: 'Learning',
     work: 'Work',
-    declaration: 'Declaration',
     hosts: 'Hosts',
     plugins_registry: 'Registry',
 };
@@ -89,7 +88,6 @@ const PAGE_LABELS: Record<string, string> = {
                             }
 
                             <p class="side-group">Governance</p>
-                            <a routerLink="/declaration" routerLinkActive="active" class="side-link">Declaration</a>
 
                             <p class="side-group">System</p>
                             <a routerLink="/hosts" routerLinkActive="active" class="side-link">Hosts</a>
@@ -234,7 +232,6 @@ export class ShellComponent {
             { label: 'Consumers', path: '/consumers', group: 'Operate' },
             { label: 'Observatory', path: '/observatory', group: 'Operate' },
             { label: 'Office 3D', path: '/office', group: 'Operate' },
-            { label: 'Declaration', path: '/declaration', group: 'Governance' },
             { label: 'Hosts', path: '/hosts', group: 'System' },
             { label: 'Registry', path: '/plugins', group: 'System' },
         ];

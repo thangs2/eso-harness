@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 const routes = readFileSync(new URL('../eso/ui/apps/control-plane/src/app/routes.ts', import.meta.url), 'utf8');
 const shell = readFileSync(new URL('../eso/ui/apps/control-plane/src/app/layout/shell/shell.component.ts', import.meta.url), 'utf8');
@@ -19,9 +19,10 @@ test('removed surfaces are not in the shell nav', () => {
   }
 });
 
-test('declaration surface stays', () => {
-  assert.equal(routes.includes("path: 'declaration'"), true);
-  assert.equal(shell.includes('routerLink="/declaration"'), true);
+test('declaration surface removed (2026-11-24)', () => {
+  assert.equal(routes.includes("path: 'declaration'"), false, 'route must be gone');
+  assert.equal(shell.includes('routerLink="/declaration"'), false, 'nav link must be gone');
+  assert.equal(existsSync(new URL('../eso/ui/apps/control-plane/src/app/features/declaration', import.meta.url)), false, 'feature folder must be gone');
 });
 
 // --- dead code + silent caps on surfaces -----------------------------------

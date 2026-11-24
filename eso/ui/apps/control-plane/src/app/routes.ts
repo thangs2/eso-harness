@@ -61,10 +61,6 @@ export const APP_ROUTES: Routes = [
         pathMatch: 'full',
     },
     {
-        path: 'declaration',
-        loadChildren: () => import('./features/declaration/declaration.routes.js').then((m) => m.DECLARATION_ROUTES),
-    },
-    {
         path: 'onboarding',
         loadChildren: () => import('./features/onboarding/onboarding.routes.js').then((m) => m.ONBOARDING_ROUTES),
     },
