@@ -71,6 +71,27 @@ const WORKER_LABEL: Record<string, string> = {
     'worker-qc-2': 'QC 2',
 };
 
+/** Pipeline v2 stage ids → the rail glyph shown next to the step number (text glyphs, no icon package). */
+const STAGE_GLYPH: Record<string, string> = {
+    'intake-law': '§',
+    'decision-jev': '◈',
+    'evidence-recon': '⌕',
+    sufficiency: '◐',
+    slp: '⌘',
+    execution: '▸',
+    seal: '⛨',
+    report: '▤',
+};
+
+/** Drill tab id → glyph; the tab keeps its label and count. */
+const TAB_GLYPH: Record<string, string> = {
+    waterfall: '≋',
+    topology: '⌗',
+    decisions: '◈',
+    rules: '§',
+    telemetry: '◷',
+};
+
 /** P2 — the four levels ESO adjudicates. Anything else is not a verdict. */
 type VerdictLevel = 'allow' | 'deny' | 'partial' | 'unknown';
 
@@ -231,7 +252,7 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
                 <section class="error-panel"><strong>Could not open request</strong><span>{{ message }}</span><a mat-stroked-button routerLink="/observatory" [queryParams]="{ consumer: consumerId() }">← Requests</a></section>
             } @else if (prompt(); as request) {
                 <nav class="detail-nav">
-                    <div class="crumb"><a routerLink="/observatory" [queryParams]="{ consumer: consumerId() }">← Requests</a><span>/</span><code>{{ request.traceId }}</code></div>
+                    <div class="crumb"><a routerLink="/observatory" [queryParams]="{ consumer: consumerId() }">← Requests</a><span class="crumb-sep">/</span><code>{{ shortId(request.observationId) }}</code></div>
                     <div class="detail-actions">
                         <a class="pill" routerLink="/office" [queryParams]="{ consumer: consumerId() }">Office 3D</a>
                         <a class="pill" routerLink="/observatory" [queryParams]="{ consumer: consumerId() }">Observatory</a>
@@ -239,22 +260,41 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
                 </nav>
 
                 <header class="request-hero">
-                    <h1 class="request-query">{{ queryText() }}</h1>
-                    <div class="badges">
-                        <span class="badge" [class.ok]="status() === 'completed'" [class.warn]="status() === 'failed'" [class.bad]="status() === 'blocked'">{{ status() }}</span>
-                        <span class="badge muted">{{ value(request, 'taskType') }}</span>
-                        <span class="badge muted">{{ traceEvents().length }} events</span>
-                        @if (failureKind()) { <span class="badge warn">{{ failureKind() }}</span> }
+                    <div class="hero-main">
+                        <span class="icon-chip hero-chip" aria-hidden="true">▸</span>
+                        <div class="hero-copy">
+                            <p class="eyebrow">Prompt request · {{ value(request, 'flowId') }}</p>
+                            <h1 class="request-query">{{ queryText() }}</h1>
+                            <p class="hero-sub">{{ workerLabel(request.workerId) }} · host {{ request.hostId }} · runtime {{ request.runtimeKey }}</p>
+                        </div>
+                        <div class="badges hero-badges">
+                            <span class="badge status-badge" [class.ok]="status() === 'completed'" [class.warn]="status() === 'failed'" [class.bad]="status() === 'blocked'"><span class="status-dot" aria-hidden="true"></span>{{ status() }}</span>
+                            @if (verdict(); as v) { <span class="badge verdict-badge" [class]="'level-' + v.level">{{ v.level }}</span> }
+                            <span class="badge muted">{{ value(request, 'taskType') }}</span>
+                            <span class="badge muted">{{ traceEvents().length }} events</span>
+                            @if (failureKind()) { <span class="badge warn">{{ failureKind() }}</span> }
+                        </div>
                     </div>
-                    <p class="subtitle">{{ workerLabel(request.workerId) }} · prompt request · {{ value(request, 'flowId') }} · host {{ request.hostId }}</p>
-                    <div class="facts">
+                    <div class="hero-id-row">
+                        <span class="hero-id-label">Request ID</span>
+                        <code class="hero-id" [title]="request.observationId">{{ shortId(request.observationId) }}</code>
+                        <button type="button" class="copy-path hero-copy-btn" (click)="copyRequestId(request.observationId)" [attr.aria-label]="requestIdCopied() ? 'Request id copied' : 'Copy request id'">{{ requestIdCopied() ? 'copied' : 'copy' }}</button>
+                    </div>
+                    <div class="facts hero-facts">
                         <span><small>Started</small>{{ formatAt(request.at) }}</span>
                         <span><small>Duration</small>{{ duration() }}</span>
+                        <span><small>Host</small>{{ request.hostId || '—' }}</span>
+                        <span><small>Runtime</small>{{ request.runtimeKey || '—' }}</span>
                         <span><small>Model</small>{{ value(request, 'model') }}</span>
+                        <span><small>Actor</small>{{ heroActor() }}</span>
                     </div>
                 </header>
 
                 <section class="verdict-hero" [attr.data-level]="verdict()?.level || 'unknown'" aria-label="Turn verdict (Q1)">
+                    <header class="verdict-hero-head">
+                        <span class="icon-chip verdict-chip" aria-hidden="true">◈</span>
+                        <div class="verdict-hero-title"><p class="eyebrow">ESO adjudication · Q1</p><h2>Turn verdict</h2><p class="card-lede">ESO's adjudication of this turn — level, score, actor and basis.</p></div>
+                    </header>
                     @if (verdict(); as v) {
                         <div class="verdict-head">
                             <span class="verdict-level-badge" [class]="'level-' + v.level">{{ v.level }}</span>
@@ -271,7 +311,7 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
 
                 <section class="effectiveness" aria-label="Orchestration effectiveness (pipeline v2)">
                     <header class="effectiveness-head">
-                        <div><p class="eyebrow">Pipeline v2</p><h2>Orchestration effectiveness</h2></div>
+                        <div class="card-head-main"><span class="icon-chip effectiveness-chip" aria-hidden="true">◱</span><div><p class="eyebrow">Pipeline v2</p><h2>Orchestration effectiveness</h2><p class="card-lede">The backend's own tally of stages, roles, workers and gaps.</p></div></div>
                         <span class="badge muted">backend tally</span>
                     </header>
                     @if (effectiveness(); as e) {
@@ -291,8 +331,9 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
 
                 <nav class="pipeline-stepper" aria-label="Pipeline stages">
                     @for (stage of systemStages(); track stage.id) {
-                        <button type="button" class="pipeline-step" [class.ok]="stage.status === 'ok'" [class.bad]="stage.status === 'warn'" [class.info]="stage.status === 'info'" [class.muted]="stage.status === 'muted'" (click)="activeTab.set(stage.tab)">
+                        <button type="button" class="pipeline-step" [class.ok]="stage.status === 'ok'" [class.bad]="stage.status === 'warn'" [class.info]="stage.status === 'info'" [class.muted]="stage.status === 'muted'" [class.active]="activeTab() === stage.tab" [attr.aria-pressed]="activeTab() === stage.tab" [title]="'Step ' + stage.stepNumber + ': ' + stage.title" (click)="activeTab.set(stage.tab)">
                             <span class="pipeline-step-no">{{ stage.stepNumber }}</span>
+                            <span class="stage-icon" aria-hidden="true">{{ stageGlyph(stage.id) }}</span>
                             <span class="pipeline-step-copy"><strong>{{ stage.title }}</strong><small>{{ stage.sub }}</small></span>
                         </button>
                     }
@@ -300,7 +341,7 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
 
                 <section class="host-signals" aria-label="Host signals (P6c)">
                     <header class="host-signals-head">
-                        <div><p class="eyebrow">Host-reported</p><h2>Host signals</h2></div>
+                        <div class="card-head-main"><span class="icon-chip signals-chip" aria-hidden="true">◉</span><div><p class="eyebrow">Host-reported</p><h2>Host signals</h2><p class="card-lede">Only what the host reported; ESO adds no default.</p></div></div>
                         <span class="badge muted">not inferred by ESO</span>
                     </header>
                     @if (signals(); as s) {
@@ -317,7 +358,7 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
 
                 <section class="endflow">
                     <header class="endflow-head">
-                        <div class="endflow-title"><span class="endflow-icon">⚡</span><div><h2>End-to-End Pipeline Data Flow</h2><p>Prompt ingest → worker handoff → evidence → telemetry</p></div></div>
+                        <div class="endflow-title"><span class="endflow-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h8l-1 8 11-14h-8l1-6z" /></svg></span><div><h2>End-to-End Pipeline Data Flow</h2><p>Prompt ingest → worker handoff → evidence → telemetry</p></div></div>
                         <button type="button" class="ghost-btn" (click)="flowExpanded.set(!flowExpanded())">{{ flowExpanded() ? '▲ Hide' : '▼ Show flow' }}</button>
                     </header>
                     @if (flowExpanded()) {
@@ -339,9 +380,41 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
                     }
                 </section>
 
-                <div class="top-grid">
-                    <section class="panel request-info">
-                        <header class="panel-head"><div><p class="eyebrow">Prompt request</p><h2>Request metadata</h2></div><span class="badge">read-only</span></header>
+                <div class="top-grid gate-tokens-row">
+                    <section class="panel gate-card" aria-label="Write gate">
+                        <header class="panel-head">
+                            <div class="card-head-main"><span class="icon-chip gate-chip" aria-hidden="true">⛨</span><div><p class="eyebrow">Scope guard</p><h2>Write gate</h2><p class="card-lede">The guard's recorded scope decision, never inferred from the verdict.</p></div></div>
+                            <span class="badge" [class.ok]="writeGate()?.allowed === true" [class.bad]="writeGate()?.allowed === false" [class.muted]="!writeGate()">{{ gateLabel() }}</span>
+                        </header>
+                        @if (writeGate(); as gate) {
+                            <div class="gate-summary">
+                                <span class="gate-state" [class.ok]="gate.allowed" [class.bad]="!gate.allowed"><span class="status-dot" aria-hidden="true"></span>{{ gate.allowed ? 'allowed' : 'blocked' }}</span>
+                                @if (gate.code) { <code class="gate-code">{{ gate.code }}</code> } @else { <span class="hint">no code</span> }
+                                <code class="gate-target">{{ gate.target }}</code>
+                                <time>{{ relative(gate.at) }}</time>
+                            </div>
+                            <dl class="gate-facts">
+                                <div><dt>Decision</dt><dd><code>{{ gate.decisionId }}</code></dd></div>
+                                @if (writeGateActor(gate.actor); as actor) { <div><dt>Actor</dt><dd>{{ actor }}</dd></div> }
+                            </dl>
+                        } @else {
+                            <p class="hint gate-empty">No scope decision was recorded for this turn</p>
+                        }
+                    </section>
+
+                    <section class="panel tokens">
+                        <header class="panel-head"><div class="card-head-main"><span class="icon-chip tokens-chip" aria-hidden="true">◎</span><div><p class="eyebrow">Cost</p><h2>Tokens &amp; model</h2><p class="card-lede">What this turn spent, and how it was measured.</p></div></div><span class="badge muted">not reported</span></header>
+                        <div class="token-tiles">
+                            <div><span>Input</span><strong>{{ tokenSummary().input ?? '—' }}</strong><small>{{ tokenSummary().estimated ? 'estimated · chars/4' : 'not captured' }}</small></div>
+                            <div><span>Output</span><strong>{{ tokenSummary().output ?? '—' }}</strong><small>{{ tokenSummary().estimated ? 'estimated · chars/4' : 'not captured' }}</small></div>
+                            <div><span>LLM calls</span><strong>{{ llmCalls().length }}</strong><small>observed worker steps</small></div>
+                            <div><span>Tools</span><strong>{{ toolCount() }}</strong><small>{{ fileCount() }} files</small></div>
+                        </div>
+                        <p class="hint">Tokens are estimated as chars/4 by the host, not provider-reported usage.</p>
+                    </section>
+
+                    <section class="panel request-info metadata-panel">
+                        <header class="panel-head"><div class="card-head-main"><span class="icon-chip meta-chip" aria-hidden="true">▤</span><div><p class="eyebrow">Prompt request</p><h2>Request metadata</h2><p class="card-lede">Identity of the prompt request; read-only capture.</p></div></div><span class="badge">read-only</span></header>
                         <div class="policy-note">Prompt body is captured at operator request. Content may contain sensitive data and is shown read-only.</div>
                         <dl class="facts-grid">
                             <dt>Request ID</dt><dd><code>{{ request.observationId }}</code></dd>
@@ -355,23 +428,13 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
                             <dt>Flow</dt><dd>{{ value(request, 'flowId') }}</dd>
                         </dl>
                     </section>
-
-                    <section class="panel tokens">
-                        <header class="panel-head"><div><p class="eyebrow">Cost</p><h2>Tokens &amp; model</h2></div><span class="badge muted">not reported</span></header>
-                        <div class="token-tiles">
-                            <div><span>Input</span><strong>{{ tokenSummary().input ?? '—' }}</strong><small>{{ tokenSummary().estimated ? 'estimated · chars/4' : 'not captured' }}</small></div>
-                            <div><span>Output</span><strong>{{ tokenSummary().output ?? '—' }}</strong><small>{{ tokenSummary().estimated ? 'estimated · chars/4' : 'not captured' }}</small></div>
-                            <div><span>LLM calls</span><strong>{{ llmCalls().length }}</strong><small>observed worker steps</small></div>
-                            <div><span>Tools</span><strong>{{ toolCount() }}</strong><small>{{ fileCount() }} files</small></div>
-                        </div>
-                        <p class="hint">Tokens are estimated as chars/4 by the host, not provider-reported usage.</p>
-                    </section>
                 </div>
 
-                <div class="tabs" role="tablist">
+                <div class="tabs drill-tabs" role="tablist" aria-label="Request detail tabs">
                     @for (tab of tabs; track tab.id) {
-                        <button type="button" role="tab" [attr.aria-selected]="activeTab() === tab.id" [class.active]="activeTab() === tab.id" (click)="activeTab.set(tab.id)">
-                            {{ tab.label }}
+                        <button type="button" role="tab" [attr.data-tab]="tab.id" [attr.aria-selected]="activeTab() === tab.id" [class.active]="activeTab() === tab.id" (click)="activeTab.set(tab.id)">
+                            <span class="tab-icon" aria-hidden="true">{{ tabGlyph(tab.id) }}</span>
+                            <span class="tab-label">{{ tab.label }}</span>
                             <span class="tab-count">{{ tabCount(tab.id) }}</span>
                         </button>
                     }
@@ -604,11 +667,11 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
                                 <div class="check-row"><span class="check-status" [attr.data-status]="check.status">{{ check.status }}</span><strong>{{ check.checkId }}</strong><small>{{ check.detail }}</small></div>
                             }
                         </div>
-                        <table class="telemetry-table"><thead><tr><th>#</th><th>Worker</th><th>Outcome</th><th>Event</th><th>Duration</th><th>Error code</th></tr></thead><tbody>
+                        <div class="table-wrap"><table class="telemetry-table"><thead><tr><th>#</th><th>Worker</th><th>Outcome</th><th>Event</th><th>Duration</th><th>Error code</th></tr></thead><tbody>
                             @for (stage of stages(); track stage.workerId; let index = $index) {
                                 <tr><td>{{ index + 1 }}</td><td>{{ stage.label }}</td><td>{{ stage.status }}</td><td>{{ stage.event }}</td><td>{{ stage.durationMs }} ms</td><td>{{ stage.errorCode || '—' }}</td></tr>
                             }
-                        </tbody></table>
+                        </tbody></table></div>
                     </section>
                 } @else if (activeTab() === 'rules') {
                     <section class="panel">
@@ -662,14 +725,14 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
                             <div><span>Tools</span><strong>{{ toolCount() }}</strong><small>observed</small></div>
                             <div><span>Files</span><strong>{{ fileCount() }}</strong><small>observed</small></div>
                         </div>
-                        <table class="telemetry-table">
+                        <div class="table-wrap"><table class="telemetry-table">
                             <thead><tr><th>#</th><th>Worker</th><th>Model</th><th>Adapter</th><th>Duration</th><th>In est.</th><th>Out est.</th><th>Outcome</th></tr></thead>
                             <tbody>
                                 @for (call of llmCalls(); track call.id) {
                                     <tr><td>{{ $index + 1 }}</td><td>{{ workerLabel(call.workerId) }}</td><td>{{ call.model }}</td><td>{{ call.adapter }}</td><td>{{ call.durationMs ? call.durationMs + ' ms' : '—' }}</td><td>{{ call.input }}</td><td>{{ call.output }}</td><td>{{ call.outcome }}</td></tr>
                                 }
                             </tbody>
-                        </table>
+                        </table></div>
                         <p class="hint">Tool/file extraction is not available in the adapter yet; cards show 0 instead of inventing data.</p>
                     </section>
                 } @else {
@@ -708,14 +771,28 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
             color: var(--ink);
         }
         .detail-nav { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
+        .crumb { display: inline-flex; align-items: center; gap: var(--space-2); min-width: 0; color: var(--muted); font-size: var(--text-xs); }
+        .crumb a { color: var(--brand); text-decoration: none; }
+        .crumb code { color: var(--brand); overflow-wrap: anywhere; }
+        .crumb-sep { color: #475569; }
         .detail-actions { display: flex; gap: var(--space-2); }
-        .pill { padding: var(--space-1) 0.5625rem; border: 1px solid #253047; border-radius: 62.44rem; background: #0f1a2b; color: #cbd5e1; font-size: .625rem; text-decoration: none; }
+        .pill { padding: var(--space-1) var(--space-2); border: 1px solid #253047; border-radius: 62.44rem; background: #0f1a2b; color: #cbd5e1; font-size: var(--text-xs); text-decoration: none; }
         .pill:hover { border-color: #5aa9ff; color: #fff; }
-        .request-hero { display: grid; gap: var(--space-4); padding-bottom: var(--space-4); border-bottom: 1px solid var(--line); }
-        .title-row { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-4); }
+        .request-hero { --card-accent: var(--brand); display: grid; gap: var(--space-4); padding: var(--space-5); border: 1px solid var(--line); border-left: 3px solid var(--card-accent); border-radius: var(--radius-md); background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.35); }
+        .hero-main { display: flex; align-items: flex-start; gap: var(--space-3); }
+        .hero-chip { width: 2.25rem; height: 2.25rem; border-color: rgba(90,169,255,.35); background: rgba(90,169,255,.1); color: var(--brand); font-size: var(--text-md); }
+        .hero-copy { display: grid; gap: var(--space-1); flex: 1; min-width: 0; }
+        .hero-copy h1 { margin: 0; }
+        .hero-sub { margin: 0; color: var(--muted); font-size: var(--text-xs); overflow-wrap: anywhere; }
+        .hero-badges { justify-content: flex-end; margin-left: auto; }
+        .hero-id-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border: 1px solid #1e2a3e; border-radius: var(--radius-sm); background: var(--surface-2); }
+        .hero-id-label { color: var(--muted); font-size: var(--text-xs); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+        .hero-id { color: var(--brand); font-size: var(--text-sm); overflow-wrap: anywhere; }
+        .hero-copy-btn { font-size: var(--text-xs); }
+        .icon-chip { display: grid; place-items: center; flex: 0 0 auto; width: 1.75rem; height: 1.75rem; border: 1px solid #253047; border-radius: var(--radius-sm); background: #0f1a2b; color: var(--brand); font-size: var(--text-sm); line-height: 1; }
+        .status-dot { display: inline-block; width: .5rem; height: .5rem; border-radius: 50%; background: currentColor; }
         .eyebrow { color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-size: var(--text-xs); margin: 0 0 var(--space-1); }
         h1 { margin: 0 0 var(--space-3); font-size: var(--text-xl); line-height: var(--text-2xl); font-weight: 600; color: #f1f5f9; }
-        .subtitle { color: var(--muted); margin: 0; }
         .badges { display: flex; flex-wrap: wrap; gap: var(--space-2); justify-content: flex-start; }
         .badge { display: inline-flex; align-items: center; gap: var(--space-1); padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); border: 1px solid #253047; background: #131722; color: #cbd5e1; font-size: var(--text-xs); line-height: var(--text-xs); font-weight: 500; text-transform: none; letter-spacing: normal; }
         .badge.ok { color: #a7f3d0; border-color: rgba(78,201,122,.3); background: rgba(78,201,122,.15); }
@@ -723,30 +800,40 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
         .badge.bad { color: #fecaca; border-color: rgba(255,107,107,.4); background: rgba(255,107,107,.2); }
         .badge.muted { color: #8b97ab; background: #0d1118; }
         .badge.info { color: #bae6fd; border-color: rgba(90,169,255,.4); background: rgba(90,169,255,.15); }
-        .facts { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); }
-        .facts span { position: relative; padding-left: var(--space-4); } .facts span:first-child { padding-left: 0; }
+        .facts { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); margin: 0; }
+        .facts span { position: relative; display: inline-flex; align-items: baseline; gap: var(--space-2); padding-left: var(--space-4); font-size: var(--text-xs); color: #cbd5e1; }
+        .facts span:first-child { padding-left: 0; }
         .facts span + span::before { content: ''; position: absolute; left: 0; top: 0.25rem; bottom: 0.25rem; width: 0.0625rem; background: #253047; }
-        .facts span { display: inline-flex; align-items: baseline; gap: var(--space-2); font-size: var(--text-xs); color: #cbd5e1; }
         .facts small { color: #64748b; font-size: .625rem; text-transform: uppercase; letter-spacing: .08em; }
-        .pipeline-stepper { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(6.875rem, 1fr); align-items: stretch; gap: 0; overflow-x: auto; padding: 0; border: 1px solid #253047; border-radius: var(--radius-md); background: #131722; }
-        .pipeline-step { display: flex; align-items: center; gap: var(--space-2); min-width: 0; padding: 0.5625rem var(--space-2); border: 0; border-right: 1px solid #1e2a3e; background: transparent; color: #8b97ab; font: inherit; text-align: left; cursor: pointer; }
+        .pipeline-stepper { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(9rem, 1fr); align-items: stretch; gap: 0; overflow-x: auto; padding: 0; border: 1px solid #253047; border-radius: var(--radius-md); background: #131722; }
+        .pipeline-step { display: flex; align-items: center; gap: var(--space-1); min-width: 0; padding: var(--space-2); border: 0; border-right: 1px solid #1e2a3e; background: transparent; color: #8b97ab; font: inherit; text-align: left; cursor: pointer; }
         .pipeline-step:last-child { border-right: 0; }
         .pipeline-step:hover { background: #162235; }
-        .pipeline-step.active { background: transparent; box-shadow: inset 0 -2px 0 #5aa9ff; }
-        .pipeline-step.active .pipeline-step-no { border-color: #5aa9ff; background: rgba(90,169,255,.12); color: #5aa9ff; }
+        .pipeline-step:focus-visible { outline: 0.125rem solid var(--brand); outline-offset: -0.125rem; }
+        .pipeline-step.active { background: #162235; box-shadow: inset 0 -2px 0 var(--brand); }
+        .pipeline-step.active .pipeline-step-no, .pipeline-step.active .stage-icon { border-color: var(--brand); background: rgba(90,169,255,.12); color: var(--brand); }
         .pipeline-step.ok { color: #4ec97a; } .pipeline-step.bad { color: #e0b341; } .pipeline-step.info { color: #5aa9ff; } .pipeline-step.muted { color: #64748b; }
-        .pipeline-step-no { display: grid; place-items: center; flex: 0 0 auto; width: 1.375rem; height: 1.375rem; border: 1px solid currentColor; border-radius: 50%; font-size: .5625rem; }
+        .pipeline-step-no { display: grid; place-items: center; flex: 0 0 auto; width: 1.25rem; height: 1.25rem; border: 1px solid currentColor; border-radius: 50%; font-size: .625rem; font-variant-numeric: tabular-nums; }
+        .stage-icon { display: grid; place-items: center; flex: 0 0 auto; width: 1.5rem; height: 1.5rem; border: 1px solid currentColor; border-radius: var(--radius-sm); background: #0d1118; font-size: var(--text-xs); line-height: 1; }
         .pipeline-step-copy { display: grid; gap: .0625rem; min-width: 0; overflow: hidden; }
-        .pipeline-step strong { display: block; font-size: .625rem; color: #e2e8f0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .pipeline-step small { display: block; max-width: 100%; font-size: .5rem; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .pipeline-step strong { display: block; font-size: .6875rem; color: #e2e8f0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .pipeline-step small { display: block; max-width: 100%; font-size: .625rem; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .flow-panel, .panel { display: grid; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--line); border-left: 3px solid var(--card-accent, var(--brand)); border-radius: var(--radius-md); background: var(--surface); min-width: 0; box-shadow: 0 1px 2px rgba(0,0,0,.35); }
         .flow-panel { --card-accent: #4ec97a; }
         .request-info { --card-accent: #5aa9ff; }
-        .tokens { --card-accent: #5aa9ff; }
+        .tokens { --card-accent: var(--warn-ink); }
         .waterfall { --card-accent: #5aa9ff; }
         .telemetry { --card-accent: #c084fc; }
         .panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
         .panel-head h2 { margin: 0; font-size: var(--text-md); }
+        .card-head-main { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+        .card-head-main h2 { margin: 0; }
+        .card-lede { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-xs); }
+        .effectiveness-chip { border-color: rgba(90,169,255,.35); background: rgba(90,169,255,.1); }
+        .signals-chip { border-color: rgba(192,132,252,.35); background: rgba(192,132,252,.12); color: #c084fc; }
+        .gate-chip { border-color: rgba(224,179,65,.4); background: rgba(224,179,65,.12); color: var(--warn-ink); }
+        .tokens-chip { border-color: rgba(224,179,65,.35); background: rgba(224,179,65,.1); color: var(--warn-ink); }
+        .meta-chip { border-color: rgba(78,201,122,.35); background: rgba(78,201,122,.1); color: var(--ok-ink); }
         .flow-chain { display: flex; align-items: center; gap: var(--space-2); overflow-x: auto; padding-bottom: var(--space-1); }
         .flow-node { display: grid; gap: var(--space-1); min-width: 5.625rem; padding: var(--space-2); border: 1px solid #253047; border-radius: var(--radius-sm); background: #0d1118; }
         .flow-node strong { font-size: .625rem; } .flow-node small { color: var(--muted); font-size: .5625rem; }
@@ -773,6 +860,20 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
         .divergence-key { color: var(--warn-ink); font-weight: 700; }
         .divergence-line.extra .divergence-key { color: var(--danger-ink); }
         .top-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); align-items: stretch; }
+        .gate-card { --card-accent: var(--warn-ink); }
+        .gate-summary { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: var(--space-3); border: 1px solid #1e2a3e; border-radius: var(--radius-sm); background: var(--surface-2); font-size: var(--text-xs); }
+        .gate-state { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--warn-ink); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+        .gate-state.ok { color: var(--ok-ink); }
+        .gate-state.bad { color: var(--danger-ink); }
+        .gate-code { color: var(--warn-ink); overflow-wrap: anywhere; }
+        .gate-target { color: var(--brand); overflow-wrap: anywhere; }
+        .gate-summary time { margin-left: auto; color: var(--muted); }
+        .gate-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--space-2) var(--space-4); margin: 0; }
+        .gate-facts div { display: grid; gap: var(--space-1); min-width: 0; }
+        .gate-facts dt { color: var(--muted); font-size: var(--text-xs); letter-spacing: .06em; text-transform: uppercase; }
+        .gate-facts dd { margin: 0; color: var(--ink); font-size: var(--text-sm); overflow-wrap: anywhere; }
+        .gate-facts code { color: var(--brand); }
+        .metadata-panel { grid-column: 1 / -1; --card-accent: var(--ok-ink); }
         .endflow { border: 1px solid #253047; border-radius: var(--radius-md); background: #131722; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.35); }
         .endflow-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-bottom: 1px solid #253047; background: #0f1a2b; }
         .endflow-title { display: flex; align-items: center; gap: var(--space-3); }
@@ -818,8 +919,18 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
         .token-tiles small { color: var(--muted); font-size: .5625rem; }
         .hint, .muted { color: var(--muted); font-size: var(--text-xs); }
         .tabs { display: flex; gap: var(--space-1); border-bottom: 1px solid #253047; overflow-x: auto; }
-        .tabs button { padding: var(--space-2) var(--space-3); border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font: inherit; font-size: var(--text-xs); font-weight: 600; cursor: pointer; white-space: nowrap; }
+        .tabs button { display: inline-flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font: inherit; font-size: var(--text-xs); font-weight: 600; cursor: pointer; white-space: nowrap; }
+        .tabs button:hover { color: #e2e8f0; }
+        .tabs button:focus-visible { outline: 0.125rem solid var(--brand); outline-offset: -0.125rem; }
         .tabs button.active { border-color: #5aa9ff; color: #5aa9ff; }
+        .drill-tabs button[data-tab='waterfall'].active { border-color: #4ec97a; color: #4ec97a; }
+        .drill-tabs button[data-tab='topology'].active { border-color: #5aa9ff; color: #5aa9ff; }
+        .drill-tabs button[data-tab='decisions'].active { border-color: #c084fc; color: #c084fc; }
+        .drill-tabs button[data-tab='rules'].active { border-color: #e0b341; color: #e0b341; }
+        .drill-tabs button[data-tab='telemetry'].active { border-color: #818cf8; color: #818cf8; }
+        .tab-icon { display: grid; place-items: center; width: 1.125rem; height: 1.125rem; border: 1px solid #1e2a3e; border-radius: var(--radius-sm); background: #0d1118; color: var(--muted); font-size: .625rem; line-height: 1; }
+        .tabs button.active .tab-icon { border-color: currentColor; background: rgba(90,169,255,.12); color: inherit; }
+        .tabs button.active .tab-count { color: inherit; }
         .waterfall { gap: var(--space-1); }
         .event-row { display: flex; gap: var(--space-3); padding: var(--space-2) 0; border-bottom: 1px solid var(--line); }
         .event-index { color: var(--muted); font-size: .625rem; width: 1.375rem; text-align: right; }
@@ -831,6 +942,7 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
         details summary { cursor: pointer; color: var(--muted); font-size: .625rem; }
         pre { max-height: 18.75rem; overflow: auto; padding: var(--space-3); border: 1px solid #253047; border-radius: var(--radius-sm); background: #0d1118; color: #cbd5e1; font-size: .6875rem; white-space: pre-wrap; }
         .raw { margin: 0; }
+        .table-wrap { width: 100%; overflow-x: auto; }
         .telemetry-table { width: 100%; border-collapse: collapse; font-size: var(--text-xs); }
         .telemetry-table th { text-align: left; background: #0f1a2b; color: #8b97ab; font-weight: 500; padding: var(--space-2); border-bottom: 1px solid #253047; text-transform: uppercase; letter-spacing: .05em; font-size: .625rem; }
         .telemetry-table td { padding: var(--space-2); border-bottom: 1px solid var(--line); }
@@ -860,6 +972,10 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
         .verdict-hero[data-level='partial'] { --card-accent: var(--warn-ink); }
         .verdict-hero[data-level='deny'] { --card-accent: var(--danger-ink); }
         .verdict-hero[data-level='unknown'] { --card-accent: #64748b; }
+        .verdict-hero-head { display: flex; align-items: center; gap: var(--space-3); }
+        .verdict-hero-title { min-width: 0; flex: 1; }
+        .verdict-hero-title h2 { margin: 0; font-size: var(--text-md); }
+        .verdict-hero-head .icon-chip { border-color: var(--card-accent); color: var(--card-accent); background: rgba(90,169,255,.08); }
         .verdict-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); }
         .verdict-level-badge { display: inline-flex; align-items: center; padding: var(--space-1) var(--space-3); border: 1px solid currentColor; border-radius: var(--radius-sm); font-size: var(--text-sm); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
         .level-allow { color: var(--ok-ink); background: rgba(78,201,122,.12); }
@@ -928,7 +1044,7 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
         .next-step { margin: 0; padding: var(--space-3); border: 1px solid #1e2a3e; border-left: 3px solid var(--brand); border-radius: var(--radius-sm); background: #0d1118; color: var(--ink); font-size: var(--text-sm); }
         .next-codes { grid-auto-flow: column; justify-content: start; }
         .next-codes li { padding: var(--space-1) var(--space-2); border: 1px solid rgba(224,179,65,.4); border-radius: var(--radius-sm); background: rgba(224,179,65,.1); color: var(--warn-ink); font-size: var(--text-xs); }
-        @media (max-width: 62.5rem) { .top-grid { grid-template-columns: 1fr; } .runtime-compare { grid-template-columns: 1fr; } .title-row { flex-direction: column; } }
+        @media (max-width: 62.5rem) { .top-grid { grid-template-columns: 1fr; } .runtime-compare { grid-template-columns: 1fr; } .hero-main { flex-wrap: wrap; } .hero-badges { margin-left: 0; justify-content: flex-start; } .waterfall-wrap { grid-template-columns: 1fr; } }
     `],
 })
 export class RequestDetailPage implements OnInit {
@@ -1120,6 +1236,9 @@ export class RequestDetailPage implements OnInit {
     /** B0-9 — feedback for the copy affordance; only set after the clipboard actually accepted the path. */
     readonly specPathCopied = signal(false);
 
+    /** Header copy affordance — same honesty rule: only "copied" after the clipboard accepted the id. */
+    readonly requestIdCopied = signal(false);
+
     /** P5a — receipt summary for Q5; absent on payloads that predate the field, never fabricated. */
     readonly receipt = computed<RequestReceiptSummaryDto | null>(() => this.detail()?.receipt ?? null);
 
@@ -1186,6 +1305,7 @@ export class RequestDetailPage implements OnInit {
         // Q5 — a new load invalidates the previous verdict; nothing is claimed verified until re-checked.
         this.receiptVerification.set('unavailable');
         this.specPathCopied.set(false);
+        this.requestIdCopied.set(false);
         let loaded: RequestDetailWithVerdict | null = null;
         try {
             loaded = await this.api.getRequestDetail(this.consumerId(), this.requestId());
@@ -1339,6 +1459,44 @@ export class RequestDetailPage implements OnInit {
             () => this.specPathCopied.set(true),
             () => this.specPathCopied.set(false)
         );
+    }
+
+    /** Header — copies the full request id; a rejected clipboard leaves the button at "copy". */
+    copyRequestId(id: string): void {
+        const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
+        if (!clipboard || typeof clipboard.writeText !== 'function') return;
+        void clipboard.writeText(id).then(
+            () => this.requestIdCopied.set(true),
+            () => this.requestIdCopied.set(false)
+        );
+    }
+
+    /** Header — a locator, not a new id: the full value stays in the tooltip and metadata block. */
+    shortId(value: string | null | undefined): string {
+        const id = typeof value === 'string' ? value.trim() : '';
+        if (!id) return '—';
+        return id.length > 16 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id;
+    }
+
+    /** Header — the verdict's actor, or the same honest "unknown actor" Q1 uses when none was recorded. */
+    heroActor(): string {
+        return this.actorId(this.verdict()?.actor ?? null);
+    }
+
+    /** Stepper — glyph per v2 stage id; an id outside the known set gets no invented icon. */
+    stageGlyph(id: string): string {
+        return STAGE_GLYPH[id] ?? '·';
+    }
+
+    /** Tabs — glyph per drill tab; the label remains the primary text. */
+    tabGlyph(id: TabKey): string {
+        return TAB_GLYPH[id] ?? '·';
+    }
+
+    /** Write-gate card — presence is reported, never assumed. */
+    gateLabel(): string {
+        const gate = this.writeGate();
+        return gate ? (gate.allowed ? 'allowed' : 'blocked') : 'not recorded';
     }
 
     /** Q6 — the only mapping the page is allowed to make: level ⇒ next action. */

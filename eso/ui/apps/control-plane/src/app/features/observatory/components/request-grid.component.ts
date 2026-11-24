@@ -97,7 +97,7 @@ interface ConversationGroup {
                                                     <td class="col-query"><a class="query-link" [title]="row.userQuery" [routerLink]="['/observatory/requests', row.traceId]" [queryParams]="{ consumer: consumerId }">{{ queryPreview(row.userQuery) }}</a></td>
                                                     <td><span class="source-pill agent">agent</span></td>
                                                     <td><span class="status-badge" [class]="'status-' + statusTone(row.status)"><i class="dot"></i>{{ row.status }}</span></td>
-                                                    <td><span class="verdict-badge" [class]="'verdict-' + verdictTone(row.decisionVerdict)">{{ row.decisionVerdict }}</span></td>
+                                                    <td><span class="verdict-badge" [class]="'verdict-' + verdictTone(row.decisionVerdict)">{{ verdictText(row.decisionVerdict) }}</span></td>
                                                     <td class="model" [title]="row.model">{{ modelShort(row.model) }}</td>
                                                     <td class="num">{{ token(row.inputTokens) }}</td>
                                                     <td class="num" [title]="row.tokensEstimated ? 'Estimated from chars ÷ 4' : ''">{{ token(row.outputTokens) }}{{ row.tokensEstimated ? '~' : '' }}</td>
@@ -153,7 +153,7 @@ interface ConversationGroup {
                                         <td class="col-query"><a class="query-link" [title]="row.userQuery" [routerLink]="['/observatory/requests', row.traceId]" [queryParams]="{ consumer: consumerId }">{{ queryPreview(row.userQuery) }}</a></td>
                                         <td><span class="source-pill agent">agent</span></td>
                                         <td><span class="status-badge" [class]="'status-' + statusTone(row.status)"><i class="dot"></i>{{ row.status }}</span></td>
-                                        <td><span class="verdict-badge" [class]="'verdict-' + verdictTone(row.decisionVerdict)">{{ row.decisionVerdict }}</span></td>
+                                        <td><span class="verdict-badge" [class]="'verdict-' + verdictTone(row.decisionVerdict)">{{ verdictText(row.decisionVerdict) }}</span></td>
                                         <td class="model" [title]="row.model">{{ modelShort(row.model) }}</td>
                                         <td class="num">{{ token(row.inputTokens) }}</td>
                                         <td class="num" [title]="row.tokensEstimated ? 'Estimated from chars ÷ 4' : ''">{{ token(row.outputTokens) }}{{ row.tokensEstimated ? '~' : '' }}</td>
@@ -369,9 +369,9 @@ export class RequestGridComponent implements OnChanges {
         return [...map.entries()].map(([conversationId, items]) => ({
             conversationId,
             host: items[0]?.hostId || 'unknown',
-            items: [...items].sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)) || (b.boundaryIndex ?? 0) - (a.boundaryIndex ?? 0)),
+            items: [...items].sort((a, b) => String(a.startedAt).localeCompare(String(b.startedAt)) || (a.boundaryIndex ?? 0) - (b.boundaryIndex ?? 0)),
             latest: items[0]?.startedAt || '',
-        })).sort((a, b) => String(b.latest).localeCompare(String(a.latest)));
+        })).sort((a, b) => String(a.latest).localeCompare(String(b.latest)));
     });
 
     ngOnChanges(changes: SimpleChanges): void {
@@ -427,9 +427,10 @@ export class RequestGridComponent implements OnChanges {
     hostLabel(value: string): string { return HOST_META[value]?.label || value || 'Unknown'; }
     hostColor(value: string): string { return HOST_META[value]?.color || '#94a3b8'; }
     statusTone(value: string): string { const status = String(value || '').toLowerCase(); if (status.includes('fail') || status.includes('block')) return 'bad'; if (status.includes('completed') || status.includes('pass')) return 'ok'; if (status.includes('submitted') || status.includes('progress') || status.includes('pending')) return 'warn'; return 'muted'; }
+    verdictText(value: string): string { return !value || value === '—' ? 'unknown' : value; }
     verdictTone(value: string): string { const verdict = String(value || '').toUpperCase(); return verdict === '—' || !verdict ? 'muted' : verdict.includes('FAIL') || verdict.includes('BLOCK') ? 'bad' : ''; }
-    modelShort(value: string): string { return (value || '—').split('/').pop() || '—'; }
-    token(value: number | null): string { return value == null ? '—' : new Intl.NumberFormat('en-US').format(value); }
+    modelShort(value: string): string { return !value || value === '—' ? 'not captured' : (value.split('/').pop() || value); }
+    token(value: number | null): string { return value == null ? 'not captured' : new Intl.NumberFormat('en-US').format(value); }
     checks(row: RequestSummaryDto): string { if (!row.checksPass && !row.checksFail) return '—'; return `${row.checksPass}/${row.checksFail}`; }
     relative(value: string): string {
         if (!value) return '—';
