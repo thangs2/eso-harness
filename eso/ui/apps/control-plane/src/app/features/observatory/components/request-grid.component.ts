@@ -103,7 +103,7 @@ interface ConversationGroup {
                                                     <td class="num" [title]="row.tokensEstimated ? 'Estimated from chars ÷ 4' : ''">{{ token(row.outputTokens) }}{{ row.tokensEstimated ? '~' : '' }}</td>
                                                     <td class="num">{{ row.callCount }}</td>
                                                     <td class="num">{{ row.toolCount }}</td>
-                                                    <td class="checks-cell" [class.checks-fail]="row.checksFail > 0">{{ checks(row) }}</td>
+                                                    <td class="checks-cell" [class.checks-fail]="row.checksFail > 0" [title]="row.checksPass + ' pass / ' + row.checksFail + ' warn'">{{ checks(row) }}</td>
                                                     <td class="open-cell">
                                                         <a class="cmd primary" [routerLink]="['/requests', row.traceId]" [queryParams]="{ consumer: consumerId }" title="Detail">→</a>
                                                         <button type="button" class="cmd stream" (click)="streamTrace.emit(row.traceId)" title="Play this trace in Live pulse">Stream</button>
@@ -159,7 +159,7 @@ interface ConversationGroup {
                                         <td class="num" [title]="row.tokensEstimated ? 'Estimated from chars ÷ 4' : ''">{{ token(row.outputTokens) }}{{ row.tokensEstimated ? '~' : '' }}</td>
                                         <td class="num">{{ row.callCount }}</td>
                                         <td class="num">{{ row.toolCount }}</td>
-                                        <td class="checks-cell" [class.checks-fail]="row.checksFail > 0">{{ checks(row) }}</td>
+                                        <td class="checks-cell" [class.checks-fail]="row.checksFail > 0" [title]="row.checksPass + ' pass / ' + row.checksFail + ' warn'">{{ checks(row) }}</td>
                                         <td class="open-cell">
                                             <a class="cmd primary" [routerLink]="['/requests', row.traceId]" [queryParams]="{ consumer: consumerId }" title="Detail">→</a>
                                             <button type="button" class="cmd stream" (click)="streamTrace.emit(row.traceId)" title="Play this trace in Live pulse">Stream</button>
