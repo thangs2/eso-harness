@@ -9,13 +9,13 @@ test('Stage 1 accepts law.loaded as weaker evidence than decision.recorded.refs'
   assert.match(REQ, /export function lawLoadedOf/);
   assert.match(REQ, /event !== 'law\.loaded'/);
   assert.match(REQ, /const lawLoaded = lawLoadedOf\(events\)/);
-  assert.match(REQ, /law\.loaded — the host read this file; no decision claim attached/);
-  assert.match(REQ, /no decision ref and no law\.loaded observation/);
+  assert.match(REQ, /law\.loaded — weak: the host read this file, no decision claim attached/);
+  assert.match(REQ, /No tool\/action was recorded, so the PreToolUse law gate had nothing to evaluate/);
 });
 
 test('decision refs stay the strong path and keep stage 1 ok', () => {
-  assert.match(REQ, /status: lawRefs\.length \? 'ok' : 'info'/);
-  assert.match(REQ, /decision\.recorded\.refs — the host decision references this law/);
+  assert.match(REQ, /status: lawState === 'decision' \? 'ok' : lawState === 'missing' \? 'warn' : 'info'/);
+  assert.match(REQ, /decision\.recorded\.refs — strong: the host decision cites this law/);
 });
 
 test('AGY Stop hook emits law.loaded only for real read tool calls', () => {
