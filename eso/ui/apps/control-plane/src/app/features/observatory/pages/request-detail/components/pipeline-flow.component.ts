@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ViewChild, input, output, signal } from '@angular/core';
+import { StepGuideComponent } from './step-guide.component.js';
 import { SectionHintComponent, type SectionHintItem } from '../../../../../shared/section-hint.component.js';
 import type { PipelineStepView, TabKey } from '../request-detail.models.js';
 
@@ -16,7 +17,7 @@ type FlowTone = 'ok' | 'decision' | 'recon' | 'warn' | 'muted';
 @Component({
     selector: 'eso-pipeline-flow',
     standalone: true,
-    imports: [SectionHintComponent],
+    imports: [SectionHintComponent, StepGuideComponent],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <section class="endflow">
@@ -46,6 +47,7 @@ type FlowTone = 'ok' | 'decision' | 'recon' | 'warn' | 'muted';
                                         <span class="collapsed-note">No host evidence for this step</span>
                                         <span class="chevron" aria-hidden="true">▸</span>
                                     </button>
+                                    <button type="button" class="step-guide-btn" aria-label="Explain this step" title="Explain this step" (click)="stepGuide?.open(step); $event.stopPropagation()">?</button>
                                     <button type="button" class="open-tab-btn" (click)="openRelatedTab(step)" [title]="'Open the ' + step.tabLabel + ' tab'">Open {{ step.tabLabel }}</button>
                                 </div>
                             } @else {
@@ -57,6 +59,7 @@ type FlowTone = 'ok' | 'decision' | 'recon' | 'warn' | 'muted';
                                             <span class="status-pill" [attr.data-tone]="tone(step)">{{ step.status }}</span>
                                             <span class="chevron" aria-hidden="true">{{ isStepOpen(step) ? '▾' : '▸' }}</span>
                                         </button>
+                                        <button type="button" class="step-guide-btn" aria-label="Explain this step" title="Explain this step" (click)="stepGuide?.open(step); $event.stopPropagation()">?</button>
                                         <button type="button" class="open-tab-btn" (click)="openRelatedTab(step)" [title]="'Open the ' + step.tabLabel + ' tab'">Open {{ step.tabLabel }}</button>
                                     </div>
                                     @if (isStepOpen(step)) {
@@ -77,6 +80,7 @@ type FlowTone = 'ok' | 'decision' | 'recon' | 'warn' | 'muted';
                     }
                 </div>
             }
+            <eso-step-guide #stepGuide />
         </section>
     `,
     styles: [`
@@ -85,6 +89,9 @@ type FlowTone = 'ok' | 'decision' | 'recon' | 'warn' | 'muted';
         h2 { font-size: 1rem; font-weight: 650; color: #f1f5f9; }
         .eyebrow { color: var(--dim); font-size: var(--fs-label); font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
         .endflow { border: 1px solid var(--line); border-radius: .75rem; background: var(--surface); overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.35); color: var(--ink); font-size: var(--fs-body); line-height: var(--lh); }
+        .step-guide-btn { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; border: 1px solid var(--line); border-radius: 50%; background: var(--surface-2); color: var(--dim); font-size: .6875rem; font-weight: 700; cursor: pointer; }
+        .step-guide-btn:hover { border-color: var(--brand); color: var(--brand); }
+        .step-guide-btn:focus-visible { outline: .125rem solid var(--brand); outline-offset: .125rem; }
         .endflow-actions { display: inline-flex; align-items: center; gap: var(--space-2); }
         .endflow-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: .875rem 1.25rem; border-bottom: 1px solid var(--line); background: #0d1118; }
         .endflow-title { display: flex; align-items: center; gap: .625rem; min-width: 0; }
@@ -139,6 +146,8 @@ type FlowTone = 'ok' | 'decision' | 'recon' | 'warn' | 'muted';
     `],
 })
 export class PipelineFlowComponent {
+    @ViewChild('stepGuide') private stepGuide?: StepGuideComponent;
+
     readonly hint: { summary: string; items: SectionHintItem[] } = {
         summary: 'One card per handoff. An empty step collapses to one row; MISSING is a missing proof, not a UI error.',
         items: [

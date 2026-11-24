@@ -805,6 +805,14 @@ export class RequestService {
         const reconCalls = recon ? recon.reduce((sum, item) => sum + item.calls, 0) : 0;
         const lawRefs = lawRefsOf(verdict);
         const lawLoaded = lawLoadedOf(events);
+        const observedTools = [...new Set(events.flatMap((event) => {
+            if (event.event === 'action.recorded') return [String(event.evidence['tool'] || '')];
+            if (event.event === 'worker.completed' && Array.isArray(event.evidence['tools'])) {
+                return (event.evidence['tools'] as unknown[]).map((tool) => typeof tool === 'string' ? tool : String((tool as Record<string, unknown>)?.['name'] || ''));
+            }
+            return [];
+        }).filter(Boolean))];
+        const lawState = lawRefs.length ? 'decision' : lawLoaded.length ? 'loaded' : observedTools.length ? 'missing' : 'not-exercised';
         const decisions = events.filter((event) => event.event === 'decision.recorded');
         const decision = decisions[decisions.length - 1];
         const winner = typeof decision?.evidence['winner'] === 'string' ? String(decision.evidence['winner']) : null;
@@ -834,8 +842,8 @@ export class RequestService {
         return [
             {
                 id: 'intake-law', stepNumber: 1, title: 'Intake & Law Gate',
-                sub: `${detail.request.userQuery.length} chars · ${lawRefs.length ? `${lawRefs.length} law ref(s)` : lawLoaded.length ? `${lawLoaded.length} law loaded` : 'law not captured'}`,
-                status: lawRefs.length ? 'ok' : 'info', tab: 'rules',
+                sub: `${detail.request.userQuery.length} chars · ${lawState === 'decision' ? `${lawRefs.length} law ref(s)` : lawState === 'loaded' ? `${lawLoaded.length} law loaded` : lawState === 'missing' ? 'law missing — tool used without read' : 'law not exercised (text-only)'}`,
+                status: lawState === 'decision' ? 'ok' : lawState === 'missing' ? 'warn' : 'info', tab: 'rules',
                 details: [
                     { label: 'Prompt', value: `${detail.request.userQuery.length} chars`, detail: `hash ${detail.request.promptHash}` },
                     {
@@ -845,14 +853,17 @@ export class RequestService {
                     },
                     {
                         label: 'Law',
-                        value: lawRefs.length
+                        value: lawState === 'decision'
                             ? lawRefs.slice(0, 2).map((ref) => ref.path || ref.kind).join(', ')
-                            : lawLoaded.length ? lawLoaded.slice(0, 2).map((ref) => ref.path).join(', ') : 'not captured',
-                        detail: lawRefs.length
-                            ? 'decision.recorded.refs — the host decision references this law'
-                            : lawLoaded.length
-                                ? 'law.loaded — the host read this file; no decision claim attached'
-                                : 'LAW_MISSING — no decision ref and no law.loaded observation',
+                            : lawState === 'loaded' ? lawLoaded.slice(0, 2).map((ref) => ref.path).join(', ')
+                                : lawState === 'missing' ? 'not captured' : 'not exercised',
+                        detail: lawState === 'decision'
+                            ? 'decision.recorded.refs — strong: the host decision cites this law'
+                            : lawState === 'loaded'
+                                ? 'law.loaded — weak: the host read this file, no decision claim attached'
+                                : lawState === 'missing'
+                                    ? `A tool/action was recorded (${observedTools.slice(0, 2).join(', ')}) but no law read or decision ref exists. The PreToolUse law gate should block this on new turns; this trace predates or bypassed the gate.`
+                                    : 'No tool/action was recorded, so the PreToolUse law gate had nothing to evaluate. A text-only answer does not read AGENTS.md — expected, but law is still unproven.',
                     },
                 ],
             },
