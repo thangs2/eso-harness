@@ -48,6 +48,9 @@ The e2e compose file builds both application images and runs a disposable stack 
 
 ## Quickstart — local host-native (default)
 
+> Một lệnh: `bash deploy/bin/stack/dev-host.sh` (thêm `--no-db` nếu PostgreSQL đã chạy, `--dry-run` để xem lệnh).
+> Ctrl-C dừng cả control-plane và UI. Log: `/tmp/eso-cp.log` · `/tmp/eso-ui.log`.
+
 ```bash
 # 1. Init: create the ignored runtime env file and runtime directories.
 bash deploy/bin/env-init.sh --env dev

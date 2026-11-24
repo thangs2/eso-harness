@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnInit, ViewEncapsulation, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Directive, OnInit, ViewEncapsulation, computed, effect, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
@@ -36,6 +36,7 @@ import type { ConsumerProfile, HostDto, KnowledgeSummaryDto, KnowledgeDocDto, Kn
  * The API, host discovery, and worker bindings all use `hostId`.
  */
 import { SettingsKnowledgeBase } from './settings-knowledge.base.js';
+@Directive()
 export abstract class SettingsTailBase extends SettingsKnowledgeBase {
 openHosts(): void {
         void this.router.navigate(['/hosts']);
