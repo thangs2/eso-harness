@@ -502,6 +502,31 @@ export function lawRefsOf(verdict: TurnVerdict): TurnVerdictRuleRef[] {
     return (verdict.ruleRefs || []).filter((ref) => LAW_REF_PATTERN.test(String(ref.path || '')));
 }
 
+/** B — law evidence reported by the host hook when it actually read a law file. Weaker than a
+ * decision ref: it proves the file was read, not that a decision relied on it. */
+export interface LawLoadedRef { path: string; hash: string | null; at: string | null; source: string; }
+
+export function lawLoadedOf(events: ReadonlyArray<RequestEvent>): LawLoadedRef[] {
+    const refs: LawLoadedRef[] = [];
+    const seen = new Set<string>();
+    for (const event of events) {
+        if (event.event !== 'law.loaded') continue;
+        const evidence = event.evidence || {};
+        const path = String(evidence['path'] || '').trim();
+        if (!path || !LAW_REF_PATTERN.test(path)) continue;
+        const key = `${path}|${String(evidence['hash'] || '')}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        refs.push({
+            path,
+            hash: typeof evidence['hash'] === 'string' ? evidence['hash'] : null,
+            at: typeof evidence['at'] === 'string' ? evidence['at'] : null,
+            source: typeof evidence['source'] === 'string' ? evidence['source'] : 'host',
+        });
+    }
+    return refs;
+}
+
 function durationMsOf(request: RequestDetailBase['request']): number {
     const start = Date.parse(request.startedAt);
     const end = Date.parse(request.endedAt);
@@ -779,6 +804,7 @@ export class RequestService {
         const recon = detail.signals?.recon ?? null;
         const reconCalls = recon ? recon.reduce((sum, item) => sum + item.calls, 0) : 0;
         const lawRefs = lawRefsOf(verdict);
+        const lawLoaded = lawLoadedOf(events);
         const decisions = events.filter((event) => event.event === 'decision.recorded');
         const decision = decisions[decisions.length - 1];
         const winner = typeof decision?.evidence['winner'] === 'string' ? String(decision.evidence['winner']) : null;
@@ -808,7 +834,7 @@ export class RequestService {
         return [
             {
                 id: 'intake-law', stepNumber: 1, title: 'Intake & Law Gate',
-                sub: `${detail.request.userQuery.length} chars · ${lawRefs.length ? `${lawRefs.length} law ref(s)` : 'law not captured'}`,
+                sub: `${detail.request.userQuery.length} chars · ${lawRefs.length ? `${lawRefs.length} law ref(s)` : lawLoaded.length ? `${lawLoaded.length} law loaded` : 'law not captured'}`,
                 status: lawRefs.length ? 'ok' : 'info', tab: 'rules',
                 details: [
                     { label: 'Prompt', value: `${detail.request.userQuery.length} chars`, detail: `hash ${detail.request.promptHash}` },
@@ -819,8 +845,14 @@ export class RequestService {
                     },
                     {
                         label: 'Law',
-                        value: lawRefs.length ? lawRefs.slice(0, 2).map((ref) => ref.path || ref.kind).join(', ') : 'not captured',
-                        detail: lawRefs.length ? 'verdict.ruleRefs' : 'LAW_MISSING — no AGENTS.md/CLAUDE.md ref in verdict.ruleRefs',
+                        value: lawRefs.length
+                            ? lawRefs.slice(0, 2).map((ref) => ref.path || ref.kind).join(', ')
+                            : lawLoaded.length ? lawLoaded.slice(0, 2).map((ref) => ref.path).join(', ') : 'not captured',
+                        detail: lawRefs.length
+                            ? 'decision.recorded.refs — the host decision references this law'
+                            : lawLoaded.length
+                                ? 'law.loaded — the host read this file; no decision claim attached'
+                                : 'LAW_MISSING — no decision ref and no law.loaded observation',
                     },
                 ],
             },

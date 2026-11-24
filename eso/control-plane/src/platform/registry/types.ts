@@ -200,7 +200,7 @@ export const RECEIPT_GENESIS_HASH = 'GENESIS';
  */
 export const REQUEST_SPEC_REF = {
     doc: 'sdlc/08.ui-design/20.pages/20.request-detail.md',
-    version: '2.3.0',
+    version: '2.4.0',
     section: '§6 Behavior spec',
     anchor: '#6-behavior-spec-std-page-behavior-1',
 } as const;

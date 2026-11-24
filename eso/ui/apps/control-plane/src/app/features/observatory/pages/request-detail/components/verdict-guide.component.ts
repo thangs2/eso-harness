@@ -148,7 +148,7 @@ import type { TurnVerdictView } from '../request-detail.models.js';
     `,
     styles: [`
         .guide { width: min(56rem, 94vw); max-height: 88vh; padding: 0; border: 1px solid var(--line); border-radius: .875rem; background: #0b111b; color: #e2e8f0; }
-        .guide::backdrop { background: rgba(2,6,14,.74); backdrop-filter: blur(2px); }
+        .guide::backdrop { background: rgba(2,6,14,.74); backdrop-filter: blur(.125rem); }
         .guide-panel { display: grid; grid-template-rows: auto minmax(0,1fr); max-height: 88vh; }
         .guide-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); padding: var(--space-4); border-bottom: 1px solid var(--line); background: #0b111b; }
         .guide-eyebrow { margin: 0 0 .125rem; color: var(--dim); font-size: .6875rem; letter-spacing: .09em; text-transform: uppercase; }
