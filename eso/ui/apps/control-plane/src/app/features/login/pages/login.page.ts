@@ -25,6 +25,9 @@ import { AppConfigService } from '../../../core/config/app-config.service.js';
                     @if (error()) {
                         <p class="form-error" role="alert">{{ error() }}</p>
                     }
+                    @if (isDev) {
+                        <p class="login-hint">Dev credential: <code>operator</code> / <code>eso-dev-only-token</code> — prefilled by this build.</p>
+                    }
                     <form (ngSubmit)="submit()" class="login-form">
                         <mat-form-field appearance="outline">
                             <mat-label>Username</mat-label>
@@ -51,6 +54,14 @@ export class LoginPage {
 
     private readonly isDev = this.config.environment() === 'development';
 
+    constructor() {
+        // A new tab may receive the credential from an already signed-in tab; continue to the
+        // requested page instead of asking the operator to type it again.
+        void this.auth.ready.then(() => {
+            if (this.auth.isAuthenticated()) void this.redirectBack();
+        });
+    }
+
     // Local dev convenience only: never ship these defaults in a production config.
     user = this.isDev ? 'operator' : '';
     password = this.isDev ? 'eso-dev-only-token' : '';
@@ -75,13 +86,17 @@ export class LoginPage {
             this.auth.setAuthorization(authorization);
             // BUG-40: do not leave the password on screen after a successful sign in.
             this.password = '';
-            const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
-            await this.router.navigateByUrl(returnUrl && /^\/(?!\/)/.test(returnUrl) ? returnUrl : '/consumers');
+            await this.redirectBack();
         } catch {
             this.error.set('AUTH_INVALID: Unable to reach control plane');
         } finally {
             this.loading.set(false);
         }
+    }
+
+    private async redirectBack(): Promise<void> {
+        const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
+        await this.router.navigateByUrl(returnUrl && /^\/(?!\/)/.test(returnUrl) ? returnUrl : '/consumers');
     }
 
     /** UTF-8-safe Base64 for HTTP Basic (btoa alone throws above U+00FF). */
