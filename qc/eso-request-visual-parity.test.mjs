@@ -13,7 +13,7 @@
  *   · the card chrome is legacy-style: icon chips, accent left rail, status dots, token tiles;
  *   · the stepper keeps the 8 pipeline v2 stage ids, one row at ≥1200, and one selected step;
  *   · the E2E step cards are dense: 3 sub-columns, empty steps collapse to one line;
- *   · the waterfall is full width with summary chips and no right rail;
+ *   · the waterfall keeps the legacy rail only when files/tools/LLM data exists;
  *   · all mandatory honest strings survive the revamp;
  *   · styles are component-scoped layout tokens only — no hardcoded `Npx` outside borders;
  *   · type scale: body 13px, secondary 12px, card title 14px, h1 26–28px, badge 11px.
@@ -114,7 +114,7 @@ test('header: real h1 prompt, badge row, one meta line and collapsible Identity'
     assert.match(STYLES, /@media \(min-width: 75rem\) \{ \.request-query \{ font-size: var\(--fs-h1-lg\); \} \}/);
 });
 
-test('at-a-glance row: four compact cards, verdict + effectiveness + gate + cost', () => {
+test('at-a-glance row: verdict + effectiveness, then the two large gate + cost cards', () => {
     const start = PAGE.indexOf('class="glance-grid top-grid"');
     const row = PAGE.slice(start, PAGE.indexOf('<nav class="pipeline-stepper"', start));
     assert.match(row, /class="verdict-hero"/);
@@ -124,13 +124,19 @@ test('at-a-glance row: four compact cards, verdict + effectiveness + gate + cost
     assert.equal((row.match(/<div class="kpi-tile">/g) ?? []).length, 7, 'all seven effectiveness values stay');
     assert.match(row, /class="token-tiles"/);
     assert.match(row, /Host signals:<\/span> not reported/, 'null signals fold to one inline line');
-    assert.match(STYLES, /\.glance-grid\s*\{[^}]*grid-template-columns:\s*minmax\(0, \.95fr\) minmax\(0, 1\.9fr\) minmax\(0, 1fr\) minmax\(0, \.95fr\)/);
+    // Legacy gate + cost row: two large cards on the second row of the at-a-glance grid.
+    assert.match(STYLES, /\.glance-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
+    assert.match(row, /class="gate-big"/, 'gate keeps a large state word');
+    assert.match(row, /class="token-gauge"/, 'cost keeps a proportion gauge');
+    assert.match(STYLES, /\.gate-card h2, \.tokens h2\s*\{[^}]*font-size:\s*var\(--fs-h2-large\)/);
+    assert.match(STYLES, /\.token-tile strong\s*\{[^}]*font-size:\s*var\(--fs-big\)/);
+    assert.match(STYLES, /\.mini-btn\s*\{/, 'small Show/Copy actions');
 });
 
 test('card chrome mirrors the legacy language: icon chips, accent rails, status dots, token tiles', () => {
     const chips = PAGE.match(/class="icon-chip/g) ?? [];
     assert.ok(chips.length >= 4, `expected icon chips on the card heads (found ${chips.length})`);
-    assert.match(STYLES, /\.icon-chip\s*\{[\s\S]*?border:\s*1px solid[\s\S]*?border-radius:\s*var\(--radius-sm\)/);
+    assert.match(STYLES, /\.icon-chip\s*\{[\s\S]*?border:\s*1px solid[\s\S]*?border-radius:\s*\.5rem/);
     // Legacy accent left rail on every card.
     assert.match(STYLES, /border-left:\s*3px solid var\(--card-accent/);
     // Status badges carry a dot as a second signal, not colour alone.
@@ -142,7 +148,7 @@ test('card chrome mirrors the legacy language: icon chips, accent rails, status 
     assert.match(STYLES, /\.detail-page\s*\{[\s\S]*?gap:\s*var\(--space-5\)/);
 });
 
-test('stepper keeps the 8 v2 stage ids, one row, readable labels and a single selected step', () => {
+test('stepper keeps the 8 v2 stage ids, legacy ring badges and a single selected step', () => {
     for (const id of STAGE_IDS) {
         assert.match(PAGE, new RegExp(`'?${id.replace('-', '\\-')}'?:\\s*'`), `stage glyph for ${id}`);
     }
@@ -150,35 +156,56 @@ test('stepper keeps the 8 v2 stage ids, one row, readable labels and a single se
     assert.match(PAGE, /class="pipeline-step-title">\{\{ stage\.title \}\}/);
     assert.match(PAGE, /class="stage-icon"/);
     assert.match(PAGE, /\{\{ stageGlyph\(stage\.id\) \}\}/);
-    assert.match(PAGE, /class="step-dot"/);
     // Selection — never the tab — decides which single step is active.
     assert.match(PAGE, /\[class\.active\]="selectedStepId\(\) === stage\.id"/);
     assert.match(PAGE, /\[attr\.aria-current\]="selectedStepId\(\) === stage\.id \? 'step' : null"/);
     assert.doesNotMatch(PAGE, /\[class\.active\]="activeTab\(\) === stage\.tab"/);
     assert.doesNotMatch(PAGE, /\[attr\.aria-pressed\]/);
-    assert.match(STYLES, /\.pipeline-step\.active\s*\{[^}]*box-shadow:\s*inset 0 -2px 0 var\(--brand\)/);
+    // Legacy anatomy: no segmented card, 34–40px circular badge, 11px label + muted sub.
     assert.match(STYLES, /\.pipeline-stepper\s*\{[^}]*grid-template-columns:\s*repeat\(8, minmax\(0, 1fr\)\)/);
-    // No label ellipsis: the title is allowed to wrap; only the sub line may truncate.
-    assert.match(STYLES, /\.pipeline-step-title\s*\{[^}]*flex-wrap:\s*wrap/);
+    assert.match(STYLES, /\.pipeline-stepper\s*\{[^}]*border:\s*0/);
+    assert.match(STYLES, /\.pipeline-stepper\s*\{[^}]*background:\s*transparent/);
+    assert.match(STYLES, /\.stage-icon\s*\{[^}]*width:\s*2\.125rem[^}]*height:\s*2\.125rem[^}]*border-radius:\s*50%/);
+    assert.match(STYLES, /\.pipeline-step-title\s*\{[^}]*font-size:\s*var\(--fs-label\)/);
+    assert.match(STYLES, /\.pipeline-step-sub\s*\{[^}]*color:\s*var\(--muted\)/);
+    // Selected = ring + glow.
+    assert.match(STYLES, /\.pipeline-step\.active \.stage-icon\s*\{[^}]*box-shadow:/);
+    // No label ellipsis: the title is allowed to wrap; anything but truncation.
+    assert.match(STYLES, /\.pipeline-step-title\s*\{[^}]*overflow-wrap:\s*anywhere/);
     assert.doesNotMatch(STYLES, /\.pipeline-step-title\s*\{[^}]*text-overflow:\s*ellipsis/);
     // Under 1200 the single row becomes horizontally scrollable.
-    assert.match(STYLES, /@media \(max-width: 74\.9375rem\) \{[\s\S]*?\.pipeline-stepper \{ grid-template-columns: repeat\(8, minmax\(9rem, 1fr\)\); overflow-x: auto; \}/);
+    assert.match(STYLES, /@media \(max-width: 74\.9375rem\) \{[\s\S]*?\.pipeline-stepper \{ grid-template-columns: repeat\(8, minmax\(9rem, 1fr\)\); overflow-x: auto;[\s\S]*?\}/);
 });
 
-test('E2E flow keeps 8 step cards, 3 sub-columns, one missing tag and empty-step collapse', () => {
+test('E2E flow ports the legacy card anatomy and collapses empty steps to one slim row', () => {
     assert.match(PAGE, /@for \(step of steps\(\); track step\.id; let index = \$index\)/);
-    assert.match(PAGE, /class="endflow-card-title">STEP \{\{ index \+ 1 \}\} · \{\{ step\.label \}\}/);
+    assert.match(PAGE, /class="endflow-card-title"[^>]*>STEP \{\{ index \+ 1 \}\} · \{\{ step\.label \}\}/);
     assert.match(PAGE, /class="endflow-subgrid" \[class\.single\]="step\.subcards\.length === 1"/);
     assert.match(PAGE, /class="sub-label">\{\{ sub\.label \}\}/);
     assert.match(PAGE, /class="sub-value">\{\{ sub\.value \}\}/);
-    assert.match(PAGE, /@if \(step\.empty\) \{ <span class="missing-tag">missing<\/span> \}/);
+    assert.match(PAGE, /class="sub-detail">\{\{ sub\.detail \}\}/);
+    assert.match(PAGE, /<span class="missing-tag">missing<\/span>/);
     assert.match(PAGE, /No host evidence for this step/);
     assert.match(PAGE, /\(click\)="toggleStep\(step\)"/);
     assert.match(PAGE, /\[attr\.aria-expanded\]="isStepOpen\(step\)"/);
     assert.match(PAGE, /stage\.details\.filter\(\(detail\) => detail\.label === 'Law'\)/);
+    // Legacy left rail: numbered circle + gradient connector, 1px coloured card.
+    assert.match(PAGE, /class="endflow-no"/);
+    assert.match(PAGE, /class="endflow-connector"/);
+    assert.match(STYLES, /\.endflow-no\s*\{[^}]*border-radius:\s*50%/);
+    assert.match(STYLES, /\.endflow-connector\s*\{[^}]*background:\s*var\(--connector/);
+    assert.match(STYLES, /\.endflow-card\s*\{[^}]*padding:\s*1rem[^}]*border:\s*1px solid var\(--line\)[^}]*border-radius:\s*\.75rem/);
+    assert.match(STYLES, /\.endflow-card\[data-tone='decision'\]/);
+    assert.match(STYLES, /\.endflow-card\[data-tone='warn'\]/);
     assert.match(STYLES, /\.endflow-subgrid\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/);
-    assert.match(STYLES, /\.endflow-sub \.sub-label\s*\{[^}]*font-size:\s*var\(--fs-secondary\)/);
-    assert.match(STYLES, /\.endflow-sub \.sub-value\s*\{[^}]*font-size:\s*var\(--fs-body\)/);
+    assert.match(STYLES, /\.endflow-sub\s*\{[^}]*background:\s*#0d1118/);
+    assert.match(STYLES, /\.endflow-sub \.sub-label\s*\{[^}]*font-size:\s*var\(--fs-label\)/);
+    assert.match(STYLES, /\.endflow-sub \.sub-detail\s*\{[^}]*font-size:\s*var\(--fs-label\)/);
+    // An empty step is one slim muted row, not a header-only stripe.
+    assert.match(PAGE, /@if \(step\.empty && !isStepOpen\(step\)\)/);
+    assert.match(PAGE, /class="endflow-collapsed"/);
+    assert.match(STYLES, /\.endflow-collapsed\s*\{[^}]*display:\s*flex/);
+    assert.match(STYLES, /\.collapsed-note\s*\{[^}]*color:\s*var\(--dim\)/);
 });
 
 test('drill tabs are full width, icon + label + count, and keep the five tabs', () => {
@@ -193,7 +220,7 @@ test('drill tabs are full width, icon + label + count, and keep the five tabs', 
     assert.match(STYLES, /\.tabs button\s*\{[^}]*flex:\s*1 1 0/);
 });
 
-test('waterfall is full width, has summary chips, a table-like event grid and no right rail', () => {
+test('waterfall keeps the legacy rail only when data exists, plus dense event pills', () => {
     const pane = PAGE.slice(
         PAGE.indexOf("selector: 'eso-waterfall-panel'"),
         PAGE.indexOf("selector: 'eso-graph-panel'"),
@@ -208,9 +235,21 @@ test('waterfall is full width, has summary chips, a table-like event grid and no
     assert.match(pane, /<time \[title\]="formatAt\(event\.at\)">\{\{ formatClock\(event\.at\) \}\}<\/time>/);
     assert.match(pane, /class="event-duration">\{\{ eventDuration\(event\) \}\}/);
     assert.match(pane, /<details class="event-evidence"/);
-    assert.equal(pane.includes('class="diag"'), false, 'right rail removed');
-    assert.equal(pane.includes('Files touched'), false, 'no Files touched box');
-    assert.match(STYLES, /\.event-table-head, \.event-grid\s*\{[^}]*grid-template-columns:\s*5\.5rem minmax\(0, 2fr\) 7rem 6rem 4\.5rem/);
+    // Dense legacy row: coloured PROMPT / TOOL / FAIL pill + monospace event.
+    assert.match(pane, /class="event-pill" \[attr\.data-kind\]="eventKind\(event\)"/);
+    assert.match(PAGE, /eventKind\(event: ObservationDto\): 'PROMPT' \| 'TOOL' \| 'FAIL'/);
+    assert.match(STYLES, /\.event-pill\[data-kind='PROMPT'\]/);
+    assert.match(STYLES, /\.event-pill\[data-kind='TOOL'\]/);
+    assert.match(STYLES, /\.event-pill\[data-kind='FAIL'\]/);
+    assert.match(STYLES, /\.event-table-head, \.event-grid\s*\{[^}]*grid-template-columns:\s*5rem minmax\(0, 2\.2fr\) 7rem 5\.5rem 4\.5rem/);
+    // The right rail exists in the component, but only renders when a dataset exists.
+    assert.match(pane, /@if \(hasRail\(\)\)/);
+    assert.match(pane, /class="wf-rail"/);
+    assert.match(pane, /Files touched/);
+    assert.match(pane, /Tool call breakdown/);
+    assert.match(pane, /LLM emissions/);
+    assert.match(PAGE, /readonly hasRail = computed\(\(\) => this\.fileRows\(\)\.length > 0 \|\| this\.toolRows\(\)\.length > 0 \|\| this\.llmRows\(\)\.length > 0\)/);
+    assert.match(STYLES, /\.wf-layout\.no-rail\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\)/);
     assert.match(STYLES, /\.waterfall-empty\s*\{/);
 });
 

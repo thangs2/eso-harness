@@ -2,7 +2,10 @@ import { ChangeDetectionStrategy, Component, ElementRef, inject, input, output }
 import { STAGE_GLYPH, type StepperStageView } from '../request-detail.models.js';
 
 /**
- * Pipeline stepper — selection is the only thing that makes a step active.
+ * Pipeline stepper — the legacy anatomy: eight evenly spaced circular badges with a coloured
+ * ring per status, an 11px coloured label and a muted sub line. There is no segmented card
+ * chrome; selection is the only active state (ring + glow + `aria-current`).
+ *
  * A tab may be linked from a step, but a tab never selects a step.
  */
 @Component({
@@ -31,31 +34,30 @@ import { STAGE_GLYPH, type StepperStageView } from '../request-detail.models.js'
                         <span class="pipeline-step-title">{{ stage.title }}</span>
                         <span class="pipeline-step-sub">{{ stage.sub }}</span>
                     </span>
-                    <span class="step-dot" aria-hidden="true"></span>
                 </button>
             }
         </nav>
     `,
     styles: [`
-        :host { display: block; --brand: #5aa9ff; --muted: #8b97ab; --dim: #64748b; --line: #253047; --line-soft: #1e2a3e; --surface: #131722; --surface-2: #0d1118; --surface-3: #0f1a2b; --warn-ink: #e0b341; --ok-ink: #4ec97a; --fs-secondary: var(--text-xs); --fs-badge: .6875rem; }
-        .stepper-hint { margin: 0 0 var(--space-1); color: var(--muted); font-size: var(--fs-secondary); }
-        .pipeline-stepper { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); overflow: hidden; }
-        .pipeline-step { position: relative; display: grid; grid-template-columns: 1.25rem minmax(0, 1fr); align-items: center; gap: var(--space-1); min-height: 4rem; padding: var(--space-1) var(--space-2); border: 0; border-right: 1px solid var(--line-soft); background: transparent; color: var(--muted); font: inherit; text-align: left; cursor: pointer; }
-        .pipeline-step:last-child { border-right: 0; }
-        .pipeline-step:hover { background: var(--surface-3); }
-        .pipeline-step:focus-visible { outline: .125rem solid var(--brand); outline-offset: -.125rem; }
-        .pipeline-step.active { background: var(--surface-3); box-shadow: inset 0 -2px 0 var(--brand); }
-        .pipeline-step.active .stage-icon { border-color: var(--brand); color: var(--brand); background: rgba(90,169,255,.12); }
+        :host { display: block; --brand: #38bdf8; --muted: #94a3b8; --dim: #64748b; --line: #253047; --line-soft: #1e2a3e; --surface: #131722; --surface-2: #0d1118; --surface-3: #0f1a2b; --warn-ink: #fbbf24; --ok-ink: #34d399; --fs-label: .6875rem; }
+        .stepper-hint { margin: 0 0 var(--space-2); color: var(--muted); font-size: var(--fs-label); }
+        .pipeline-stepper { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); border: 0; background: transparent; }
+        .pipeline-step { position: relative; display: grid; grid-template-columns: 2.125rem minmax(0, 1fr); align-items: start; gap: .375rem; padding: .25rem .5rem .5rem 0; border: 0; background: transparent; color: var(--muted); font: inherit; text-align: left; cursor: pointer; }
+        .pipeline-step:not(:last-child)::after { content: ''; position: absolute; top: 1.3125rem; right: -.0625rem; width: .75rem; height: .0625rem; background: var(--line); }
+        .pipeline-step:hover .stage-icon { transform: translateY(-.0625rem); }
+        .pipeline-step:focus-visible { outline: .125rem solid var(--brand); outline-offset: .125rem; border-radius: .375rem; }
+        .stage-icon { display: grid; place-items: center; width: 2.125rem; height: 2.125rem; border: 2px solid currentColor; border-radius: 50%; background: var(--surface-2); font-size: .8125rem; font-weight: 700; line-height: 1; transition: transform .15s ease, box-shadow .15s ease, background .15s ease; }
         .pipeline-step.ok { color: var(--ok-ink); }
         .pipeline-step.bad { color: var(--warn-ink); }
         .pipeline-step.info { color: var(--brand); }
-        .pipeline-step.muted { color: var(--dim); }
-        .stage-icon { display: grid; place-items: center; width: 1.25rem; height: 1.25rem; border: 1px solid currentColor; border-radius: var(--radius-sm); background: var(--surface-2); font-size: var(--fs-secondary); line-height: 1; }
-        .pipeline-step-copy { display: grid; gap: 0; min-width: 0; }
-        .pipeline-step-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: .1875rem; color: #e2e8f0; font-size: var(--fs-secondary); line-height: 1.2; }
-        .pipeline-step-sub { color: var(--muted); font-size: var(--fs-badge); line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .step-dot { position: absolute; top: var(--space-1); right: var(--space-2); width: .375rem; height: .375rem; border-radius: 50%; background: currentColor; }
-        @media (max-width: 74.9375rem) { .pipeline-stepper { grid-template-columns: repeat(8, minmax(9rem, 1fr)); overflow-x: auto; } }
+        .pipeline-step.muted { color: var(--muted); }
+        .pipeline-step-copy { display: grid; gap: .125rem; min-width: 0; padding-top: .1875rem; }
+        .pipeline-step-title { color: currentColor; font-size: var(--fs-label); font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+        .pipeline-step-sub { color: var(--muted); font-size: var(--fs-label); line-height: 1.35; overflow-wrap: anywhere; }
+        .pipeline-step.active .stage-icon { border-color: var(--brand); background: rgba(56,189,248,.14); color: #e0f2fe; box-shadow: 0 0 0 .1875rem rgba(56,189,248,.2), 0 0 .875rem rgba(56,189,248,.55); }
+        .pipeline-step.active .pipeline-step-title { color: var(--brand); }
+        .pipeline-step.active .pipeline-step-sub { color: #bae6fd; }
+        @media (max-width: 74.9375rem) { .pipeline-stepper { grid-template-columns: repeat(8, minmax(9rem, 1fr)); overflow-x: auto; padding-bottom: .25rem; } .pipeline-step:not(:last-child)::after { display: none; } }
     `],
 })
 export class PipelineStepperComponent {

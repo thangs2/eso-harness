@@ -57,6 +57,16 @@ import { toActionEvents, toFlowSteps, toTraceEvents } from './request-detail/req
 
                 <eso-request-hero [detail]="detail" [verdict]="verdict()" />
 
+                <eso-pipeline-stepper [stages]="detail.systemStages" [selectedStepId]="selectedStepId()" (stepSelected)="selectStep($event)" />
+
+                <eso-pipeline-flow
+                    [steps]="flowSteps()"
+                    [selectedStepId]="selectedStepId()"
+                    [expandedIds]="expandedStepIds()"
+                    (stepToggled)="toggleStep($event)"
+                    (openTab)="activeTab.set($event)"
+                />
+
                 <eso-glance-cards
                     [verdict]="verdict()"
                     [effectiveness]="effectiveness()"
@@ -66,16 +76,6 @@ import { toActionEvents, toFlowSteps, toTraceEvents } from './request-detail/req
                     [llmCallCount]="detail.telemetry.llmCalls.length"
                     [toolCount]="detail.telemetry.tools.length"
                     [fileCount]="detail.telemetry.files.length"
-                />
-
-                <eso-pipeline-stepper [stages]="detail.systemStages" [selectedStepId]="selectedStepId()" (stepSelected)="selectStep($event)" />
-
-                <eso-pipeline-flow
-                    [steps]="flowSteps()"
-                    [selectedStepId]="selectedStepId()"
-                    [expandedIds]="expandedStepIds()"
-                    (stepToggled)="toggleStep($event)"
-                    (openTab)="activeTab.set($event)"
                 />
 
                 <div class="tabs drill-tabs" role="tablist" aria-label="Request detail tabs">
@@ -89,7 +89,7 @@ import { toActionEvents, toFlowSteps, toTraceEvents } from './request-detail/req
                 </div>
 
                 @if (activeTab() === 'waterfall') {
-                    <eso-waterfall-panel [events]="traceEvents()" [fileCount]="detail.telemetry.files.length" [toolCount]="detail.telemetry.tools.length" [llmCallCount]="detail.telemetry.llmCalls.length" (rawEvidenceOpened)="trackRawEvidence()" />
+                    <eso-waterfall-panel [events]="traceEvents()" [files]="detail.telemetry.files" [tools]="detail.telemetry.tools" [llmCalls]="detail.telemetry.llmCalls" (rawEvidenceOpened)="trackRawEvidence()" />
                 } @else if (activeTab() === 'topology') {
                     <eso-graph-panel [detail]="detail" />
                 } @else if (activeTab() === 'decisions') {
@@ -105,7 +105,7 @@ import { toActionEvents, toFlowSteps, toTraceEvents } from './request-detail/req
     styles: [`
         :host { display: block; }
         .detail-page { --surface: #131722; --surface-2: #0d1118; --surface-3: #0f1a2b; --line: #253047; --line-soft: #1e2a3e; --ink: #e2e8f0; --muted: #8b97ab; --dim: #64748b; --brand: #5aa9ff; --brand-ink: #ffffff; --warn-ink: #e0b341; --ok-ink: #4ec97a; --danger-ink: #ff6b6b; --fs-h1: 1.625rem; --fs-h1-lg: 1.75rem; --fs-title: 0.875rem; --fs-body: 0.8125rem; --fs-secondary: var(--text-xs); --fs-badge: 0.6875rem; --lh: 1.35; }
-        .detail-page { display: grid; gap: var(--space-5); width: 100%; max-width: calc(var(--content-max) + var(--page-pad) * 2); margin: 0 auto; padding: var(--page-pad); box-sizing: border-box; color: var(--ink); font-size: var(--fs-body); line-height: var(--lh); }
+        .detail-page { display: grid; gap: var(--space-5); row-gap: var(--space-4); width: 100%; max-width: calc(var(--content-max) + var(--page-pad) * 2); margin: 0 auto; padding: var(--page-pad); box-sizing: border-box; color: var(--ink); font-size: var(--fs-body); line-height: var(--lh); }
         .detail-nav { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
         .crumb { display: inline-flex; align-items: center; gap: var(--space-2); min-width: 0; color: var(--muted); font-size: var(--fs-secondary); }
         .crumb a { color: var(--brand); text-decoration: none; }

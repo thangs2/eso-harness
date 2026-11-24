@@ -1,6 +1,6 @@
-import type { ObservationDto, RequestDetailDto, RequestReceiptSummaryDto } from '../../../../../../../../libs/api-client/types.js';
+import type { ObservationDto, RequestDetailDto, RequestLlmCallDto, RequestReceiptSummaryDto } from '../../../../../../../../libs/api-client/types.js';
 
-export type { ObservationDto, RequestDetailDto, RequestReceiptSummaryDto };
+export type { ObservationDto, RequestDetailDto, RequestLlmCallDto, RequestReceiptSummaryDto };
 
 /** Drill-pane ids. A stage may point at one of these, but a tab never selects a stage. */
 export type TabKey = 'waterfall' | 'topology' | 'decisions' | 'rules' | 'telemetry';

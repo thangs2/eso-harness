@@ -67,7 +67,7 @@ const PAGE_LABELS: Record<string, string> = {
                     </div>
                 </header>
 
-                <div class="app-body">
+                <div class="app-body" [class.focus-mode]="onRequestDetail()">
                     @if (menuOpen()) { <button type="button" class="sidebar-overlay" aria-label="Close navigation" (click)="menuOpen.set(false)"></button> }
                     <aside class="app-sidebar" [class.open]="menuOpen()" aria-label="Application navigation">
                         <nav class="side-nav" (click)="menuOpen.set(false)">
@@ -166,6 +166,9 @@ const PAGE_LABELS: Record<string, string> = {
         .side-foot-title { color: #c8d6e5; font-size: 11px; font-weight: 700; }
         .side-foot-text { color: #7f93a8; font-size: 10px; }
         .eso-content { width: 100%; max-width: none; margin: 0; padding: var(--space-5); }
+        .app-body.focus-mode { grid-template-columns: minmax(0, 1fr); }
+        .app-body.focus-mode .app-sidebar { display: none; }
+        .app-body.focus-mode .eso-content { padding: 0; }
         .eso-content-observatory { padding: 0; }
         .menu-toggle { display: none; border: 1px solid #2a4058; background: #0f1b2b; color: #dbeafe; border-radius: var(--radius-sm); width: 36px; height: 36px; font-size: 18px; cursor: pointer; }
         .sidebar-overlay { display: none; }
@@ -223,6 +226,7 @@ export class ShellComponent {
     readonly onGraph = computed(() => this.url().startsWith('/event-graph'));
     readonly onOffice = computed(() => this.url().startsWith('/office'));
     readonly onRequests = computed(() => this.url().startsWith('/observatory/requests'));
+    readonly onRequestDetail = computed(() => this.url().startsWith('/observatory/requests/'));
     readonly activeConsumer = computed(() => this.consumers().find((item) => item.id === this.consumerId()) ?? null);
     readonly paletteOpen = signal(false);
     readonly paletteQuery = signal('');

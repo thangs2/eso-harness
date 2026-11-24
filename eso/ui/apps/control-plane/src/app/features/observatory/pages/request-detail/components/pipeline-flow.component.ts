@@ -1,9 +1,16 @@
 import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
 import type { PipelineStepView, TabKey } from '../request-detail.models.js';
 
+type FlowTone = 'ok' | 'decision' | 'recon' | 'warn' | 'muted';
+
 /**
- * End-to-end flow — one card per system stage. A card owns two distinct actions:
- * toggle its evidence, or open the related tab. Selecting a step is the stepper's job.
+ * End-to-end flow — one card per system stage, ported from the legacy diagram anatomy:
+ * a numbered circle plus a vertical gradient connector on the left, then a 1px coloured card
+ * (emerald executed / purple decision / sky recon / amber warn / slate unknown) with 16px
+ * padding and up to three raised sub-panels. An empty step collapses to one slim muted row.
+ *
+ * A card owns two distinct actions: toggle its evidence, or open the related tab. Selecting a
+ * step is the stepper's job.
  */
 @Component({
     selector: 'eso-pipeline-flow',
@@ -21,31 +28,46 @@ import type { PipelineStepView, TabKey } from '../request-detail.models.js';
             @if (flowExpanded()) {
                 <div class="endflow-body">
                     @for (step of steps(); track step.id; let index = $index) {
-                        <div class="endflow-step" [class.is-empty]="step.empty" [attr.id]="'step-' + step.id">
-                            <div class="endflow-rail"><span class="endflow-no" [class.ok]="step.status === 'ok'" [class.bad]="step.status === 'warn'">{{ index + 1 }}</span></div>
-                            <div class="endflow-card" [class.ok]="step.status === 'ok'" [class.bad]="step.status === 'warn'" [class.info]="step.status === 'info'" [class.selected]="selectedStepId() === step.id">
-                                <div class="endflow-card-row">
-                                    <button type="button" class="endflow-card-head" (click)="toggleStep(step)" [attr.aria-expanded]="isStepOpen(step)">
-                                        <span class="endflow-card-title">STEP {{ index + 1 }} · {{ step.label }}</span>
-                                        @if (step.empty) { <span class="missing-tag">missing</span> }
-                                        <span class="endflow-card-sub">{{ step.empty ? 'No host evidence for this step' : step.sub }}</span>
-                                        <span class="badge" [class.ok]="step.status === 'ok'" [class.warn]="step.status === 'warn'">{{ step.status }}</span>
-                                        <span class="chevron" aria-hidden="true">{{ isStepOpen(step) ? '▾' : '▸' }}</span>
+                        <div class="endflow-step" [class.is-empty]="step.empty" [attr.id]="'step-' + step.id" [attr.data-tone]="tone(step)">
+                            <div class="endflow-rail">
+                                <span class="endflow-no" [attr.data-tone]="tone(step)">{{ index + 1 }}</span>
+                                @if (!$last) { <span class="endflow-connector" [attr.data-tone]="tone(step)" aria-hidden="true"></span> }
+                            </div>
+                            @if (step.empty && !isStepOpen(step)) {
+                                <div class="endflow-collapsed">
+                                    <button type="button" class="collapsed-head" (click)="toggleStep(step)" [attr.aria-expanded]="false">
+                                        <span class="endflow-card-title" [attr.data-tone]="tone(step)">STEP {{ index + 1 }} · {{ step.label }}</span>
+                                        <span class="missing-tag">missing</span>
+                                        <span class="collapsed-note">No host evidence for this step</span>
+                                        <span class="chevron" aria-hidden="true">▸</span>
                                     </button>
                                     <button type="button" class="open-tab-btn" (click)="openRelatedTab(step)" [title]="'Open the ' + step.tabLabel + ' tab'">Open {{ step.tabLabel }}</button>
                                 </div>
-                                @if (isStepOpen(step)) {
-                                    <div class="endflow-subgrid" [class.single]="step.subcards.length === 1">
-                                        @for (sub of step.subcards; track sub.label) {
-                                            <div class="endflow-sub">
-                                                <span class="sub-label">{{ sub.label }}</span>
-                                                <strong class="sub-value">{{ sub.value }}</strong>
-                                                <small class="sub-detail">{{ sub.detail }}</small>
-                                            </div>
-                                        }
+                            } @else {
+                                <div class="endflow-card" [attr.data-tone]="tone(step)" [class.selected]="selectedStepId() === step.id">
+                                    <div class="endflow-card-row">
+                                        <button type="button" class="endflow-card-head" (click)="toggleStep(step)" [attr.aria-expanded]="isStepOpen(step)">
+                                            <span class="endflow-card-title" [attr.data-tone]="tone(step)">STEP {{ index + 1 }} · {{ step.label }}</span>
+                                            <span class="endflow-card-sub">({{ step.empty ? 'no host evidence for this step' : step.sub }})</span>
+                                            <span class="status-pill" [attr.data-tone]="tone(step)">{{ step.status }}</span>
+                                            <span class="chevron" aria-hidden="true">{{ isStepOpen(step) ? '▾' : '▸' }}</span>
+                                        </button>
+                                        <button type="button" class="open-tab-btn" (click)="openRelatedTab(step)" [title]="'Open the ' + step.tabLabel + ' tab'">Open {{ step.tabLabel }}</button>
                                     </div>
-                                }
-                            </div>
+                                    @if (isStepOpen(step)) {
+                                        <div class="endflow-subgrid" [class.single]="step.subcards.length === 1" [class.two]="step.subcards.length === 2">
+                                            @for (sub of step.subcards; track sub.label; let i = $index) {
+                                                <div class="endflow-sub" [attr.data-tone]="subTone(i)">
+                                                    <span class="sub-dot" aria-hidden="true"></span>
+                                                    <span class="sub-label">{{ sub.label }}</span>
+                                                    <strong class="sub-value">{{ sub.value }}</strong>
+                                                    <span class="sub-detail">{{ sub.detail }}</span>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            }
                         </div>
                     }
                 </div>
@@ -53,51 +75,61 @@ import type { PipelineStepView, TabKey } from '../request-detail.models.js';
         </section>
     `,
     styles: [`
-        :host { display: block; --brand: #5aa9ff; --muted: #8b97ab; --dim: #64748b; --line: #253047; --line-soft: #1e2a3e; --surface: #131722; --surface-2: #0d1118; --surface-3: #0f1a2b; --ink: #e2e8f0; --warn-ink: #e0b341; --ok-ink: #4ec97a; --fs-title: .875rem; --fs-body: .8125rem; --fs-secondary: var(--text-xs); --fs-badge: .6875rem; --lh: 1.35; }
+        :host { display: block; --brand: #38bdf8; --muted: #94a3b8; --dim: #64748b; --line: #253047; --line-soft: #1e2a3e; --surface: #131722; --surface-2: #0d1118; --page: #0a0e17; --ink: #e2e8f0; --warn-ink: #fbbf24; --ok-ink: #34d399; --decision-ink: #a78bfa; --recon-ink: #38bdf8; --fs-label: .6875rem; --fs-body: .75rem; --lh: 1.45; }
         h2, p { margin: 0; }
-        h2 { font-size: var(--fs-title); font-weight: 650; }
-        .eyebrow { color: var(--dim); font-size: var(--fs-badge); font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
-        .endflow { border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.35); color: var(--ink); font-size: var(--fs-body); line-height: var(--lh); }
-        .endflow-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-2) var(--space-4); border-bottom: 1px solid var(--line); background: var(--surface-3); }
-        .endflow-title { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
-        .endflow-icon { display: grid; place-items: center; flex: 0 0 auto; width: 1.5rem; height: 1.5rem; border: 1px solid rgba(90,169,255,.35); border-radius: var(--radius-sm); background: rgba(90,169,255,.1); color: var(--brand); }
+        h2 { font-size: 1rem; font-weight: 650; color: #f1f5f9; }
+        .eyebrow { color: var(--dim); font-size: var(--fs-label); font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+        .endflow { border: 1px solid var(--line); border-radius: .75rem; background: var(--surface); overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.35); color: var(--ink); font-size: var(--fs-body); line-height: var(--lh); }
+        .endflow-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: .875rem 1.25rem; border-bottom: 1px solid var(--line); background: #0d1118; }
+        .endflow-title { display: flex; align-items: center; gap: .625rem; min-width: 0; }
+        .endflow-icon { display: grid; place-items: center; flex: 0 0 auto; width: 2rem; height: 2rem; border: 1px solid rgba(56,189,248,.35); border-radius: .5rem; background: rgba(56,189,248,.1); color: var(--recon-ink); }
         .endflow-icon svg { width: 1rem; height: 1rem; }
-        .endflow-title p { margin: 0; color: var(--muted); font-size: var(--fs-secondary); }
-        .ghost-btn { padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); color: var(--muted); font: inherit; font-size: var(--fs-secondary); line-height: 1.6; cursor: pointer; white-space: nowrap; }
-        .ghost-btn:hover { border-color: var(--brand); color: #ffffff; }
-        .ghost-btn:focus-visible, .open-tab-btn:focus-visible { outline: .125rem solid var(--brand); outline-offset: -.125rem; }
-        .endflow-body { display: grid; gap: 0; padding: var(--space-2) var(--space-3) var(--space-3); background: var(--surface-2); }
-        .endflow-step { display: grid; grid-template-columns: 1.5rem minmax(0, 1fr); gap: var(--space-2); align-items: start; scroll-margin-top: calc(var(--header-h) + var(--space-2)); }
-        .endflow-rail { display: flex; flex-direction: column; align-items: center; padding-top: var(--space-1); }
-        .endflow-no { display: grid; place-items: center; width: 1.375rem; height: 1.375rem; border: 1px solid #475569; border-radius: 50%; background: var(--surface); color: var(--muted); font-size: var(--fs-badge); font-weight: 700; }
-        .endflow-no.ok { border-color: var(--ok-ink); color: var(--ok-ink); }
-        .endflow-no.bad { border-color: var(--warn-ink); color: var(--warn-ink); }
-        .endflow-step:not(:last-child) .endflow-rail::after { content: ''; flex: 1; width: .0625rem; margin: .1875rem 0; background: var(--line); }
-        .endflow-card { min-width: 0; margin-bottom: var(--space-1); border: 1px solid var(--line); border-left: 3px solid #475569; border-radius: var(--radius-sm); background: var(--surface); }
-        .endflow-card.ok { border-left-color: var(--ok-ink); }
-        .endflow-card.bad { border-left-color: var(--warn-ink); }
-        .endflow-card.info { border-left-color: var(--brand); }
-        .endflow-card.selected { box-shadow: 0 0 0 1px var(--brand) inset; background: var(--surface-3); }
-        .endflow-card-row { display: flex; align-items: center; gap: var(--space-1); padding-right: var(--space-2); }
-        .endflow-card-head { display: flex; flex: 1 1 auto; align-items: center; gap: var(--space-2); width: 100%; min-width: 0; padding: var(--space-1) var(--space-2); border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
-        .endflow-card-head:hover { background: rgba(90,169,255,.05); }
-        .endflow-card-head:focus-visible { outline: .125rem solid var(--brand); outline-offset: -.125rem; }
-        .endflow-card-title { flex: 0 0 auto; color: #cbd5e1; font-size: var(--fs-badge); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
-        .endflow-card-sub { flex: 1 1 auto; min-width: 0; color: var(--muted); font-size: var(--fs-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .missing-tag { flex: 0 0 auto; padding: 0 var(--space-1); border: 1px solid rgba(224,179,65,.4); border-radius: var(--radius-sm); background: rgba(224,179,65,.1); color: var(--warn-ink); font-size: var(--fs-badge); letter-spacing: .06em; line-height: 1.5; text-transform: uppercase; }
-        .endflow-card .badge { display: inline-flex; align-items: center; min-height: 1.25rem; padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); color: #cbd5e1; font-size: var(--fs-badge); white-space: nowrap; }
-        .endflow-card .badge.ok { color: #a7f3d0; border-color: rgba(78,201,122,.3); }
-        .endflow-card .badge.warn { color: #fde68a; border-color: rgba(224,179,65,.45); }
-        .open-tab-btn { flex: 0 0 auto; padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--brand); font: inherit; font-size: var(--fs-badge); line-height: 1.7; cursor: pointer; white-space: nowrap; }
-        .open-tab-btn:hover { border-color: var(--brand); background: rgba(90,169,255,.12); }
-        .chevron { color: var(--muted); font-size: var(--fs-secondary); line-height: 1; }
-        .endflow-subgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2) var(--space-4); padding: 0 var(--space-2) var(--space-2); }
+        .endflow-title p { margin: 0; color: var(--muted); font-size: var(--fs-label); }
+        .ghost-btn { padding: 0 .625rem; border: 1px solid var(--line); border-radius: .375rem; background: var(--surface); color: var(--muted); font: inherit; font-size: var(--fs-label); line-height: 1.8; cursor: pointer; white-space: nowrap; }
+        .ghost-btn:hover { border-color: var(--recon-ink); color: #ffffff; }
+        .ghost-btn:focus-visible, .open-tab-btn:focus-visible, .collapsed-head:focus-visible { outline: .125rem solid var(--recon-ink); outline-offset: -.125rem; }
+        .endflow-body { display: grid; gap: 1.25rem; padding: 1.25rem; background: var(--page); }
+        .endflow-step { display: grid; grid-template-columns: 2.25rem minmax(0, 1fr); gap: .75rem; align-items: stretch; scroll-margin-top: calc(var(--header-h) + var(--space-2)); }
+        .endflow-rail { display: flex; flex-direction: column; align-items: center; }
+        .endflow-no { display: grid; place-items: center; flex: 0 0 auto; width: 2.25rem; height: 2.25rem; border: 2px solid var(--tone, var(--muted)); border-radius: 50%; background: #0d1118; color: var(--tone, var(--muted)); font-size: .75rem; font-weight: 700; box-shadow: 0 0 .75rem color-mix(in srgb, var(--tone, #94a3b8) 35%, transparent); }
+        .endflow-step.is-empty .endflow-no { width: 1.75rem; height: 1.75rem; font-size: var(--fs-label); box-shadow: none; }
+        .endflow-connector { flex: 1 1 auto; width: .125rem; min-height: 1.5rem; margin: .375rem 0; background: var(--connector, var(--line)); }
+        [data-tone='ok'] { --tone: var(--ok-ink); --connector: linear-gradient(180deg, #34d399, rgba(167,139,250,.4)); }
+        [data-tone='decision'] { --tone: var(--decision-ink); --connector: linear-gradient(180deg, #a78bfa, rgba(56,189,248,.4)); }
+        [data-tone='recon'] { --tone: var(--recon-ink); --connector: linear-gradient(180deg, #38bdf8, rgba(251,191,36,.4)); }
+        [data-tone='warn'] { --tone: var(--warn-ink); --connector: linear-gradient(180deg, #fbbf24, rgba(148,163,184,.35)); }
+        [data-tone='muted'] { --tone: var(--muted); --connector: linear-gradient(180deg, rgba(148,163,184,.6), transparent); }
+        .endflow-card { min-width: 0; padding: 1rem; border: 1px solid var(--line); border-radius: .75rem; background: var(--surface); }
+        .endflow-card[data-tone='ok'] { border-color: rgba(52,211,153,.55); }
+        .endflow-card[data-tone='decision'] { border-color: rgba(167,139,250,.55); }
+        .endflow-card[data-tone='recon'] { border-color: rgba(56,189,248,.55); }
+        .endflow-card[data-tone='warn'] { border-color: rgba(251,191,36,.6); }
+        .endflow-card[data-tone='muted'] { border-color: rgba(148,163,184,.35); }
+        .endflow-card.selected { box-shadow: 0 0 0 1px var(--recon-ink), 0 0 1rem rgba(56,189,248,.18); }
+        .endflow-card-row { display: flex; align-items: flex-start; gap: .75rem; }
+        .endflow-card-head { display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: baseline; gap: .25rem .5rem; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+        .endflow-card-head:focus-visible { outline: .125rem solid var(--recon-ink); outline-offset: .125rem; }
+        .endflow-card-title { flex: 0 0 auto; color: var(--tone, var(--muted)); font-size: var(--fs-label); font-weight: 700; letter-spacing: .08em; line-height: 1.5; text-transform: uppercase; }
+        .endflow-card-sub { flex: 1 1 12rem; min-width: 0; color: var(--muted); font-size: var(--fs-label); line-height: 1.5; overflow-wrap: anywhere; }
+        .status-pill { flex: 0 0 auto; margin-left: auto; padding: 0 .5rem; border: 1px solid var(--tone, var(--line)); border-radius: 62.44rem; background: color-mix(in srgb, var(--tone, #94a3b8) 14%, transparent); color: var(--tone, var(--muted)); font-size: var(--fs-label); font-weight: 600; letter-spacing: .04em; line-height: 1.6; text-transform: uppercase; }
+        .chevron { flex: 0 0 auto; color: var(--muted); font-size: var(--fs-label); line-height: 1.6; }
+        .missing-tag { flex: 0 0 auto; padding: 0 .375rem; border: 1px solid rgba(251,191,36,.4); border-radius: .25rem; background: rgba(251,191,36,.1); color: var(--warn-ink); font-size: var(--fs-label); letter-spacing: .06em; line-height: 1.6; text-transform: uppercase; }
+        .open-tab-btn { flex: 0 0 auto; align-self: flex-start; padding: 0 .625rem; border: 1px solid var(--line); border-radius: .375rem; background: #0d1118; color: var(--recon-ink); font: inherit; font-size: var(--fs-label); line-height: 1.8; cursor: pointer; white-space: nowrap; }
+        .open-tab-btn:hover { border-color: var(--recon-ink); background: rgba(56,189,248,.12); }
+        .endflow-subgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; margin-top: .75rem; }
+        .endflow-subgrid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .endflow-subgrid.single { grid-template-columns: minmax(0, 1fr); }
-        .endflow-sub { display: grid; gap: 0; min-width: 0; }
-        .endflow-sub .sub-label { color: var(--dim); font-size: var(--fs-secondary); letter-spacing: .04em; text-transform: uppercase; }
-        .endflow-sub .sub-value { color: #e2e8f0; font-size: var(--fs-body); font-weight: 600; line-height: var(--lh); overflow-wrap: anywhere; }
-        .endflow-sub .sub-detail { color: var(--dim); font-size: var(--fs-secondary); line-height: var(--lh); overflow-wrap: anywhere; }
-        @media (max-width: 47.9375rem) { .endflow-subgrid { grid-template-columns: minmax(0, 1fr); } }
+        .endflow-sub { display: grid; grid-template-columns: .375rem minmax(0, 1fr); align-items: start; gap: .125rem .5rem; min-width: 0; padding: .625rem .75rem; border: 1px solid var(--line-soft); border-radius: .5rem; background: #0d1118; }
+        .endflow-sub .sub-dot { grid-row: 1; align-self: center; width: .375rem; height: .375rem; border-radius: 50%; background: var(--tone, var(--muted)); }
+        .endflow-sub .sub-label { color: var(--tone, var(--muted)); font-size: var(--fs-label); font-weight: 700; letter-spacing: .06em; line-height: 1.45; text-transform: uppercase; }
+        .endflow-sub .sub-value { grid-column: 2; color: #e2e8f0; font-size: var(--fs-body); font-weight: 650; line-height: 1.45; overflow-wrap: anywhere; }
+        .endflow-sub .sub-detail { grid-column: 2; color: var(--muted); font-size: var(--fs-label); line-height: 1.45; overflow-wrap: anywhere; }
+        .endflow-collapsed { display: flex; align-items: center; justify-content: space-between; gap: .75rem; min-width: 0; min-height: 2rem; padding: .25rem 0; border-bottom: 1px solid rgba(37,48,71,.65); }
+        .collapsed-head { display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: baseline; gap: .25rem .5rem; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+        .collapsed-head .endflow-card-title { color: var(--muted); letter-spacing: .06em; }
+        .collapsed-note { color: var(--dim); font-size: var(--fs-label); line-height: 1.45; }
+        .endflow-collapsed .open-tab-btn { align-self: center; }
+        @media (max-width: 62.5rem) { .endflow-subgrid, .endflow-subgrid.two { grid-template-columns: minmax(0, 1fr); } }
     `],
 })
 export class PipelineFlowComponent {
@@ -109,6 +141,20 @@ export class PipelineFlowComponent {
     readonly openTab = output<TabKey>();
 
     readonly flowExpanded = signal(true);
+
+    /** Legacy colour law: warn wins, then decision, executed, recon, unknown. */
+    tone(step: PipelineStepView): FlowTone {
+        if (step.status === 'warn' || step.status === 'bad' || step.status === 'missing' || step.status === 'fail') return 'warn';
+        if (step.id === 'decision-jev') return 'decision';
+        if (step.status === 'ok') return 'ok';
+        if (step.status === 'info') return 'recon';
+        return 'muted';
+    }
+
+    /** Sub-panel dots cycle emerald → sky → amber, like the legacy three-up rows. */
+    subTone(index: number): FlowTone {
+        return (['ok', 'recon', 'warn'] as const)[index % 3];
+    }
 
     isStepOpen(step: PipelineStepView): boolean {
         return this.expandedIds().has(step.id);
