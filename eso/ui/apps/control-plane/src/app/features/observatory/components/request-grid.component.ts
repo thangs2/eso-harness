@@ -91,7 +91,7 @@ interface ConversationGroup {
                                                         } @else {
                                                             <span class="expand-spacer" aria-hidden="true"></span>
                                                         }
-                                                        <span class="boundary">{{ row.boundaryIndex ?? index + 1 }}</span>
+                                                        <span class="boundary">{{ sequence(row, index, group.items.length) }}</span>
                                                     </td>
                                                     <td class="when" [title]="fullTime(row.startedAt)">{{ relative(row.startedAt) }}</td>
                                                     <td class="col-query"><a class="query-link" [title]="row.userQuery" [routerLink]="['/observatory/requests', row.traceId]" [queryParams]="{ consumer: consumerId }">{{ queryPreview(row.userQuery) }}</a></td>
@@ -146,7 +146,7 @@ interface ConversationGroup {
                                         } @else {
                                             <span class="expand-spacer" aria-hidden="true"></span>
                                         }
-                                        <span class="boundary">{{ row.boundaryIndex ?? index + 1 }}</span>
+                                        <span class="boundary">{{ sequence(row, index + offset(), filtered().length) }}</span>
                                     </td>
                                         <td class="when" [title]="fullTime(row.startedAt)">{{ relative(row.startedAt) }}</td>
                                         <td><span class="ide-badge" [style.color]="hostColor(row.hostId)"><i class="dot" [style.background]="hostColor(row.hostId)"></i>{{ hostLabel(row.hostId) }}</span></td>
@@ -427,6 +427,16 @@ export class RequestGridComponent implements OnChanges {
     hostLabel(value: string): string { return HOST_META[value]?.label || value || 'Unknown'; }
     hostColor(value: string): string { return HOST_META[value]?.color || '#94a3b8'; }
     statusTone(value: string): string { const status = String(value || '').toLowerCase(); if (status.includes('fail') || status.includes('block')) return 'bad'; if (status.includes('completed') || status.includes('pass')) return 'ok'; if (status.includes('submitted') || status.includes('progress') || status.includes('pending')) return 'warn'; return 'muted'; }
+    /**
+     * Chronological sequence, not display position. The list is newest-first, so the newest
+     * prompt carries the highest number (8 → 1 top-to-bottom). A host-provided boundaryIndex wins.
+     */
+    sequence(row: { boundaryIndex?: number | null }, position: number, total: number): number {
+        const boundary = Number(row.boundaryIndex);
+        if (Number.isFinite(boundary) && boundary > 0) return boundary;
+        return Math.max(1, total - position);
+    }
+
     verdictText(value: string): string { return !value || value === '—' ? 'unknown' : value; }
     verdictTone(value: string): string { const verdict = String(value || '').toUpperCase(); return verdict === '—' || !verdict ? 'muted' : verdict.includes('FAIL') || verdict.includes('BLOCK') ? 'bad' : ''; }
     modelShort(value: string): string { return !value || value === '—' ? 'not captured' : (value.split('/').pop() || value); }
