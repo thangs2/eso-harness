@@ -260,135 +260,114 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
                 </nav>
 
                 <header class="request-hero">
-                    <div class="hero-main">
-                        <span class="icon-chip hero-chip" aria-hidden="true">▸</span>
+                    <div class="hero-head">
                         <div class="hero-copy">
                             <p class="eyebrow">Prompt request · {{ value(request, 'flowId') }}</p>
                             <h1 class="request-query">{{ queryText() }}</h1>
-                            <p class="hero-sub">{{ workerLabel(request.workerId) }} · host {{ request.hostId }} · runtime {{ request.runtimeKey }}</p>
                         </div>
                         <div class="badges hero-badges">
                             <span class="badge status-badge" [class.ok]="status() === 'completed'" [class.warn]="status() === 'failed'" [class.bad]="status() === 'blocked'"><span class="status-dot" aria-hidden="true"></span>{{ status() }}</span>
-                            @if (verdict(); as v) { <span class="badge verdict-badge" [class]="'level-' + v.level">{{ v.level }}</span> }
+                            @if (verdict(); as v) { <span class="badge verdict-badge" [class]="'level-' + v.level">{{ v.level }}</span> } @else { <span class="badge muted">unknown</span> }
                             <span class="badge muted">{{ value(request, 'taskType') }}</span>
                             <span class="badge muted">{{ traceEvents().length }} events</span>
                             @if (failureKind()) { <span class="badge warn">{{ failureKind() }}</span> }
                         </div>
                     </div>
-                    <div class="hero-id-row">
-                        <span class="hero-id-label">Request ID</span>
-                        <code class="hero-id" [title]="request.observationId">{{ shortId(request.observationId) }}</code>
-                        <button type="button" class="copy-path hero-copy-btn" (click)="copyRequestId(request.observationId)" [attr.aria-label]="requestIdCopied() ? 'Request id copied' : 'Copy request id'">{{ requestIdCopied() ? 'copied' : 'copy' }}</button>
-                    </div>
-                    <div class="facts hero-facts">
-                        <span><small>Started</small>{{ formatAt(request.at) }}</span>
-                        <span><small>Duration</small>{{ duration() }}</span>
-                        <span><small>Host</small>{{ request.hostId || '—' }}</span>
-                        <span><small>Runtime</small>{{ request.runtimeKey || '—' }}</span>
-                        <span><small>Model</small>{{ value(request, 'model') }}</span>
-                        <span><small>Actor</small>{{ heroActor() }}</span>
-                    </div>
+                    <p class="hero-meta">
+                        <span class="meta-fact"><span class="meta-key">Started</span>{{ formatAt(request.at) }}</span>
+                        <span class="meta-fact"><span class="meta-key">Duration</span>{{ duration() }}</span>
+                        <span class="meta-fact"><span class="meta-key">Host</span>{{ request.hostId || '—' }}</span>
+                        <span class="meta-fact"><span class="meta-key">Runtime</span>{{ request.runtimeKey || '—' }}</span>
+                        <span class="meta-fact"><span class="meta-key">Model</span>{{ value(request, 'model') === '—' ? 'not captured' : value(request, 'model') }}</span>
+                        <span class="meta-fact"><span class="meta-key">Actor</span>{{ heroActor() }}</span>
+                    </p>
+                    <details class="identity-details">
+                        <summary class="identity-summary">
+                            <span class="identity-title">Identity</span>
+                            <code class="identity-locator" [title]="request.observationId">{{ shortId(request.observationId) }}</code>
+                            <span class="identity-hint">id · hash · length · flow</span>
+                            <span class="chevron" aria-hidden="true">▸</span>
+                        </summary>
+                        <div class="identity-body">
+                            <p class="policy-note">Prompt body is captured at operator request. Content may contain sensitive data and is shown read-only.</p>
+                            <dl class="identity-grid">
+                                <div class="identity-cell"><dt>Request ID</dt><dd><code>{{ request.observationId }}</code> <button type="button" class="copy-path" (click)="copyRequestId(request.observationId)" [attr.aria-label]="requestIdCopied() ? 'Request id copied' : 'Copy request id'">{{ requestIdCopied() ? 'copied' : 'copy' }}</button></dd></div>
+                                <div class="identity-cell"><dt>Request hash</dt><dd><code>{{ value(request, 'requestHash') }}</code></dd></div>
+                                <div class="identity-cell"><dt>Request length</dt><dd>{{ value(request, 'requestLength') }} chars</dd></div>
+                                <div class="identity-cell"><dt>Worker</dt><dd>{{ request.workerId || '—' }}</dd></div>
+                                <div class="identity-cell"><dt>Runtime</dt><dd>{{ request.runtimeKey }}</dd></div>
+                                <div class="identity-cell"><dt>Host</dt><dd>{{ request.hostId }}</dd></div>
+                                <div class="identity-cell"><dt>Task type</dt><dd>{{ value(request, 'taskType') }}</dd></div>
+                                <div class="identity-cell"><dt>Model / adapter</dt><dd>{{ value(request, 'model') }} · {{ value(request, 'adapter') }}</dd></div>
+                                <div class="identity-cell"><dt>Flow</dt><dd>{{ value(request, 'flowId') }}</dd></div>
+                            </dl>
+                        </div>
+                    </details>
                 </header>
 
-                <section class="verdict-hero" [attr.data-level]="verdict()?.level || 'unknown'" aria-label="Turn verdict (Q1)">
-                    <header class="verdict-hero-head">
-                        <span class="icon-chip verdict-chip" aria-hidden="true">◈</span>
-                        <div class="verdict-hero-title"><p class="eyebrow">ESO adjudication · Q1</p><h2>Turn verdict</h2><p class="card-lede">ESO's adjudication of this turn — level, score, actor and basis.</p></div>
-                    </header>
-                    @if (verdict(); as v) {
-                        <div class="verdict-head">
-                            <span class="verdict-level-badge" [class]="'level-' + v.level">{{ v.level }}</span>
-                            <div class="verdict-meta"><small>Score</small><strong>{{ v.score }}</strong></div>
-                            <div class="verdict-meta"><small>Actor</small><span class="verdict-actor-id">{{ actorId(v.actor) }}</span>@if (actorRole(v.actor); as role) {<span class="verdict-actor-role">{{ role }}</span>}</div>
-                            <div class="verdict-meta"><small>Computed</small><time>{{ relative(v.computedAt) }}</time></div>
-                        </div>
-                        <p class="verdict-basis">{{ v.basis }}</p>
-                    } @else {
-                        <div class="verdict-head"><span class="verdict-level-badge level-unknown">not returned</span></div>
-                        <p class="verdict-basis">The API response for this request carried no verdict.</p>
-                    }
-                </section>
+                <section class="glance-grid top-grid" aria-label="Request at a glance">
+                    <section class="verdict-hero" [attr.data-level]="verdict()?.level || 'unknown'" aria-label="Turn verdict (Q1)">
+                        <header class="verdict-hero-head">
+                            <h2>Turn verdict</h2>
+                            @if (verdict(); as v) { <span class="verdict-level-badge" [class]="'level-' + v.level">{{ v.level }}</span> }
+                        </header>
+                        @if (verdict(); as v) {
+                            <div class="verdict-figures">
+                                <div class="verdict-meta"><small>Score</small><strong>{{ v.score }}</strong></div>
+                                <div class="verdict-meta"><small>Actor</small><span class="verdict-actor-id" [title]="actorId(v.actor)">{{ actorId(v.actor) }}</span>@if (actorRole(v.actor); as role) { <span class="verdict-actor-role">{{ role }}</span> }</div>
+                                <div class="verdict-meta"><small>Computed</small><time>{{ relative(v.computedAt) }}</time></div>
+                            </div>
+                            <p class="verdict-basis">{{ v.basis }}</p>
+                        } @else {
+                            <div class="verdict-figures"><span class="verdict-level-badge level-unknown">not returned</span></div>
+                            <p class="verdict-basis">The API response for this request carried no verdict.</p>
+                        }
+                    </section>
 
-                <section class="effectiveness" aria-label="Orchestration effectiveness (pipeline v2)">
-                    <header class="effectiveness-head">
-                        <div class="card-head-main"><span class="icon-chip effectiveness-chip" aria-hidden="true">◱</span><div><p class="eyebrow">Pipeline v2</p><h2>Orchestration effectiveness</h2><p class="card-lede">The backend's own tally of stages, roles, workers and gaps.</p></div></div>
-                        <span class="badge muted">backend tally</span>
-                    </header>
-                    @if (effectiveness(); as e) {
-                        <div class="kpi-strip">
-                            <div class="kpi-tile"><span>Pipeline steps evidenced</span><strong>{{ countOrDash(e.stepsWithEvidence) }}/{{ countOrDash(e.stepsTotal) }}</strong><small>with host evidence</small></div>
-                            <div class="kpi-tile"><span>Roles &amp; workers</span><strong>{{ countOrDash(e.rolesObserved) }}/{{ countOrDash(e.rolesAssigned) }} roles</strong><small>{{ countOrDash(e.workersObserved) }}/{{ countOrDash(e.workersTotal) }} workers</small></div>
-                            <div class="kpi-tile"><span>Failures</span><strong>{{ countOrDash(e.failures) }}</strong><small>recorded failures</small></div>
-                            <div class="kpi-tile"><span>Duration</span><strong>{{ humanDuration(e.durationMs) }}</strong><small>pipeline elapsed</small></div>
-                            <div class="kpi-tile"><span>Write gate checked</span><strong>{{ yesNo(e.writeGateChecked) }}</strong><small>scope decision</small></div>
-                            <div class="kpi-tile"><span>Receipt sealed</span><strong>{{ yesNo(e.receiptSealed) }}</strong><small>receipt seal</small></div>
-                            <div class="kpi-tile"><span>Gaps</span><strong>{{ countOrDash(e.gaps) }}</strong><small>open proof gaps</small></div>
-                        </div>
-                    } @else {
-                        <p class="hint">No effectiveness data for this request</p>
-                    }
-                </section>
-
-                <nav class="pipeline-stepper" aria-label="Pipeline stages">
-                    @for (stage of systemStages(); track stage.id) {
-                        <button type="button" class="pipeline-step" [class.ok]="stage.status === 'ok'" [class.bad]="stage.status === 'warn'" [class.info]="stage.status === 'info'" [class.muted]="stage.status === 'muted'" [class.active]="activeTab() === stage.tab" [attr.aria-pressed]="activeTab() === stage.tab" [title]="'Step ' + stage.stepNumber + ': ' + stage.title" (click)="activeTab.set(stage.tab)">
-                            <span class="pipeline-step-no">{{ stage.stepNumber }}</span>
-                            <span class="stage-icon" aria-hidden="true">{{ stageGlyph(stage.id) }}</span>
-                            <span class="pipeline-step-copy"><strong>{{ stage.title }}</strong><small>{{ stage.sub }}</small></span>
-                        </button>
-                    }
-                </nav>
-
-                <section class="host-signals" aria-label="Host signals (P6c)">
-                    <header class="host-signals-head">
-                        <div class="card-head-main"><span class="icon-chip signals-chip" aria-hidden="true">◉</span><div><p class="eyebrow">Host-reported</p><h2>Host signals</h2><p class="card-lede">Only what the host reported; ESO adds no default.</p></div></div>
-                        <span class="badge muted">not inferred by ESO</span>
-                    </header>
-                    @if (signals(); as s) {
-                        <div class="signal-strip">
-                            <div class="signal-tile"><span>Preflight</span><strong>{{ preflightLabel(s.preflight) }}</strong><small>{{ preflightFingerprint(s.preflight) }}</small></div>
-                            <div class="signal-tile"><span>Recon calls</span><strong>{{ reconLabel(s.recon) }}</strong><small>calls the host reported, per adapter</small></div>
-                            <div class="signal-tile"><span>Brain tier</span><strong>{{ brainTierLabel(s.brainTier) }}</strong><small>tier the host reported</small></div>
-                            <div class="signal-tile"><span>Distill</span><strong>{{ distillLabel(s.distill) }}</strong><small>lessons the host reported</small></div>
-                        </div>
-                    } @else {
-                        <p class="hint">No host signal was reported for this turn</p>
-                    }
-                </section>
-
-                <section class="endflow">
-                    <header class="endflow-head">
-                        <div class="endflow-title"><span class="endflow-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h8l-1 8 11-14h-8l1-6z" /></svg></span><div><h2>End-to-End Pipeline Data Flow</h2><p>Prompt ingest → worker handoff → evidence → telemetry</p></div></div>
-                        <button type="button" class="ghost-btn" (click)="flowExpanded.set(!flowExpanded())">{{ flowExpanded() ? '▲ Hide' : '▼ Show flow' }}</button>
-                    </header>
-                    @if (flowExpanded()) {
-                        <div class="endflow-body">
-                            @for (step of endSteps(); track step.id; let index = $index) {
-                                <div class="endflow-step">
-                                    <div class="endflow-rail"><span class="endflow-no" [class.ok]="step.status === 'PASS'" [class.bad]="step.status === 'FAIL' || step.status === 'BLOCKED'">{{ index + 1 }}</span></div>
-                                    <div class="endflow-card" [class.ok]="step.status === 'ok'" [class.bad]="step.status === 'warn'" [class.info]="step.status === 'info'">
-                                        <div class="endflow-card-head"><strong>STEP {{ index + 1 }} · {{ step.label }}</strong><span class="badge" [class.ok]="step.status === 'ok'" [class.warn]="step.status === 'warn'">{{ step.status }}</span></div>
-                                        <div class="endflow-subgrid">
-                                            @for (sub of step.subcards; track sub.label) {
-                                                <div class="endflow-sub"><span>{{ sub.label }}</span><strong>{{ sub.value }}</strong><small>{{ sub.detail }}</small></div>
-                                            }
-                                        </div>
-                                    </div>
+                    <section class="effectiveness" aria-label="Orchestration effectiveness (pipeline v2)">
+                        <header class="effectiveness-head">
+                            <div class="card-head-main"><span class="icon-chip effectiveness-chip" aria-hidden="true">◱</span><div><p class="eyebrow">Pipeline v2</p><h2>Orchestration effectiveness</h2></div></div>
+                            <span class="badge muted">backend tally</span>
+                        </header>
+                        @if (effectiveness(); as e) {
+                            <div class="kpi-strip">
+                                <div class="kpi-tile"><span>Pipeline steps evidenced</span><strong>{{ countOrDash(e.stepsWithEvidence) }}/{{ countOrDash(e.stepsTotal) }}</strong></div>
+                                <div class="kpi-tile"><span>Roles &amp; workers</span><strong>{{ countOrDash(e.rolesObserved) }}/{{ countOrDash(e.rolesAssigned) }} roles</strong><small>{{ countOrDash(e.workersObserved) }}/{{ countOrDash(e.workersTotal) }} workers</small></div>
+                                <div class="kpi-tile"><span>Failures</span><strong>{{ countOrDash(e.failures) }}</strong></div>
+                                <div class="kpi-tile"><span>Duration</span><strong>{{ humanDuration(e.durationMs) }}</strong></div>
+                                <div class="kpi-tile"><span>Write gate checked</span><strong>{{ yesNo(e.writeGateChecked) }}</strong></div>
+                                <div class="kpi-tile"><span>Receipt sealed</span><strong>{{ yesNo(e.receiptSealed) }}</strong></div>
+                                <div class="kpi-tile"><span>Gaps</span><strong>{{ countOrDash(e.gaps) }}</strong></div>
+                            </div>
+                        } @else {
+                            <p class="hint">No effectiveness data for this request</p>
+                        }
+                        @if (signals(); as s) {
+                            <div class="host-signals" aria-label="Host signals (P6c)">
+                                <header class="host-signals-head">
+                                    <div class="card-head-main"><span class="icon-chip signals-chip" aria-hidden="true">◉</span><div><p class="eyebrow">Host-reported</p><h2>Host signals</h2></div></div>
+                                    <span class="badge muted">not inferred by ESO</span>
+                                </header>
+                                <div class="signal-strip">
+                                    <div class="signal-tile"><span>Preflight</span><strong>{{ preflightLabel(s.preflight) }}</strong><small>{{ preflightFingerprint(s.preflight) }}</small></div>
+                                    <div class="signal-tile"><span>Recon calls</span><strong>{{ reconLabel(s.recon) }}</strong><small>calls the host reported, per adapter</small></div>
+                                    <div class="signal-tile"><span>Brain tier</span><strong>{{ brainTierLabel(s.brainTier) }}</strong><small>tier the host reported</small></div>
+                                    <div class="signal-tile"><span>Distill</span><strong>{{ distillLabel(s.distill) }}</strong><small>lessons the host reported</small></div>
                                 </div>
-                            }
-                        </div>
-                    }
-                </section>
+                            </div>
+                        } @else {
+                            <p class="signals-inline" title="No host signal was reported for this turn"><span class="signals-key">Host signals:</span> not reported</p>
+                        }
+                    </section>
 
-                <div class="top-grid gate-tokens-row">
                     <section class="panel gate-card" aria-label="Write gate">
                         <header class="panel-head">
-                            <div class="card-head-main"><span class="icon-chip gate-chip" aria-hidden="true">⛨</span><div><p class="eyebrow">Scope guard</p><h2>Write gate</h2><p class="card-lede">The guard's recorded scope decision, never inferred from the verdict.</p></div></div>
-                            <span class="badge" [class.ok]="writeGate()?.allowed === true" [class.bad]="writeGate()?.allowed === false" [class.muted]="!writeGate()">{{ gateLabel() }}</span>
+                            <div class="card-head-main"><span class="icon-chip gate-chip" aria-hidden="true">⛨</span><div><p class="eyebrow">Scope guard</p><h2>Write gate</h2></div></div>
+                            <span class="gate-badge" [attr.data-state]="writeGate()?.allowed === true ? 'allowed' : writeGate() ? 'blocked' : 'none'">{{ writeGate() ? gateLabel() : 'not recorded' }}</span>
                         </header>
                         @if (writeGate(); as gate) {
                             <div class="gate-summary">
-                                <span class="gate-state" [class.ok]="gate.allowed" [class.bad]="!gate.allowed"><span class="status-dot" aria-hidden="true"></span>{{ gate.allowed ? 'allowed' : 'blocked' }}</span>
+                                <span class="gate-state" [attr.data-state]="gate.allowed ? 'allowed' : 'blocked'"><span class="status-dot" aria-hidden="true"></span>{{ gate.allowed ? 'allowed' : 'blocked' }}</span>
                                 @if (gate.code) { <code class="gate-code">{{ gate.code }}</code> } @else { <span class="hint">no code</span> }
                                 <code class="gate-target">{{ gate.target }}</code>
                                 <time>{{ relative(gate.at) }}</time>
@@ -402,33 +381,66 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
                         }
                     </section>
 
-                    <section class="panel tokens">
-                        <header class="panel-head"><div class="card-head-main"><span class="icon-chip tokens-chip" aria-hidden="true">◎</span><div><p class="eyebrow">Cost</p><h2>Tokens &amp; model</h2><p class="card-lede">What this turn spent, and how it was measured.</p></div></div><span class="badge muted">not reported</span></header>
+                    <section class="panel tokens" aria-label="Cost">
+                        <header class="panel-head"><div class="card-head-main"><span class="icon-chip tokens-chip" aria-hidden="true">◎</span><div><p class="eyebrow">Cost</p><h2>Tokens &amp; model</h2></div></div></header>
                         <div class="token-tiles">
                             <div><span>Input</span><strong>{{ tokenSummary().input ?? '—' }}</strong><small>{{ tokenSummary().estimated ? 'estimated · chars/4' : 'not captured' }}</small></div>
                             <div><span>Output</span><strong>{{ tokenSummary().output ?? '—' }}</strong><small>{{ tokenSummary().estimated ? 'estimated · chars/4' : 'not captured' }}</small></div>
-                            <div><span>LLM calls</span><strong>{{ llmCalls().length }}</strong><small>observed worker steps</small></div>
+                            <div><span title="LLM calls">Calls</span><strong>{{ llmCalls().length }}</strong><small>worker steps</small></div>
                             <div><span>Tools</span><strong>{{ toolCount() }}</strong><small>{{ fileCount() }} files</small></div>
                         </div>
-                        <p class="hint">Tokens are estimated as chars/4 by the host, not provider-reported usage.</p>
+                        <p class="hint">Estimated chars/4 · not provider-reported.</p>
                     </section>
+                </section>
 
-                    <section class="panel request-info metadata-panel">
-                        <header class="panel-head"><div class="card-head-main"><span class="icon-chip meta-chip" aria-hidden="true">▤</span><div><p class="eyebrow">Prompt request</p><h2>Request metadata</h2><p class="card-lede">Identity of the prompt request; read-only capture.</p></div></div><span class="badge">read-only</span></header>
-                        <div class="policy-note">Prompt body is captured at operator request. Content may contain sensitive data and is shown read-only.</div>
-                        <dl class="facts-grid">
-                            <dt>Request ID</dt><dd><code>{{ request.observationId }}</code></dd>
-                            <dt>Request hash</dt><dd><code>{{ value(request, 'requestHash') }}</code></dd>
-                            <dt>Request length</dt><dd>{{ value(request, 'requestLength') }} chars</dd>
-                            <dt>Worker</dt><dd>{{ request.workerId || '—' }}</dd>
-                            <dt>Runtime</dt><dd>{{ request.runtimeKey }}</dd>
-                            <dt>Host</dt><dd>{{ request.hostId }}</dd>
-                            <dt>Task type</dt><dd>{{ value(request, 'taskType') }}</dd>
-                            <dt>Model / adapter</dt><dd>{{ value(request, 'model') }} · {{ value(request, 'adapter') }}</dd>
-                            <dt>Flow</dt><dd>{{ value(request, 'flowId') }}</dd>
-                        </dl>
-                    </section>
-                </div>
+                <nav class="pipeline-stepper" aria-label="Pipeline stages">
+                    @for (stage of systemStages(); track stage.id) {
+                        <button type="button" class="pipeline-step" [class.ok]="stage.status === 'ok'" [class.bad]="stage.status === 'warn'" [class.info]="stage.status === 'info'" [class.muted]="stage.status === 'muted'" [class.active]="activeTab() === stage.tab" [attr.aria-pressed]="activeTab() === stage.tab" [title]="'Step ' + stage.stepNumber + ': ' + stage.title + ' — ' + stage.sub" (click)="activeTab.set(stage.tab)">
+                            <span class="stage-icon" aria-hidden="true">{{ stageGlyph(stage.id) }}</span>
+                            <span class="pipeline-step-copy">
+                                <span class="pipeline-step-title">{{ stage.title }}</span>
+                                <span class="pipeline-step-sub">{{ stage.sub }}</span>
+                            </span>
+                            <span class="step-dot" aria-hidden="true"></span>
+                        </button>
+                    }
+                </nav>
+
+                <section class="endflow">
+                    <header class="endflow-head">
+                        <div class="endflow-title"><span class="endflow-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h8l-1 8 11-14h-8l1-6z" /></svg></span><div><p class="eyebrow">Pipeline v2 · data flow</p><h2>End-to-End Pipeline Data Flow</h2><p>Prompt ingest → worker handoff → evidence → telemetry</p></div></div>
+                        <button type="button" class="ghost-btn" (click)="flowExpanded.set(!flowExpanded())">{{ flowExpanded() ? '▲ Hide' : '▼ Show flow' }}</button>
+                    </header>
+                    @if (flowExpanded()) {
+                        <div class="endflow-body">
+                            @for (step of endSteps(); track step.id; let index = $index) {
+                                <div class="endflow-step" [class.is-empty]="step.empty">
+                                    <div class="endflow-rail"><span class="endflow-no" [class.ok]="step.status === 'ok'" [class.bad]="step.status === 'warn'">{{ index + 1 }}</span></div>
+                                    <div class="endflow-card" [class.ok]="step.status === 'ok'" [class.bad]="step.status === 'warn'" [class.info]="step.status === 'info'">
+                                        <button type="button" class="endflow-card-head" (click)="toggleStep(step)" [attr.aria-expanded]="isStepOpen(step)">
+                                            <span class="endflow-card-title">STEP {{ index + 1 }} · {{ step.label }}</span>
+                                            @if (step.empty) { <span class="missing-tag">missing</span> }
+                                            <span class="endflow-card-sub">{{ step.empty ? 'No host evidence for this step' : step.sub }}</span>
+                                            <span class="badge" [class.ok]="step.status === 'ok'" [class.warn]="step.status === 'warn'">{{ step.status }}</span>
+                                            <span class="chevron" aria-hidden="true">{{ isStepOpen(step) ? '▾' : '▸' }}</span>
+                                        </button>
+                                        @if (isStepOpen(step)) {
+                                            <div class="endflow-subgrid" [class.single]="step.subcards.length === 1">
+                                                @for (sub of step.subcards; track sub.label) {
+                                                    <div class="endflow-sub">
+                                                        <span class="sub-label">{{ sub.label }}</span>
+                                                        <strong class="sub-value">{{ sub.value }}</strong>
+                                                        <small class="sub-detail">{{ sub.detail }}</small>
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </section>
 
                 <div class="tabs drill-tabs" role="tablist" aria-label="Request detail tabs">
                     @for (tab of tabs; track tab.id) {
@@ -441,27 +453,27 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
                 </div>
 
                 @if (activeTab() === 'waterfall') {
-                    <section class="waterfall-wrap">
-                        <div class="panel waterfall">
-                            <div class="waterfall-toolbar"><div class="chips"><button type="button" class="chip" [class.on]="!eventQuery()" (click)="eventQuery.set('')">All</button><button type="button" class="chip" [class.on]="eventQuery() === 'FAIL'" (click)="eventQuery.set('FAIL')">Failures</button><button type="button" class="chip" [class.on]="eventQuery() === 'prompt.submitted'" (click)="eventQuery.set('prompt.submitted')">Requests</button></div><input class="search" [value]="eventQuery()" (input)="eventQuery.set($any($event.target).value)" placeholder="Filter event / worker…"></div>
-                            @for (event of waterfallEvents(); track event.observationId; let index = $index) {
-                                <article class="event-row" [class.bad]="event.outcome === 'FAIL' || event.outcome === 'BLOCKED'">
-                                    <span class="event-index">#{{ index + 1 }}</span>
-                                    <div class="event-main">
-                                        <div class="event-title"><code>{{ event.event }}</code><span class="badge">{{ event.outcome || '—' }}</span><span class="muted">{{ event.workerId || '—' }}</span><time>{{ formatAt(event.at) }}</time></div>
-                                        <small>{{ event.runtimeKey }} · {{ event.hostId }}</small>
-                                        <details (toggle)="trackEvidence($event)"><summary>Evidence</summary><pre>{{ evidenceText(event.evidence) }}</pre></details>
-                                    </div>
-                                </article>
-                            }
+                    <section class="panel waterfall">
+                        <div class="waterfall-toolbar">
+                            <div class="chips"><button type="button" class="chip" [class.on]="!eventQuery()" (click)="eventQuery.set('')">All</button><button type="button" class="chip" [class.on]="eventQuery() === 'FAIL'" (click)="eventQuery.set('FAIL')">Failures</button><button type="button" class="chip" [class.on]="eventQuery() === 'prompt.submitted'" (click)="eventQuery.set('prompt.submitted')">Requests</button></div>
+                            <div class="wf-summary"><span class="summary-chip">Files <strong>{{ fileCount() }}</strong></span><span class="summary-chip">Tool calls <strong>{{ toolCount() }}</strong></span><span class="summary-chip">LLM calls <strong>{{ llmCalls().length }}</strong></span></div>
+                            <input class="search" [value]="eventQuery()" (input)="eventQuery.set($any($event.target).value)" placeholder="Filter event / worker…">
                         </div>
-                        <aside class="diag">
-                            <section class="panel mini"><header class="panel-head"><h2>Files touched</h2><span class="badge muted">{{ fileCount() }}</span></header><p class="hint">No agent-reported file operations in this request.</p></section>
-                            <section class="panel mini"><header class="panel-head"><h2>Tool calls</h2><span class="badge muted">{{ toolCount() }}</span></header><p class="hint">No agent-reported tool calls in this request.</p></section>
-                            <section class="panel mini"><header class="panel-head"><h2>LLM calls</h2><span class="badge muted">{{ llmCalls().length }}</span></header>
-                                <ul class="call-list">@for (call of llmCalls(); track call.id) { <li><span>{{ workerLabel(call.workerId) }}</span><code>{{ call.model }}</code><small>{{ call.durationMs ? call.durationMs + ' ms' : 'duration not reported' }} · {{ call.input }} in / {{ call.output }} out</small></li> }</ul>
-                            </section>
-                        </aside>
+                        <div class="event-table-head" aria-hidden="true"><span>Time</span><span>Event</span><span>Worker</span><span>Outcome</span><span>Duration</span></div>
+                        @for (event of waterfallEvents(); track event.observationId) {
+                            <article class="event-row" [class.bad]="event.outcome === 'FAIL' || event.outcome === 'BLOCKED'">
+                                <div class="event-grid">
+                                    <time [title]="formatAt(event.at)">{{ formatClock(event.at) }}</time>
+                                    <code [title]="event.event">{{ event.event }}</code>
+                                    <span class="event-worker" [title]="event.workerId || '—'">{{ workerLabel(event.workerId) }}</span>
+                                    <span class="badge" [class.ok]="event.outcome === 'PASS' || event.outcome === 'COMPLETED'" [class.bad]="event.outcome === 'FAIL' || event.outcome === 'BLOCKED'">{{ event.outcome || '—' }}</span>
+                                    <span class="event-duration">{{ eventDuration(event) }}</span>
+                                </div>
+                                <details class="event-evidence" (toggle)="trackEvidence($event)"><summary>Evidence</summary><pre>{{ evidenceText(event.evidence) }}</pre></details>
+                            </article>
+                        } @empty {
+                            <p class="hint waterfall-empty">{{ eventQuery() ? 'No events match this filter.' : 'No events recorded for this request.' }}</p>
+                        }
                     </section>
                 } @else if (activeTab() === 'topology') {
                     <section class="panel">
@@ -750,14 +762,24 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
         .detail-page {
             --surface: #131722;
             --surface-2: #0d1118;
+            --surface-3: #0f1a2b;
             --line: #253047;
+            --line-soft: #1e2a3e;
             --ink: #e2e8f0;
             --muted: #8b97ab;
+            --dim: #64748b;
             --brand: #5aa9ff;
             --brand-ink: #ffffff;
             --warn-ink: #e0b341;
             --ok-ink: #4ec97a;
             --danger-ink: #ff6b6b;
+            --fs-h1: 1.625rem;
+            --fs-h1-lg: 1.75rem;
+            --fs-title: 0.875rem;
+            --fs-body: 0.8125rem;
+            --fs-secondary: var(--text-xs);
+            --fs-badge: 0.6875rem;
+            --lh: 1.35;
             display: grid;
             gap: var(--space-5);
             width: 100%;
@@ -769,282 +791,327 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
             border-radius: 0;
             background: transparent;
             color: var(--ink);
+            font-size: var(--fs-body);
+            line-height: var(--lh);
         }
+        h1, h2, h3, p, dl, dd, dt, ul, li { margin: 0; }
+        h2 { font-size: var(--fs-title); line-height: var(--lh); font-weight: 650; color: #f1f5f9; }
+        h3 { font-size: var(--fs-body); line-height: var(--lh); font-weight: 600; color: #e2e8f0; }
+        .eyebrow { color: var(--dim); font-size: var(--fs-badge); font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+        .hint, .muted { color: var(--muted); font-size: var(--fs-secondary); }
         .detail-nav { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
-        .crumb { display: inline-flex; align-items: center; gap: var(--space-2); min-width: 0; color: var(--muted); font-size: var(--text-xs); }
+        .crumb { display: inline-flex; align-items: center; gap: var(--space-2); min-width: 0; color: var(--muted); font-size: var(--fs-secondary); }
         .crumb a { color: var(--brand); text-decoration: none; }
         .crumb code { color: var(--brand); overflow-wrap: anywhere; }
-        .crumb-sep { color: #475569; }
+        .crumb-sep { color: var(--dim); }
         .detail-actions { display: flex; gap: var(--space-2); }
-        .pill { padding: var(--space-1) var(--space-2); border: 1px solid #253047; border-radius: 62.44rem; background: #0f1a2b; color: #cbd5e1; font-size: var(--text-xs); text-decoration: none; }
-        .pill:hover { border-color: #5aa9ff; color: #fff; }
-        .request-hero { --card-accent: var(--brand); display: grid; gap: var(--space-4); padding: var(--space-5); border: 1px solid var(--line); border-left: 3px solid var(--card-accent); border-radius: var(--radius-md); background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.35); }
-        .hero-main { display: flex; align-items: flex-start; gap: var(--space-3); }
-        .hero-chip { width: 2.25rem; height: 2.25rem; border-color: rgba(90,169,255,.35); background: rgba(90,169,255,.1); color: var(--brand); font-size: var(--text-md); }
-        .hero-copy { display: grid; gap: var(--space-1); flex: 1; min-width: 0; }
-        .hero-copy h1 { margin: 0; }
-        .hero-sub { margin: 0; color: var(--muted); font-size: var(--text-xs); overflow-wrap: anywhere; }
-        .hero-badges { justify-content: flex-end; margin-left: auto; }
-        .hero-id-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border: 1px solid #1e2a3e; border-radius: var(--radius-sm); background: var(--surface-2); }
-        .hero-id-label { color: var(--muted); font-size: var(--text-xs); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
-        .hero-id { color: var(--brand); font-size: var(--text-sm); overflow-wrap: anywhere; }
-        .hero-copy-btn { font-size: var(--text-xs); }
-        .icon-chip { display: grid; place-items: center; flex: 0 0 auto; width: 1.75rem; height: 1.75rem; border: 1px solid #253047; border-radius: var(--radius-sm); background: #0f1a2b; color: var(--brand); font-size: var(--text-sm); line-height: 1; }
-        .status-dot { display: inline-block; width: .5rem; height: .5rem; border-radius: 50%; background: currentColor; }
-        .eyebrow { color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-size: var(--text-xs); margin: 0 0 var(--space-1); }
-        h1 { margin: 0 0 var(--space-3); font-size: var(--text-xl); line-height: var(--text-2xl); font-weight: 600; color: #f1f5f9; }
-        .badges { display: flex; flex-wrap: wrap; gap: var(--space-2); justify-content: flex-start; }
-        .badge { display: inline-flex; align-items: center; gap: var(--space-1); padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); border: 1px solid #253047; background: #131722; color: #cbd5e1; font-size: var(--text-xs); line-height: var(--text-xs); font-weight: 500; text-transform: none; letter-spacing: normal; }
+        .pill { padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: 62.44rem; background: var(--surface-3); color: #cbd5e1; font-size: var(--fs-secondary); line-height: 1.6; text-decoration: none; }
+        .pill:hover { border-color: var(--brand); color: #ffffff; }
+        .request-hero { display: grid; gap: var(--space-2); padding: var(--space-4) var(--space-5); border: 1px solid var(--line); border-left: 3px solid var(--brand); border-radius: var(--radius-md); background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.35); }
+        .hero-head { display: flex; align-items: flex-start; gap: var(--space-3); flex-wrap: wrap; }
+        .hero-copy { display: grid; gap: var(--space-1); flex: 1 1 32rem; min-width: 0; }
+        .hero-badges { margin-left: auto; justify-content: flex-end; }
+        .request-query { margin: 0; font-size: var(--fs-h1); line-height: 1.2; font-weight: 650; letter-spacing: -.01em; color: #f1f5f9; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+        .hero-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2); color: #cbd5e1; font-size: var(--fs-secondary); }
+        .meta-fact { display: inline-flex; align-items: baseline; gap: var(--space-1); }
+        .meta-fact + .meta-fact::before { content: '·'; margin-right: var(--space-1); color: var(--dim); }
+        .meta-key { color: var(--dim); font-size: var(--fs-badge); letter-spacing: .06em; text-transform: uppercase; }
+        .badges { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
+        .badge { display: inline-flex; align-items: center; gap: var(--space-1); min-height: 1.25rem; padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); color: #cbd5e1; font-size: var(--fs-badge); line-height: 1.2; font-weight: 500; white-space: nowrap; }
         .badge.ok { color: #a7f3d0; border-color: rgba(78,201,122,.3); background: rgba(78,201,122,.15); }
         .badge.warn { color: #fde68a; border-color: rgba(224,179,65,.45); background: rgba(224,179,65,.12); }
         .badge.bad { color: #fecaca; border-color: rgba(255,107,107,.4); background: rgba(255,107,107,.2); }
-        .badge.muted { color: #8b97ab; background: #0d1118; }
+        .badge.muted { color: var(--muted); background: var(--surface-2); }
         .badge.info { color: #bae6fd; border-color: rgba(90,169,255,.4); background: rgba(90,169,255,.15); }
-        .facts { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); margin: 0; }
-        .facts span { position: relative; display: inline-flex; align-items: baseline; gap: var(--space-2); padding-left: var(--space-4); font-size: var(--text-xs); color: #cbd5e1; }
-        .facts span:first-child { padding-left: 0; }
-        .facts span + span::before { content: ''; position: absolute; left: 0; top: 0.25rem; bottom: 0.25rem; width: 0.0625rem; background: #253047; }
-        .facts small { color: #64748b; font-size: .625rem; text-transform: uppercase; letter-spacing: .08em; }
-        .pipeline-stepper { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(9rem, 1fr); align-items: stretch; gap: 0; overflow-x: auto; padding: 0; border: 1px solid #253047; border-radius: var(--radius-md); background: #131722; }
-        .pipeline-step { display: flex; align-items: center; gap: var(--space-1); min-width: 0; padding: var(--space-2); border: 0; border-right: 1px solid #1e2a3e; background: transparent; color: #8b97ab; font: inherit; text-align: left; cursor: pointer; }
-        .pipeline-step:last-child { border-right: 0; }
-        .pipeline-step:hover { background: #162235; }
-        .pipeline-step:focus-visible { outline: 0.125rem solid var(--brand); outline-offset: -0.125rem; }
-        .pipeline-step.active { background: #162235; box-shadow: inset 0 -2px 0 var(--brand); }
-        .pipeline-step.active .pipeline-step-no, .pipeline-step.active .stage-icon { border-color: var(--brand); background: rgba(90,169,255,.12); color: var(--brand); }
-        .pipeline-step.ok { color: #4ec97a; } .pipeline-step.bad { color: #e0b341; } .pipeline-step.info { color: #5aa9ff; } .pipeline-step.muted { color: #64748b; }
-        .pipeline-step-no { display: grid; place-items: center; flex: 0 0 auto; width: 1.25rem; height: 1.25rem; border: 1px solid currentColor; border-radius: 50%; font-size: .625rem; font-variant-numeric: tabular-nums; }
-        .stage-icon { display: grid; place-items: center; flex: 0 0 auto; width: 1.5rem; height: 1.5rem; border: 1px solid currentColor; border-radius: var(--radius-sm); background: #0d1118; font-size: var(--text-xs); line-height: 1; }
-        .pipeline-step-copy { display: grid; gap: .0625rem; min-width: 0; overflow: hidden; }
-        .pipeline-step strong { display: block; font-size: .6875rem; color: #e2e8f0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .pipeline-step small { display: block; max-width: 100%; font-size: .625rem; text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .flow-panel, .panel { display: grid; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--line); border-left: 3px solid var(--card-accent, var(--brand)); border-radius: var(--radius-md); background: var(--surface); min-width: 0; box-shadow: 0 1px 2px rgba(0,0,0,.35); }
-        .flow-panel { --card-accent: #4ec97a; }
-        .request-info { --card-accent: #5aa9ff; }
-        .tokens { --card-accent: var(--warn-ink); }
-        .waterfall { --card-accent: #5aa9ff; }
-        .telemetry { --card-accent: #c084fc; }
-        .panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
-        .panel-head h2 { margin: 0; font-size: var(--text-md); }
-        .card-head-main { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+        .status-dot { display: inline-block; width: .4375rem; height: .4375rem; border-radius: 50%; background: currentColor; }
+        .identity-details { border-top: 1px solid var(--line-soft); padding-top: var(--space-2); }
+        .identity-summary { display: flex; align-items: center; gap: var(--space-2); cursor: pointer; color: var(--muted); font-size: var(--fs-secondary); list-style: none; }
+        .identity-summary::-webkit-details-marker { display: none; }
+        .identity-title { color: #cbd5e1; font-weight: 600; }
+        .identity-locator { color: var(--brand); overflow-wrap: anywhere; }
+        .identity-hint { color: var(--dim); font-size: var(--fs-badge); }
+        .chevron { color: var(--muted); font-size: var(--fs-secondary); line-height: 1; }
+        .identity-summary .chevron { margin-left: auto; transition: transform .15s ease; }
+        .identity-details[open] .identity-summary .chevron { transform: rotate(90deg); }
+        .identity-body { display: grid; gap: var(--space-2); padding-top: var(--space-2); }
+        .policy-note { padding: var(--space-2); border: 1px solid var(--line-soft); border-left: 3px solid var(--warn-ink); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--muted); font-size: var(--fs-secondary); }
+        .identity-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2) var(--space-4); }
+        .identity-cell { display: grid; gap: .0625rem; min-width: 0; }
+        .identity-cell dt { color: var(--dim); font-size: var(--fs-badge); letter-spacing: .06em; text-transform: uppercase; }
+        .identity-cell dd { color: #cbd5e1; font-size: var(--fs-secondary); overflow-wrap: anywhere; }
+        .identity-cell code { color: var(--brand); }
+        .glance-grid { display: grid; grid-template-columns: minmax(0, .95fr) minmax(0, 1.9fr) minmax(0, 1fr) minmax(0, .95fr); gap: var(--space-3); align-items: start; }
+        .glance-grid > * { min-width: 0; }
+        .panel { display: grid; align-content: start; gap: var(--space-2); padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-left: 3px solid var(--card-accent, var(--brand)); border-radius: var(--radius-md); background: var(--surface); min-width: 0; box-shadow: 0 1px 2px rgba(0,0,0,.35); }
+        .panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); }
+        .panel-head h2 { margin: 0; }
+        .card-head-main { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
         .card-head-main h2 { margin: 0; }
-        .card-lede { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-xs); }
-        .effectiveness-chip { border-color: rgba(90,169,255,.35); background: rgba(90,169,255,.1); }
-        .signals-chip { border-color: rgba(192,132,252,.35); background: rgba(192,132,252,.12); color: #c084fc; }
-        .gate-chip { border-color: rgba(224,179,65,.4); background: rgba(224,179,65,.12); color: var(--warn-ink); }
-        .tokens-chip { border-color: rgba(224,179,65,.35); background: rgba(224,179,65,.1); color: var(--warn-ink); }
-        .meta-chip { border-color: rgba(78,201,122,.35); background: rgba(78,201,122,.1); color: var(--ok-ink); }
-        .flow-chain { display: flex; align-items: center; gap: var(--space-2); overflow-x: auto; padding-bottom: var(--space-1); }
-        .flow-node { display: grid; gap: var(--space-1); min-width: 5.625rem; padding: var(--space-2); border: 1px solid #253047; border-radius: var(--radius-sm); background: #0d1118; }
-        .flow-node strong { font-size: .625rem; } .flow-node small { color: var(--muted); font-size: .5625rem; }
-        .flow-node.ok { border-color: #4ec97a; } .flow-node.bad { border-color: #e0b341; }
+        .icon-chip { display: grid; place-items: center; flex: 0 0 auto; width: 1.5rem; height: 1.5rem; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-3); color: var(--brand); font-size: var(--fs-secondary); line-height: 1; }
+        .effectiveness-chip { border-color: rgba(90,169,255,.35); color: var(--brand); }
+        .signals-chip { border-color: rgba(192,132,252,.35); color: #c084fc; }
+        .gate-chip { border-color: rgba(224,179,65,.4); color: var(--warn-ink); }
+        .tokens-chip { border-color: rgba(224,179,65,.35); color: var(--warn-ink); }
+        .verdict-hero { --card-accent: #64748b; display: grid; align-content: start; gap: var(--space-2); padding: var(--space-4); border: 1px solid var(--line); border-left: 3px solid var(--card-accent); border-radius: var(--radius-md); background: var(--surface); min-width: 0; font-size: var(--text-sm); box-shadow: 0 1px 2px rgba(0,0,0,.35); }
+        .verdict-hero[data-level='allow'] { --card-accent: var(--ok-ink); }
+        .verdict-hero[data-level='partial'] { --card-accent: var(--warn-ink); }
+        .verdict-hero[data-level='deny'] { --card-accent: var(--danger-ink); }
+        .verdict-hero[data-level='unknown'] { --card-accent: #64748b; }
+        .verdict-hero-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); }
+        .verdict-figures { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: var(--space-1) var(--space-2); }
+        .verdict-meta { display: grid; gap: 0; min-width: 0; }
+        .verdict-meta small { color: var(--dim); font-size: var(--fs-badge); letter-spacing: .06em; text-transform: uppercase; }
+        .verdict-meta strong { color: var(--warn-ink); font-size: 1.125rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+        .verdict-meta time { color: var(--ink); font-size: var(--fs-secondary); white-space: nowrap; }
+        .verdict-actor-id { min-width: 0; color: var(--ink); font-size: var(--fs-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .verdict-actor-role { display: block; color: var(--dim); font-size: var(--fs-badge); }
+        .verdict-basis { margin: 0; color: #cbd5e1; font-size: var(--fs-secondary); line-height: var(--lh); overflow-wrap: anywhere; }
+        .verdict-level-badge { display: inline-flex; align-items: center; min-height: 1.25rem; padding: 0 var(--space-2); border: 1px solid currentColor; border-radius: var(--radius-sm); font-size: var(--fs-badge); font-weight: 700; letter-spacing: .06em; line-height: 1.2; text-transform: uppercase; white-space: nowrap; }
+        .level-allow { color: var(--ok-ink); background: rgba(78,201,122,.12); }
+        .level-partial { color: var(--warn-ink); background: rgba(224,179,65,.12); }
+        .level-deny { color: var(--danger-ink); background: rgba(255,107,107,.12); }
+        .level-unknown { color: var(--muted); background: rgba(139,151,171,.12); }
+        .effectiveness { --card-accent: var(--brand); display: grid; align-content: start; gap: var(--space-2); padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-left: 3px solid var(--card-accent); border-radius: var(--radius-md); background: var(--surface); min-width: 0; box-shadow: 0 1px 2px rgba(0,0,0,.35); }
+        .effectiveness-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); }
+        .kpi-strip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-1) var(--space-3); }
+        .kpi-tile { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; column-gap: var(--space-2); min-width: 0; }
+        .kpi-tile span { grid-column: 1; color: var(--dim); font-size: var(--fs-badge); letter-spacing: .04em; text-transform: uppercase; }
+        .kpi-tile strong { grid-column: 2; color: var(--ink); font-size: var(--fs-secondary); font-weight: 650; font-variant-numeric: tabular-nums; text-align: right; overflow-wrap: anywhere; }
+        .kpi-tile small { grid-column: 1 / -1; color: var(--dim); font-size: var(--fs-badge); overflow-wrap: anywhere; }
+        .signals-inline { color: var(--muted); font-size: var(--fs-secondary); }
+        .signals-key { color: #cbd5e1; font-weight: 600; }
+        .host-signals { display: grid; gap: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--line-soft); }
+        .host-signals-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); }
+        .signal-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
+        .signal-tile { display: grid; gap: 0; min-width: 0; }
+        .signal-tile span { color: var(--dim); font-size: var(--fs-badge); letter-spacing: .04em; text-transform: uppercase; }
+        .signal-tile strong { color: var(--ink); font-size: var(--fs-secondary); font-weight: 600; overflow-wrap: anywhere; }
+        .signal-tile small { color: var(--dim); font-size: var(--fs-badge); overflow-wrap: anywhere; }
+        .gate-card { --card-accent: var(--warn-ink); }
+        .gate-badge { padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--muted); font-size: var(--fs-badge); letter-spacing: .06em; line-height: 1.6; text-transform: uppercase; white-space: nowrap; }
+        .gate-badge[data-state='allowed'] { color: var(--ok-ink); border-color: rgba(78,201,122,.35); }
+        .gate-badge[data-state='blocked'] { color: var(--danger-ink); border-color: rgba(255,107,107,.4); }
+        .gate-summary { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); padding: var(--space-2); border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--surface-2); font-size: var(--fs-secondary); }
+        .gate-state { display: inline-flex; align-items: center; gap: var(--space-1); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+        .gate-state[data-state='allowed'] { color: var(--ok-ink); }
+        .gate-state[data-state='blocked'] { color: var(--danger-ink); }
+        .gate-code { color: var(--warn-ink); overflow-wrap: anywhere; }
+        .gate-target { color: var(--brand); overflow-wrap: anywhere; }
+        .gate-summary time { margin-left: auto; color: var(--dim); font-size: var(--fs-badge); }
+        .gate-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: var(--space-1) var(--space-3); }
+        .gate-facts div { display: grid; gap: 0; min-width: 0; }
+        .gate-facts dt { color: var(--dim); font-size: var(--fs-badge); letter-spacing: .06em; text-transform: uppercase; }
+        .gate-facts dd { color: var(--ink); font-size: var(--fs-secondary); overflow-wrap: anywhere; }
+        .gate-facts code { color: var(--brand); }
+        .gate-empty { margin: 0; }
+        .tokens { --card-accent: var(--warn-ink); }
+        .token-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-1) var(--space-2); }
+        .token-tiles div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; column-gap: var(--space-1); padding: var(--space-1) var(--space-2); border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--surface-2); }
+        .token-tiles span { grid-column: 1; color: var(--dim); font-size: var(--fs-badge); letter-spacing: .04em; text-transform: uppercase; }
+        .token-tiles strong { grid-column: 2; color: var(--warn-ink); font-size: var(--fs-body); font-variant-numeric: tabular-nums; line-height: 1.2; text-align: right; }
+        .token-tiles small { grid-column: 1 / -1; color: var(--dim); font-size: var(--fs-badge); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .pipeline-stepper { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); overflow: hidden; }
+        .pipeline-step { position: relative; display: grid; grid-template-columns: 1.25rem minmax(0, 1fr); align-items: center; gap: var(--space-1); min-height: 4rem; padding: var(--space-1) var(--space-2); border: 0; border-right: 1px solid var(--line-soft); background: transparent; color: var(--muted); font: inherit; text-align: left; cursor: pointer; }
+        .pipeline-step:last-child { border-right: 0; }
+        .pipeline-step:hover { background: var(--surface-3); }
+        .pipeline-step:focus-visible { outline: .125rem solid var(--brand); outline-offset: -.125rem; }
+        .pipeline-step.active { background: var(--surface-3); box-shadow: inset 0 -2px 0 var(--brand); }
+        .pipeline-step.active .stage-icon { border-color: var(--brand); color: var(--brand); background: rgba(90,169,255,.12); }
+        .pipeline-step.ok { color: var(--ok-ink); }
+        .pipeline-step.bad { color: var(--warn-ink); }
+        .pipeline-step.info { color: var(--brand); }
+        .pipeline-step.muted { color: var(--dim); }
+        .stage-icon { display: grid; place-items: center; width: 1.25rem; height: 1.25rem; border: 1px solid currentColor; border-radius: var(--radius-sm); background: var(--surface-2); font-size: var(--fs-secondary); line-height: 1; }
+        .pipeline-step-copy { display: grid; gap: 0; min-width: 0; }
+        .pipeline-step-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: .1875rem; color: #e2e8f0; font-size: var(--fs-secondary); line-height: 1.2; }
+        .pipeline-step-no { color: var(--dim); font-size: var(--fs-badge); font-variant-numeric: tabular-nums; }
+        .step-dot { position: absolute; top: var(--space-1); right: var(--space-2); width: .375rem; height: .375rem; border-radius: 50%; background: currentColor; }
+        .pipeline-step-sub { color: var(--muted); font-size: var(--fs-badge); line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .endflow { border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.35); }
+        .endflow-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-2) var(--space-4); border-bottom: 1px solid var(--line); background: var(--surface-3); }
+        .endflow-title { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+        .endflow-icon { display: grid; place-items: center; flex: 0 0 auto; width: 1.5rem; height: 1.5rem; border: 1px solid rgba(90,169,255,.35); border-radius: var(--radius-sm); background: rgba(90,169,255,.1); color: var(--brand); }
+        .endflow-icon svg { width: 1rem; height: 1rem; }
+        .endflow-title h2 { margin: 0; font-size: var(--fs-title); font-weight: 650; }
+        .endflow-title p { margin: 0; color: var(--muted); font-size: var(--fs-secondary); }
+        .ghost-btn { padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); color: var(--muted); font: inherit; font-size: var(--fs-secondary); line-height: 1.6; cursor: pointer; white-space: nowrap; }
+        .ghost-btn:hover { border-color: var(--brand); color: #ffffff; }
+        .endflow-body { display: grid; gap: 0; padding: var(--space-2) var(--space-3) var(--space-3); background: var(--surface-2); }
+        .endflow-step { display: grid; grid-template-columns: 1.5rem minmax(0, 1fr); gap: var(--space-2); align-items: start; }
+        .endflow-rail { display: flex; flex-direction: column; align-items: center; padding-top: var(--space-1); }
+        .endflow-no { display: grid; place-items: center; width: 1.375rem; height: 1.375rem; border: 1px solid #475569; border-radius: 50%; background: var(--surface); color: var(--muted); font-size: var(--fs-badge); font-weight: 700; }
+        .endflow-no.ok { border-color: var(--ok-ink); color: var(--ok-ink); }
+        .endflow-no.bad { border-color: var(--warn-ink); color: var(--warn-ink); }
+        .endflow-step:not(:last-child) .endflow-rail::after { content: ''; flex: 1; width: .0625rem; margin: .1875rem 0; background: var(--line); }
+        .endflow-card { min-width: 0; margin-bottom: var(--space-1); border: 1px solid var(--line); border-left: 3px solid #475569; border-radius: var(--radius-sm); background: var(--surface); }
+        .endflow-card.ok { border-left-color: var(--ok-ink); }
+        .endflow-card.bad { border-left-color: var(--warn-ink); }
+        .endflow-card.info { border-left-color: var(--brand); }
+        .endflow-card-head { display: flex; align-items: center; gap: var(--space-2); width: 100%; padding: var(--space-1) var(--space-2); border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+        .endflow-card-head:hover { background: rgba(90,169,255,.05); }
+        .endflow-card-head:focus-visible { outline: .125rem solid var(--brand); outline-offset: -.125rem; }
+        .endflow-card-title { flex: 0 0 auto; color: #cbd5e1; font-size: var(--fs-badge); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+        .endflow-card-sub { flex: 1 1 auto; min-width: 0; color: var(--muted); font-size: var(--fs-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .missing-tag { flex: 0 0 auto; padding: 0 var(--space-1); border: 1px solid rgba(224,179,65,.4); border-radius: var(--radius-sm); background: rgba(224,179,65,.1); color: var(--warn-ink); font-size: var(--fs-badge); letter-spacing: .06em; line-height: 1.5; text-transform: uppercase; }
+        .endflow-subgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2) var(--space-4); padding: 0 var(--space-2) var(--space-2); }
+        .endflow-subgrid.single { grid-template-columns: minmax(0, 1fr); }
+        .endflow-sub { display: grid; gap: 0; min-width: 0; }
+        .endflow-sub .sub-label { color: var(--dim); font-size: var(--fs-secondary); letter-spacing: .04em; text-transform: uppercase; }
+        .endflow-sub .sub-value { color: #e2e8f0; font-size: var(--fs-body); font-weight: 600; line-height: var(--lh); overflow-wrap: anywhere; }
+        .endflow-sub .sub-detail { color: var(--dim); font-size: var(--fs-secondary); line-height: var(--lh); overflow-wrap: anywhere; }
+        .tabs { display: flex; width: 100%; gap: 0; border-bottom: 1px solid var(--line); overflow-x: auto; }
+        .tabs button { display: inline-flex; flex: 1 1 0; align-items: center; justify-content: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font: inherit; font-size: var(--fs-secondary); font-weight: 600; cursor: pointer; white-space: nowrap; }
+        .tabs button:hover { color: var(--ink); }
+        .tabs button:focus-visible { outline: .125rem solid var(--brand); outline-offset: -.125rem; }
+        .tabs button.active { border-color: var(--brand); color: var(--brand); }
+        .drill-tabs button[data-tab='waterfall'].active { border-color: var(--ok-ink); color: var(--ok-ink); }
+        .drill-tabs button[data-tab='topology'].active { border-color: var(--brand); color: var(--brand); }
+        .drill-tabs button[data-tab='decisions'].active { border-color: #c084fc; color: #c084fc; }
+        .drill-tabs button[data-tab='rules'].active { border-color: var(--warn-ink); color: var(--warn-ink); }
+        .drill-tabs button[data-tab='telemetry'].active { border-color: #818cf8; color: #818cf8; }
+        .tab-icon { display: grid; place-items: center; width: 1.125rem; height: 1.125rem; border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--muted); font-size: var(--fs-badge); line-height: 1; }
+        .tabs button.active .tab-icon { border-color: currentColor; background: rgba(90,169,255,.12); color: inherit; }
+        .tabs button.active .tab-count { color: inherit; }
+        .tab-label { font-size: var(--fs-secondary); }
+        .tab-count { padding: .0625rem var(--space-1); border-radius: 62.44rem; background: var(--surface-2); color: var(--muted); font-size: var(--fs-badge); font-variant-numeric: tabular-nums; }
+        .waterfall { --card-accent: var(--brand); gap: var(--space-1); padding: var(--space-3) var(--space-4); }
+        .waterfall-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); padding-bottom: var(--space-1); border-bottom: 1px solid var(--line-soft); }
+        .chips { display: flex; gap: var(--space-1); }
+        .chip { padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-3); color: var(--muted); font: inherit; font-size: var(--fs-badge); line-height: 1.6; cursor: pointer; }
+        .chip.on { border-color: rgba(90,169,255,.5); background: rgba(90,169,255,.12); color: var(--brand); }
+        .wf-summary { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-left: auto; }
+        .summary-chip { display: inline-flex; align-items: center; gap: var(--space-1); min-height: 1.25rem; padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--muted); font-size: var(--fs-badge); white-space: nowrap; }
+        .summary-chip strong { color: #cbd5e1; font-variant-numeric: tabular-nums; }
+        .search { width: 12rem; padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--ink); font: inherit; font-size: var(--fs-secondary); line-height: 1.6; }
+        .event-table-head, .event-grid { display: grid; grid-template-columns: 5.5rem minmax(0, 2fr) 7rem 6rem 4.5rem; gap: var(--space-2); align-items: center; }
+        .event-table-head { padding: var(--space-1) 0; border-bottom: 1px solid var(--line); color: var(--dim); font-size: var(--fs-badge); letter-spacing: .06em; text-transform: uppercase; }
+        .event-row { padding: 0; border-bottom: 1px solid var(--line-soft); }
+        .event-row:last-child { border-bottom: 0; }
+        .event-grid { min-height: 1.75rem; padding: var(--space-1) 0; }
+        .event-grid time { color: var(--dim); font-size: var(--fs-secondary); font-variant-numeric: tabular-nums; }
+        .event-grid code { color: var(--brand); font-size: var(--fs-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .event-worker { color: #cbd5e1; font-size: var(--fs-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .event-duration { color: var(--muted); font-size: var(--fs-secondary); text-align: right; font-variant-numeric: tabular-nums; }
+        .event-row.bad .event-grid code { color: var(--danger-ink); }
+        .event-evidence { padding: 0 0 var(--space-1) 5.5rem; }
+        .event-evidence summary { color: var(--muted); font-size: var(--fs-secondary); cursor: pointer; }
+        .waterfall-empty { margin: 0; padding: var(--space-2) 0; }
+        pre { max-height: 18rem; overflow: auto; padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); color: #cbd5e1; font-size: var(--fs-secondary); line-height: var(--lh); white-space: pre-wrap; }
+        .raw { margin: 0; }
+        .table-wrap { width: 100%; overflow-x: auto; }
+        .telemetry-table { width: 100%; border-collapse: collapse; font-size: var(--fs-secondary); }
+        .telemetry-table th { padding: var(--space-2); border-bottom: 1px solid var(--line); background: var(--surface-3); color: var(--muted); font-size: var(--fs-badge); font-weight: 500; letter-spacing: .05em; text-align: left; text-transform: uppercase; }
+        .telemetry-table td { padding: var(--space-2); border-bottom: 1px solid var(--line); }
+        .checks { display: grid; gap: var(--space-1); }
+        .check-row { display: flex; align-items: baseline; gap: var(--space-2); padding: var(--space-1) var(--space-2); border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--surface-2); font-size: var(--fs-secondary); }
+        .check-status { min-width: 2.5rem; color: var(--muted); font-size: var(--fs-badge); font-weight: 700; text-transform: uppercase; }
+        .check-status[data-status='pass'] { color: var(--ok-ink); }
+        .check-status[data-status='warn'] { color: var(--warn-ink); }
+        .check-status[data-status='skip'] { color: var(--dim); }
+        .check-row strong { color: #cbd5e1; font-size: var(--fs-secondary); white-space: nowrap; }
+        .check-row small { color: var(--dim); font-size: var(--fs-secondary); }
+        .recon-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(13.75rem, 1fr)); gap: var(--space-2); }
+        .recon-card { display: grid; gap: var(--space-1); padding: var(--space-2) var(--space-3); border: 1px solid var(--line-soft); border-left: 3px solid var(--brand); border-radius: var(--radius-sm); background: var(--surface-2); }
+        .recon-card > div { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+        .recon-card strong { color: #e2e8f0; font-size: var(--fs-secondary); }
+        .recon-card small { color: var(--dim); font-size: var(--fs-secondary); }
+        .context-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+        .facts-grid { display: grid; grid-template-columns: 6.875rem minmax(0, 1fr); gap: .1875rem var(--space-3); font-size: var(--fs-secondary); }
+        .facts-grid dt { color: var(--muted); }
+        .facts-grid dd { min-width: 0; overflow-wrap: anywhere; }
+        .flow-chain { display: flex; align-items: center; gap: var(--space-2); padding-bottom: var(--space-1); overflow-x: auto; }
+        .flow-node { display: grid; gap: var(--space-1); min-width: 5.625rem; padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); }
+        .flow-node strong { font-size: var(--fs-secondary); }
+        .flow-node small { color: var(--muted); font-size: var(--fs-badge); }
+        .flow-node.ok { border-color: var(--ok-ink); }
+        .flow-node.bad { border-color: var(--warn-ink); }
         .flow-node.prompt { border-color: var(--brand); }
-        .flow-arrow { color: var(--muted); font-size: var(--text-xs); }
+        .flow-arrow { color: var(--muted); font-size: var(--fs-secondary); }
         .runtime-compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
         .runtime-column { display: grid; align-content: start; gap: var(--space-2); min-width: 0; padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); }
         .runtime-column-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
-        .runtime-column-head h3 { margin: 0; font-size: var(--text-sm); }
-        .runtime-column-head small { color: var(--muted); font-size: var(--text-xs); }
-        .runtime-row { display: grid; grid-template-columns: 1.25rem minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; border-bottom: 1px solid #1e2a3e; }
+        .runtime-column-head h3 { margin: 0; font-size: var(--fs-secondary); }
+        .runtime-column-head small { color: var(--muted); font-size: var(--fs-badge); }
+        .runtime-row { display: grid; grid-template-columns: 1.25rem minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); padding: var(--space-1) 0; border-bottom: 1px solid var(--line-soft); }
         .runtime-row:last-child { border-bottom: 0; }
-        .runtime-no { color: var(--muted); font-size: .5625rem; text-align: right; font-variant-numeric: tabular-nums; }
-        .runtime-name { display: grid; gap: .0625rem; min-width: 0; }
-        .runtime-name strong { color: var(--ink); font-size: var(--text-xs); overflow-wrap: anywhere; }
-        .runtime-name small { color: var(--muted); font-size: .5625rem; overflow-wrap: anywhere; }
+        .runtime-no { color: var(--muted); font-size: var(--fs-badge); text-align: right; font-variant-numeric: tabular-nums; }
+        .runtime-name { display: grid; gap: 0; min-width: 0; }
+        .runtime-name strong { color: var(--ink); font-size: var(--fs-secondary); overflow-wrap: anywhere; }
+        .runtime-name small { color: var(--muted); font-size: var(--fs-badge); overflow-wrap: anywhere; }
         .runtime-divergence { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--line); border-left: 3px solid var(--brand); border-radius: var(--radius-sm); background: var(--surface-2); }
         .runtime-divergence[data-kind='missing'] { border-left-color: var(--warn-ink); }
         .runtime-divergence[data-kind='extra'] { border-left-color: var(--danger-ink); }
         .runtime-divergence[data-kind='matches'] { border-left-color: var(--ok-ink); }
         .divergence-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
-        .divergence-line { margin: 0; color: #cbd5e1; font-size: var(--text-xs); overflow-wrap: anywhere; }
+        .divergence-line { color: #cbd5e1; font-size: var(--fs-secondary); overflow-wrap: anywhere; }
         .divergence-key { color: var(--warn-ink); font-weight: 700; }
         .divergence-line.extra .divergence-key { color: var(--danger-ink); }
-        .top-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); align-items: stretch; }
-        .gate-card { --card-accent: var(--warn-ink); }
-        .gate-summary { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: var(--space-3); border: 1px solid #1e2a3e; border-radius: var(--radius-sm); background: var(--surface-2); font-size: var(--text-xs); }
-        .gate-state { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--warn-ink); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
-        .gate-state.ok { color: var(--ok-ink); }
-        .gate-state.bad { color: var(--danger-ink); }
-        .gate-code { color: var(--warn-ink); overflow-wrap: anywhere; }
-        .gate-target { color: var(--brand); overflow-wrap: anywhere; }
-        .gate-summary time { margin-left: auto; color: var(--muted); }
-        .gate-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--space-2) var(--space-4); margin: 0; }
-        .gate-facts div { display: grid; gap: var(--space-1); min-width: 0; }
-        .gate-facts dt { color: var(--muted); font-size: var(--text-xs); letter-spacing: .06em; text-transform: uppercase; }
-        .gate-facts dd { margin: 0; color: var(--ink); font-size: var(--text-sm); overflow-wrap: anywhere; }
-        .gate-facts code { color: var(--brand); }
-        .metadata-panel { grid-column: 1 / -1; --card-accent: var(--ok-ink); }
-        .endflow { border: 1px solid #253047; border-radius: var(--radius-md); background: #131722; overflow: hidden; box-shadow: 0 1px 2px rgba(0,0,0,.35); }
-        .endflow-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-bottom: 1px solid #253047; background: #0f1a2b; }
-        .endflow-title { display: flex; align-items: center; gap: var(--space-3); }
-        .endflow-icon { display: grid; place-items: center; width: 1.75rem; height: 1.75rem; border: 1px solid rgba(90,169,255,.35); border-radius: var(--radius-sm); background: rgba(90,169,255,.1); color: #5aa9ff; }
-        .endflow-title h2 { margin: 0; font-size: var(--text-xs); font-weight: 700; letter-spacing: .02em; }
-        .endflow-title p { margin: var(--space-1) 0 0; color: #8b97ab; font-size: .625rem; }
-        .ghost-btn { padding: 0.3125rem var(--space-2); border: 1px solid #253047; border-radius: var(--radius-sm); background: #131722; color: #8b97ab; font: inherit; font-size: .625rem; cursor: pointer; }
-        .endflow-body { display: grid; gap: 0; padding: var(--space-4); background: #0a0e17; }
-        .endflow-step { display: grid; grid-template-columns: 1.75rem minmax(0, 1fr); gap: var(--space-3); }
-        .endflow-rail { display: flex; flex-direction: column; align-items: center; }
-        .endflow-no { display: grid; place-items: center; width: 1.5rem; height: 1.5rem; border: 1px solid #475569; border-radius: 50%; background: #131722; color: #8b97ab; font-size: .5625rem; font-weight: 700; }
-        .endflow-no.ok { border-color: #4ec97a; color: #4ec97a; } .endflow-no.bad { border-color: #e0b341; color: #e0b341; }
-        .endflow-step:not(:last-child) .endflow-rail::after { content: ''; flex: 1; width: 0.0625rem; margin: 0.1875rem 0; background: linear-gradient(#253047, #253047); }
-        .endflow-card { margin-bottom: var(--space-2); padding: 0.5625rem 0.6875rem; border: 1px solid #253047; border-left: 3px solid #475569; border-radius: var(--radius-sm); background: #131722; }
-        .endflow-card.ok { border-left-color: #4ec97a; } .endflow-card.bad { border-left-color: #e0b341; } .endflow-card.info { border-left-color: #5aa9ff; }
-        .endflow-card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
-        .endflow-card-head strong { font-size: .625rem; text-transform: uppercase; letter-spacing: .06em; color: #cbd5e1; }
-        .endflow-subgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); margin-top: var(--space-2); }
-        .endflow-sub { display: grid; gap: .0625rem; padding: var(--space-2) var(--space-3); border: 1px solid #1e2a3e; border-radius: var(--radius-sm); background: #0d1118; }
-        .endflow-sub span { color: #64748b; font-size: .5625rem; text-transform: uppercase; letter-spacing: .06em; }
-        .endflow-sub strong { color: #cbd5e1; font-size: .625rem; overflow-wrap: anywhere; }
-        .endflow-sub small { color: #64748b; font-size: .5625rem; overflow-wrap: anywhere; }
-        .waterfall-wrap { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(17.5rem, .35fr); gap: var(--space-4); align-items: start; }
-        .waterfall-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-1); }
-        .chips { display: flex; gap: var(--space-1); }
-        .chip { padding: var(--space-1) var(--space-2); border: 1px solid #253047; border-radius: var(--radius-sm); background: #0f1a2b; color: #8b97ab; font: inherit; font-size: .5625rem; cursor: pointer; }
-        .chip.on { border-color: rgba(90,169,255,.5); background: rgba(90,169,255,.12); color: #5aa9ff; }
-        .search { width: 13.75rem; padding: 0.3125rem var(--space-2); border: 1px solid #253047; border-radius: var(--radius-sm); background: #0d1118; color: #e2e8f0; font: inherit; font-size: .625rem; }
-        .diag { display: grid; gap: var(--space-3); }
-        .mini { padding: var(--space-3); }
-        .mini h2 { font-size: .6875rem; margin: 0; }
-        .call-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.3125rem; }
-        .call-list li { display: grid; gap: .0625rem; padding: 0.3125rem 0; border-bottom: 1px solid #253047; }
-        .call-list span { font-size: .625rem; color: #cbd5e1; } .call-list code { font-size: .5625rem; color: #5aa9ff; } .call-list small { color: #64748b; font-size: .5625rem; }
-        .tab-count { margin-left: var(--space-2); padding: .0625rem 0.3125rem; border-radius: 62.44rem; background: #0d1118; color: #8b97ab; font-size: .5625rem; }
-        .policy-note { padding: var(--space-3); border: 1px solid #253047; border-left: 3px solid #e0b341; border-radius: var(--radius-sm); background: #0d1118; color: #8b97ab; font-size: var(--text-xs); }
-        .facts-grid { display: grid; grid-template-columns: 6.875rem minmax(0, 1fr); gap: 0.3125rem var(--space-3); margin: 0; font-size: var(--text-xs); }
-        .facts-grid dt { color: var(--muted); } .facts-grid dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
-        .token-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
-        .token-tiles div { display: grid; gap: .0625rem; padding: var(--space-3); border: 1px solid #253047; border-radius: var(--radius-sm); background: #0d1118; }
-        .token-tiles span { color: var(--muted); font-size: .5625rem; text-transform: uppercase; }
-        .token-tiles strong { font-size: var(--text-xl); color: #e0b341; font-variant-numeric: tabular-nums; }
-        .token-tiles small { color: var(--muted); font-size: .5625rem; }
-        .hint, .muted { color: var(--muted); font-size: var(--text-xs); }
-        .tabs { display: flex; gap: var(--space-1); border-bottom: 1px solid #253047; overflow-x: auto; }
-        .tabs button { display: inline-flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font: inherit; font-size: var(--text-xs); font-weight: 600; cursor: pointer; white-space: nowrap; }
-        .tabs button:hover { color: #e2e8f0; }
-        .tabs button:focus-visible { outline: 0.125rem solid var(--brand); outline-offset: -0.125rem; }
-        .tabs button.active { border-color: #5aa9ff; color: #5aa9ff; }
-        .drill-tabs button[data-tab='waterfall'].active { border-color: #4ec97a; color: #4ec97a; }
-        .drill-tabs button[data-tab='topology'].active { border-color: #5aa9ff; color: #5aa9ff; }
-        .drill-tabs button[data-tab='decisions'].active { border-color: #c084fc; color: #c084fc; }
-        .drill-tabs button[data-tab='rules'].active { border-color: #e0b341; color: #e0b341; }
-        .drill-tabs button[data-tab='telemetry'].active { border-color: #818cf8; color: #818cf8; }
-        .tab-icon { display: grid; place-items: center; width: 1.125rem; height: 1.125rem; border: 1px solid #1e2a3e; border-radius: var(--radius-sm); background: #0d1118; color: var(--muted); font-size: .625rem; line-height: 1; }
-        .tabs button.active .tab-icon { border-color: currentColor; background: rgba(90,169,255,.12); color: inherit; }
-        .tabs button.active .tab-count { color: inherit; }
-        .waterfall { gap: var(--space-1); }
-        .event-row { display: flex; gap: var(--space-3); padding: var(--space-2) 0; border-bottom: 1px solid var(--line); }
-        .event-index { color: var(--muted); font-size: .625rem; width: 1.375rem; text-align: right; }
-        .event-main { display: grid; gap: var(--space-1); min-width: 0; flex: 1; }
-        .event-title { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
-        .event-title code { color: var(--brand); }
-        .event-title time { margin-left: auto; color: var(--muted); font-size: .5625rem; }
-        .event-main small { color: var(--muted); font-size: .625rem; }
-        details summary { cursor: pointer; color: var(--muted); font-size: .625rem; }
-        pre { max-height: 18.75rem; overflow: auto; padding: var(--space-3); border: 1px solid #253047; border-radius: var(--radius-sm); background: #0d1118; color: #cbd5e1; font-size: .6875rem; white-space: pre-wrap; }
-        .raw { margin: 0; }
-        .table-wrap { width: 100%; overflow-x: auto; }
-        .telemetry-table { width: 100%; border-collapse: collapse; font-size: var(--text-xs); }
-        .telemetry-table th { text-align: left; background: #0f1a2b; color: #8b97ab; font-weight: 500; padding: var(--space-2); border-bottom: 1px solid #253047; text-transform: uppercase; letter-spacing: .05em; font-size: .625rem; }
-        .telemetry-table td { padding: var(--space-2); border-bottom: 1px solid var(--line); }
-        .checks { display: grid; gap: var(--space-1); margin-bottom: var(--space-3); }
-        .check-row { display: flex; align-items: baseline; gap: var(--space-2); padding: var(--space-2) var(--space-2); border: 1px solid #1e2a3e; border-radius: var(--radius-sm); background: #0d1118; font-size: .625rem; }
-        .check-status { min-width: 2.5rem; text-transform: uppercase; font-size: .5625rem; font-weight: 700; color: #8b97ab; }
-        .check-status[data-status='pass'] { color: #4ec97a; } .check-status[data-status='warn'] { color: #e0b341; } .check-status[data-status='skip'] { color: #64748b; }
-        .check-row strong { color: #cbd5e1; font-size: .625rem; white-space: nowrap; }
-        .check-row small { color: #64748b; }
-        .recon-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(13.75rem, 1fr)); gap: var(--space-2); margin-bottom: var(--space-4); }
-        .recon-card { display: grid; gap: var(--space-1); padding: 0.5625rem var(--space-3); border: 1px solid #1e2a3e; border-left: 3px solid #5aa9ff; border-radius: var(--radius-sm); background: #0d1118; }
-        .recon-card > div { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
-        .recon-card strong { color: #e2e8f0; font-size: .6875rem; }
-        .recon-card small { color: #64748b; font-size: .5625rem; }
-        .context-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
-        .context-grid h3 { margin-top: 0; }
-        .timeline { gap: var(--space-2); }
-        .lane { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: var(--space-3); align-items: center; font-size: var(--text-xs); }
-        .lane-track { padding: var(--space-2); border-bottom: 1px dashed var(--line); }
-        .lane-event { display: inline-block; padding: 0.1875rem 0.4375rem; border: 1px solid var(--line); border-radius: 62.44rem; font-size: .625rem; }
-        .lane-event.bad { color: var(--warn-ink, #d97706); border-color: var(--warn-ink, #d97706); }
-        .loading-label { color: var(--muted); }
-        .error-panel { display: grid; gap: var(--space-2); padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-md); color: var(--muted); }
-        .error-panel strong { color: var(--ink); }
-        .verdict-hero { --card-accent: #64748b; display: grid; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--line); border-left: 3px solid var(--card-accent); border-radius: var(--radius-md); background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.35); }
-        .verdict-hero[data-level='allow'] { --card-accent: var(--ok-ink); }
-        .verdict-hero[data-level='partial'] { --card-accent: var(--warn-ink); }
-        .verdict-hero[data-level='deny'] { --card-accent: var(--danger-ink); }
-        .verdict-hero[data-level='unknown'] { --card-accent: #64748b; }
-        .verdict-hero-head { display: flex; align-items: center; gap: var(--space-3); }
-        .verdict-hero-title { min-width: 0; flex: 1; }
-        .verdict-hero-title h2 { margin: 0; font-size: var(--text-md); }
-        .verdict-hero-head .icon-chip { border-color: var(--card-accent); color: var(--card-accent); background: rgba(90,169,255,.08); }
-        .verdict-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); }
-        .verdict-level-badge { display: inline-flex; align-items: center; padding: var(--space-1) var(--space-3); border: 1px solid currentColor; border-radius: var(--radius-sm); font-size: var(--text-sm); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
-        .level-allow { color: var(--ok-ink); background: rgba(78,201,122,.12); }
-        .level-partial { color: var(--warn-ink); background: rgba(224,179,65,.12); }
-        .level-deny { color: var(--danger-ink); background: rgba(255,107,107,.12); }
-        .level-unknown { color: var(--muted); background: rgba(139,151,171,.12); }
-        .verdict-meta { display: grid; gap: .0625rem; min-width: 0; }
-        .verdict-meta small { color: var(--muted); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .08em; }
-        .verdict-meta strong { color: var(--warn-ink); font-size: var(--text-xl); font-variant-numeric: tabular-nums; line-height: 1; }
-        .verdict-meta time, .verdict-actor-id { color: var(--ink); font-size: var(--text-sm); overflow-wrap: anywhere; }
-        .verdict-actor-role { color: var(--muted); font-size: var(--text-xs); }
-        .verdict-basis { margin: 0; color: #cbd5e1; font-size: var(--text-sm); line-height: 1.5; overflow-wrap: anywhere; }
-        .spec-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); margin: 0; padding: var(--space-2) var(--space-3); border: 1px solid #1e2a3e; border-radius: var(--radius-sm); background: #0d1118; color: #cbd5e1; font-size: var(--text-xs); }
-        .spec-label { color: var(--muted); font-size: .5625rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+        .verdict-block { display: grid; gap: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--line); }
+        .verdict-block h3 { display: flex; align-items: baseline; gap: var(--space-2); font-size: var(--fs-title); }
+        .q-no { color: var(--muted); font-size: var(--fs-badge); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+        .verdict-score-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); color: var(--muted); font-size: var(--fs-secondary); }
+        .verdict-score-line strong { color: var(--ink); font-size: var(--fs-title); font-variant-numeric: tabular-nums; }
+        .rule-refs, .gap-list, .action-list, .next-codes { display: grid; gap: var(--space-1); padding: 0; list-style: none; }
+        .rule-ref { padding: var(--space-1) var(--space-2); border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--surface-2); font-size: var(--fs-secondary); overflow-wrap: anywhere; }
+        .rule-ref code { color: var(--brand); }
+        .gap-row { display: grid; gap: var(--space-1); padding: var(--space-1) var(--space-2); border: 1px solid var(--line-soft); border-left: 3px solid var(--warn-ink); border-radius: var(--radius-sm); background: var(--surface-2); }
+        .gap-head { color: #cbd5e1; font-size: var(--fs-secondary); overflow-wrap: anywhere; }
+        .gap-head code { color: var(--warn-ink); font-weight: 700; }
+        .gap-consequence { color: var(--muted); font-size: var(--fs-secondary); }
+        .action-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); padding: var(--space-1) var(--space-2); border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--surface-2); color: #cbd5e1; font-size: var(--fs-secondary); }
+        .action-row strong { color: var(--ink); font-size: var(--fs-body); }
+        .action-row code { color: var(--brand); overflow-wrap: anywhere; }
+        .spec-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); padding: var(--space-2); border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--surface-2); color: #cbd5e1; font-size: var(--fs-secondary); }
+        .spec-label { color: var(--muted); font-size: var(--fs-badge); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
         .spec-line code { color: var(--brand); overflow-wrap: anywhere; }
         .spec-version { color: var(--warn-ink); font-variant-numeric: tabular-nums; }
         .spec-section { color: #cbd5e1; }
-        .write-gate { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); margin: 0; padding: var(--space-2) var(--space-3); border: 1px solid #1e2a3e; border-radius: var(--radius-sm); background: #0d1118; color: #cbd5e1; font-size: var(--text-xs); }
-        .write-gate-label { color: var(--muted); font-size: .5625rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+        .write-gate { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); padding: var(--space-2) var(--space-3); border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--surface-2); color: #cbd5e1; font-size: var(--text-xs); }
+        .write-gate-label { color: var(--muted); font-size: var(--fs-badge); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
         .write-gate code { color: var(--brand); overflow-wrap: anywhere; }
         .write-gate time, .write-gate-actor { color: var(--muted); }
-        .copy-path { padding: var(--space-1) var(--space-2); border: 1px solid #253047; border-radius: var(--radius-sm); background: #131722; color: #8b97ab; font: inherit; font-size: .5625rem; cursor: pointer; }
-        .copy-path:hover { background: #162235; color: #e2e8f0; }
-        .host-signals { display: grid; gap: var(--space-2); padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-left: 3px solid #c084fc; border-radius: var(--radius-md); background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.35); }
-        .effectiveness { --card-accent: var(--brand); display: grid; gap: var(--space-2); padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-left: 3px solid var(--card-accent); border-radius: var(--radius-md); background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.35); }
-        .effectiveness-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
-        .effectiveness-head h2 { margin: 0; font-size: var(--text-md); }
-        .kpi-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr)); gap: var(--space-2); }
-        .kpi-tile { display: grid; gap: .0625rem; padding: var(--space-2) var(--space-3); border: 1px solid #1e2a3e; border-radius: var(--radius-sm); background: var(--surface-2); }
-        .kpi-tile span { color: #64748b; font-size: .5625rem; letter-spacing: .06em; text-transform: uppercase; }
-        .kpi-tile strong { color: var(--ink); font-size: var(--text-sm); font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-        .kpi-tile small { color: #64748b; font-size: .5625rem; overflow-wrap: anywhere; }
-        .jev-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-3); margin: 0; color: #cbd5e1; font-size: var(--text-sm); overflow-wrap: anywhere; }
-        .jev-summary { color: var(--ink); }
-        .jev-mismatch { padding: var(--space-1) var(--space-2); border: 1px solid rgba(224,179,65,.45); border-radius: var(--radius-sm); background: rgba(224,179,65,.12); color: var(--warn-ink); font-size: var(--text-xs); }
-        .host-signals-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
-        .host-signals-head h2 { margin: 0; font-size: var(--text-md); }
-        .signal-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--space-2); }
-        .signal-tile { display: grid; gap: .0625rem; padding: var(--space-2) var(--space-3); border: 1px solid #1e2a3e; border-radius: var(--radius-sm); background: #0d1118; }
-        .signal-tile span { color: #64748b; font-size: .5625rem; letter-spacing: .06em; text-transform: uppercase; }
-        .signal-tile strong { color: #e2e8f0; font-size: var(--text-sm); font-weight: 600; overflow-wrap: anywhere; }
-        .signal-tile small { color: #64748b; font-size: .5625rem; overflow-wrap: anywhere; }
-        .verdict-block { display: grid; gap: var(--space-2); padding-top: var(--space-3); border-top: 1px solid var(--line); }
-        .verdict-block h3 { display: flex; align-items: baseline; gap: var(--space-2); margin: 0; font-size: var(--text-md); }
-        .q-no { color: var(--muted); font-size: var(--text-xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-        .verdict-score-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); margin: 0; color: var(--muted); font-size: var(--text-xs); }
-        .verdict-score-line strong { color: var(--ink); font-size: var(--text-md); font-variant-numeric: tabular-nums; }
-        .rule-refs, .gap-list, .action-list, .next-codes { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
-        .rule-ref { padding: var(--space-2) var(--space-3); border: 1px solid #1e2a3e; border-radius: var(--radius-sm); background: #0d1118; font-size: var(--text-xs); overflow-wrap: anywhere; }
-        .rule-ref code { color: var(--brand); }
-        .gap-row { display: grid; gap: var(--space-1); padding: var(--space-2) var(--space-3); border: 1px solid #1e2a3e; border-left: 3px solid var(--warn-ink); border-radius: var(--radius-sm); background: #0d1118; }
-        .gap-head { color: #cbd5e1; font-size: var(--text-xs); overflow-wrap: anywhere; }
-        .gap-head code { color: var(--warn-ink); font-weight: 700; }
-        .gap-consequence { margin: 0; color: var(--muted); font-size: var(--text-xs); }
-        .action-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-3); padding: var(--space-2) var(--space-3); border: 1px solid #1e2a3e; border-radius: var(--radius-sm); background: #0d1118; color: #cbd5e1; font-size: var(--text-xs); }
-        .action-row strong { color: var(--ink); font-size: var(--text-sm); }
-        .action-row code { color: var(--brand); overflow-wrap: anywhere; }
-        .receipt-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); margin: 0; font-size: var(--text-sm); color: var(--muted); }
+        .copy-path { padding: 0 var(--space-1); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-3); color: var(--muted); font: inherit; font-size: var(--fs-badge); line-height: 1.6; cursor: pointer; }
+        .copy-path:hover { border-color: var(--brand); color: #ffffff; }
+        .receipt-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); color: var(--muted); font-size: var(--fs-body); }
         .receipt-line code { color: var(--brand); overflow-wrap: anywhere; }
-        .receipt-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--space-2) var(--space-4); margin: 0; }
-        .receipt-facts div { display: grid; gap: var(--space-1); min-width: 0; }
-        .receipt-facts dt { color: var(--muted); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .06em; }
-        .receipt-facts dd { margin: 0; color: var(--ink); font-size: var(--text-sm); overflow-wrap: anywhere; }
+        .receipt-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: var(--space-1) var(--space-3); }
+        .receipt-facts div { display: grid; gap: 0; min-width: 0; }
+        .receipt-facts dt { color: var(--muted); font-size: var(--fs-badge); letter-spacing: .06em; text-transform: uppercase; }
+        .receipt-facts dd { color: var(--ink); font-size: var(--fs-secondary); overflow-wrap: anywhere; }
         .receipt-facts code { color: var(--brand); }
         .receipt-verify { margin: 0; }
-        .next-step { margin: 0; padding: var(--space-3); border: 1px solid #1e2a3e; border-left: 3px solid var(--brand); border-radius: var(--radius-sm); background: #0d1118; color: var(--ink); font-size: var(--text-sm); }
+        .next-step { padding: var(--space-2) var(--space-3); border: 1px solid var(--line-soft); border-left: 3px solid var(--brand); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--ink); font-size: var(--fs-body); }
         .next-codes { grid-auto-flow: column; justify-content: start; }
-        .next-codes li { padding: var(--space-1) var(--space-2); border: 1px solid rgba(224,179,65,.4); border-radius: var(--radius-sm); background: rgba(224,179,65,.1); color: var(--warn-ink); font-size: var(--text-xs); }
-        @media (max-width: 62.5rem) { .top-grid { grid-template-columns: 1fr; } .runtime-compare { grid-template-columns: 1fr; } .hero-main { flex-wrap: wrap; } .hero-badges { margin-left: 0; justify-content: flex-start; } .waterfall-wrap { grid-template-columns: 1fr; } }
+        .next-codes li { padding: 0 var(--space-2); border: 1px solid rgba(224,179,65,.4); border-radius: var(--radius-sm); background: rgba(224,179,65,.1); color: var(--warn-ink); font-size: var(--fs-badge); }
+        .jev-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); color: #cbd5e1; font-size: var(--fs-body); overflow-wrap: anywhere; }
+        .jev-summary { color: var(--ink); }
+        .jev-mismatch { padding: 0 var(--space-2); border: 1px solid rgba(224,179,65,.45); border-radius: var(--radius-sm); background: rgba(224,179,65,.12); color: var(--warn-ink); font-size: var(--fs-secondary); }
+        .timeline { gap: var(--space-2); }
+        .lane { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: var(--space-3); align-items: center; font-size: var(--fs-secondary); }
+        .lane-track { padding: var(--space-2); border-bottom: 1px dashed var(--line); }
+        .lane-event { display: inline-block; padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: 62.44rem; font-size: var(--fs-badge); }
+        .lane-event.bad { color: var(--warn-ink); border-color: var(--warn-ink); }
+        .loading-label { color: var(--muted); }
+        .error-panel { display: grid; gap: var(--space-2); padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-md); color: var(--muted); }
+        .error-panel strong { color: var(--ink); }
+        @media (max-width: 74.9375rem) {
+            .glance-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .pipeline-stepper { grid-template-columns: repeat(8, minmax(9rem, 1fr)); overflow-x: auto; }
+            .identity-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .effectiveness .kpi-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .signal-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        }
+        @media (max-width: 62.5rem) { .top-grid { grid-template-columns: 1fr; } .runtime-compare { grid-template-columns: 1fr; } }
+        @media (min-width: 75rem) { .request-query { font-size: var(--fs-h1-lg); } }
+        @media (max-width: 47.9375rem) {
+            .glance-grid { grid-template-columns: minmax(0, 1fr); }
+            .identity-grid { grid-template-columns: minmax(0, 1fr); }
+            .context-grid { grid-template-columns: minmax(0, 1fr); }
+            .endflow-subgrid { grid-template-columns: minmax(0, 1fr); }
+            .event-table-head, .event-grid { grid-template-columns: 4.5rem minmax(0, 1fr) 5rem 4.5rem; }
+            .event-table-head span:nth-child(4), .event-grid .badge { display: none; }
+            .event-table-head span:nth-child(3), .event-grid .event-worker { display: none; }
+        }
     `],
 })
 export class RequestDetailPage implements OnInit {
@@ -1068,6 +1135,8 @@ export class RequestDetailPage implements OnInit {
         { id: 'telemetry' as const, label: 'Telemetry & Trace' },
     ];
     readonly flowExpanded = signal(true);
+    /** Per-step disclosure override; empty steps start collapsed to a single line. */
+    readonly stepOpen = signal<Record<string, boolean>>({});
     readonly eventQuery = signal('');
     readonly requestId = signal(decodeURIComponent(this.route.snapshot.paramMap.get('requestId') || ''));
 
@@ -1338,13 +1407,59 @@ export class RequestDetailPage implements OnInit {
         this.activeTab.set('waterfall');
     }
 
-    readonly endSteps = computed(() => this.systemStages().map((stage) => ({
-        id: stage.id,
-        label: stage.title,
-        status: stage.status,
-        sub: stage.sub,
-        subcards: stage.details,
-    })));
+    /**
+     * E2E flow — the same 8 stages, but the header already carries prompt identity and the
+     * verdict actor, so step 1 keeps only its law evidence. A step whose remaining subcards are
+     * all absent is flagged `empty` and renders one line until the reader expands it.
+     */
+    readonly endSteps = computed(() => this.systemStages().map((stage) => {
+        const lawValue = stage.details.find((detail) => detail.label === 'Law')?.value ?? 'not captured';
+        const subcards = stage.id === 'intake-law'
+            ? stage.details.filter((detail) => detail.label === 'Law')
+            : stage.details;
+        return {
+            id: stage.id,
+            label: stage.title,
+            status: stage.status,
+            sub: stage.id === 'intake-law' ? (this.missingValue(lawValue) ? 'law not captured' : lawValue) : stage.sub,
+            subcards,
+            empty: subcards.length === 0 || subcards.every((detail) => this.missingValue(detail.value)),
+        };
+    }));
+
+    /** Disclosure state for one E2E step: non-empty steps start open, empty steps start collapsed. */
+    isStepOpen(step: { id: string; empty: boolean }): boolean {
+        const override = this.stepOpen()[step.id];
+        return override === undefined ? !step.empty : override;
+    }
+
+    toggleStep(step: { id: string; empty: boolean }): void {
+        const next = !this.isStepOpen(step);
+        this.stepOpen.update((map) => ({ ...map, [step.id]: next }));
+    }
+
+    /** A value the API actually did not report — never a judgement about the step. */
+    private missingValue(value: string): boolean {
+        const text = (value || '').trim().toLowerCase();
+        return !text || text === '—' || text === 'not captured' || text === 'not reported' || text === 'not recorded' || text === 'unknown';
+    }
+
+    /** Waterfall duration — host-reported ms when present, otherwise the observed span, never a guess. */
+    eventDuration(event: ObservationDto): string {
+        const evidence = (event.evidence as Record<string, unknown> | null) ?? {};
+        const reported = evidence['durationMs'];
+        if (typeof reported === 'number' && Number.isFinite(reported)) return this.humanDuration(reported);
+        const span = new Date(event.receivedAt).getTime() - new Date(event.at).getTime();
+        return Number.isFinite(span) && span > 0 ? this.humanDuration(span) : '—';
+    }
+
+    /** Waterfall time column — clock only; the full timestamp stays in the tooltip. */
+    formatClock(value: string): string {
+        if (!value) return '—';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return value;
+        return new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(date);
+    }
     readonly waterfallEvents = computed(() => {
         const query = this.eventQuery().trim().toLowerCase();
         if (!query) return this.traceEvents();
