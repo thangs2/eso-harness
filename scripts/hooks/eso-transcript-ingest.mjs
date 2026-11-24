@@ -13,6 +13,7 @@ import { dirname, join } from 'node:path';
 
 if (process.env.ESO_OBSERVE_DISABLED === '1') process.exit(0);
 
+
 const host = (() => { const i = process.argv.indexOf('--host'); return i >= 0 ? process.argv[i + 1] : 'agy'; })();
 const argValue = (name) => { const i = process.argv.indexOf(name); return i >= 0 ? process.argv[i + 1] : ''; };
 const sinceArg = argValue('--since');
@@ -50,7 +51,11 @@ try { payload = rawInput ? JSON.parse(rawInput) : {}; } catch { payload = {}; }
 if (payload.parentConversationId && payload.parentConversationId !== payload.conversationId) process.exit(0);
 
 let parentTools = [];
-if (typeof payload.transcriptPath === 'string' && existsSync(payload.transcriptPath)) {
+let parentTranscriptPath = typeof payload.transcriptPath === 'string' && existsSync(payload.transcriptPath) ? payload.transcriptPath : '';
+let parentInputTokens = 0;
+let parentOutputTokens = 0;
+let parentModel = '';
+if (parentTranscriptPath) {
     try {
         const lines = readFileSync(payload.transcriptPath, 'utf8').trim().split('\n');
         let start = -1;
@@ -66,6 +71,9 @@ if (typeof payload.transcriptPath === 'string' && existsSync(payload.transcriptP
                 let step;
                 try { step = JSON.parse(lines[i]); } catch { continue; }
                 for (const tool of step.tool_calls || []) if (tool?.name) parentTools.push(tool.name);
+                if (Number.isFinite(Number(step.input_tokens))) parentInputTokens += Number(step.input_tokens);
+                if (Number.isFinite(Number(step.output_tokens))) parentOutputTokens += Number(step.output_tokens);
+                if (!parentModel && typeof step.model === 'string' && step.model.trim()) parentModel = step.model.trim();
             }
         }
     } catch { /* optional */ }
@@ -175,6 +183,53 @@ for (const brainRoot of brainRoots) {
                 } catch { /* never block */ }
             }
         }
+    }
+}
+// Parent turn completion: the Stop hook is the only place with provider usage + tool calls, so
+// post ONE worker.completed for the parent trace. Without it the grid has model but no In/Out/Calls/Tools.
+if (parentTranscriptPath && parentConversationId && parentTraceId && (parentInputTokens > 0 || parentOutputTokens > 0 || parentTools.length > 0 || parentModel)) {
+    const toolList = [...new Set(parentTools)];
+    const completion = {
+        observationId: `obs-turn-${parentTraceId.replace(/[^a-zA-Z0-9:_-]/g, '').slice(-48)}`,
+        idempotencyKey: `host-turn-complete:${parentTraceId}`,
+        traceId: parentTraceId,
+        hostId: hostConfig.hostId,
+        runtimeKey: hostConfig.runtimeKey,
+        workerId: 'worker-lead',
+        event: 'worker.completed',
+        outcome: 'PASS',
+        at: new Date().toISOString(),
+        evidence: {
+            source: 'host-transcript',
+            host: hostConfig.hostId,
+            runtimeKey: hostConfig.runtimeKey,
+            conversationId: parentConversationId,
+            workerId: 'worker-lead',
+            adapter: host,
+            model: parentModel || null,
+            tokenSummary: {
+                input: parentInputTokens,
+                output: parentOutputTokens,
+                estimated: false,
+            },
+            tools: toolList.map((name) => ({ name })),
+            durationMs: turnStartedAt ? Math.max(0, Date.now() - turnStartedAt) : 0,
+            hostStep: Number(payload.boundary_index ?? payload.boundaryIndex ?? 0) || 0,
+        },
+    };
+    try {
+        const response = await fetch(config.baseUrl.replace(/\/+$/, '') + '/api/v1/consumers/' + encodeURIComponent(config.consumer) + '/observations', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', authorization: 'Bearer ' + hostConfig.token },
+            body: JSON.stringify(completion),
+            signal: AbortSignal.timeout(3000),
+        });
+        if (!response.ok) throw new Error('HTTP ' + response.status + ' ' + (await response.text()).slice(0, 250));
+    } catch (error) {
+        try {
+            mkdirSync(dirname(outbox), { recursive: true });
+            appendFileSync(outbox, JSON.stringify({ observation: completion, error: String(error?.message || error) }) + '\n');
+        } catch { /* never block */ }
     }
 }
 process.exit(0);
