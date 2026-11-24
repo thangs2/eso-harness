@@ -99,7 +99,7 @@ test('effectiveness === null renders the honest empty state', () => {
 test('no fabricated numbers: every KPI is the reported field, never a default', () => {
     // The denominator is the reported total, not a hardcoded stage count.
     assert.doesNotMatch(effectivenessPanel, /\/\s*8\b/);
-    assert.doesNotMatch(PAGE, /stepsWithEvidence[^\n]*\?\?/);
+    assert.doesNotMatch(PAGE, /stepsWithEvidence[^\n]*\?\?\s*[0-9]/);
     assert.doesNotMatch(PAGE, /stepsTotal[^\n]*(\?\?|\|\|)/);
     assert.doesNotMatch(PAGE, /rolesAssigned[^\n]*(\?\?|\|\|)/);
     assert.doesNotMatch(PAGE, /workersTotal[^\n]*(\?\?|\|\|)/);

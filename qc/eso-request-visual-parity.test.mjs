@@ -150,7 +150,7 @@ test('card chrome mirrors the legacy language: icon chips, accent rails, status 
 
 test('stepper keeps the 8 v2 stage ids, legacy ring badges and a single selected step', () => {
     for (const id of STAGE_IDS) {
-        assert.match(PAGE, new RegExp(`'?${id.replace('-', '\\-')}'?:\\s*'`), `stage glyph for ${id}`);
+        assert.match(PAGE, new RegExp(`case '${id}':`), `icon for ${id}`);
     }
     assert.match(PAGE, /@for \(stage of stages\(\); track stage\.id; let index = \$index\)/);
     assert.match(PAGE, /class="pipeline-step-title">\{\{ stage\.title \}\}/);
