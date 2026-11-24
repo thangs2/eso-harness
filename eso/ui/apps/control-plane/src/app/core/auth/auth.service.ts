@@ -1,4 +1,5 @@
-import { Injectable, signal, computed } from '@angular/core';
+import { Injectable, inject, signal, computed } from '@angular/core';
+import { AppConfigService } from '../config/app-config.service.js';
 
 /**
  * Authentication Service (Angular 22 Signals).
@@ -16,6 +17,7 @@ const HANDSHAKE_MS = 400;
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
+    private readonly apiBase = inject(AppConfigService).apiBaseUrl();
     private readonly _authorization = signal<string | null>(this.read());
     private channel: BroadcastChannel | null = null;
     private resolveReady: (() => void) | null = null;
@@ -87,14 +89,29 @@ export class AuthService {
                 }
                 if (data.type === 'grant' && !this._authorization()) {
                     const value = String(data.authorization || '');
-                    if (value.startsWith('Basic ')) {
-                        this.setAuthorization(value);
+                    if (!value.startsWith('Basic ')) return;
+                    // A peer may itself hold a stale credential (e.g. after a password rotation).
+                    // Never adopt it blindly: verify against the control plane first, then store.
+                    void this.verify(value).then((ok) => {
+                        if (ok) this.setAuthorization(value);
                         this.resolveReady?.();
-                    }
+                    });
                 }
             };
         } catch {
             this.channel = null;
+        }
+    }
+
+    /** True only when the control plane accepts the header; a 401 must not poison other tabs. */
+    private async verify(authorization: string): Promise<boolean> {
+        try {
+            const res = await fetch(`${this.apiBase}/api/v1/auth/me`, {
+                headers: { Accept: 'application/json', Authorization: authorization },
+            });
+            return res.ok;
+        } catch {
+            return false;
         }
     }
 

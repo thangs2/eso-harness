@@ -64,10 +64,25 @@ import type {
 export class ControlPlaneApiClient {
     private baseUrl: string;
     private tokenProvider: () => string | null;
+    private readonly onUnauthorized?: () => void;
 
-    constructor(options: { baseUrl?: string; tokenProvider?: () => string | null } = {}) {
+    constructor(options: { baseUrl?: string; tokenProvider?: () => string | null; onUnauthorized?: () => void } = {}) {
         this.baseUrl = (options.baseUrl || 'http://127.0.0.1:8787').replace(/\/$/, '');
         this.tokenProvider = options.tokenProvider || (() => null);
+        this.onUnauthorized = options.onUnauthorized;
+    }
+
+    /**
+     * One place that turns a rejected credential into a sign-in redirect. A stale Basic header
+     * otherwise leaves pages stuck on "loading" with an empty grid — the API says 401 but no
+     * surface clears the credential.
+     */
+    private async fetchImpl(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+        const response = await fetch(input, init);
+        if ((response.status === 401 || response.status === 403) && this.onUnauthorized) {
+            this.onUnauthorized();
+        }
+        return response;
     }
 
     private getHeaders(): Record<string, string> {
@@ -85,7 +100,7 @@ export class ControlPlaneApiClient {
 
     async getWorkOverview(project: string = 'default'): Promise<WorkOverviewResponse> {
         const url = `${this.baseUrl}/api/v1/work-overview?project=${encodeURIComponent(project)}`;
-        const res = await fetch(url, {
+        const res = await this.fetchImpl(url, {
             method: 'GET',
             headers: this.getHeaders(),
         });
@@ -109,7 +124,7 @@ export class ControlPlaneApiClient {
 
     async getWorkOverviewHtml(project: string = 'default'): Promise<{ html: string; status: number }> {
         const url = `${this.baseUrl}/work-overview?project=${encodeURIComponent(project)}`;
-        const res = await fetch(url, {
+        const res = await this.fetchImpl(url, {
             method: 'GET',
             headers: this.getHeaders(),
         });
@@ -119,7 +134,7 @@ export class ControlPlaneApiClient {
 
     async previewConfig(consumerId: string): Promise<ConfigPreviewDto> {
         const url = `${this.baseUrl}/api/v1/consumers/${encodeURIComponent(consumerId)}/config/preview`;
-        const res = await fetch(url, {
+        const res = await this.fetchImpl(url, {
             method: 'GET',
             headers: this.getHeaders(),
         });
@@ -132,7 +147,7 @@ export class ControlPlaneApiClient {
 
     async saveConfig(consumerId: string, config: Record<string, unknown>, hash: string): Promise<{ success: boolean; hash: string }> {
         const url = `${this.baseUrl}/api/v1/consumers/${encodeURIComponent(consumerId)}/config`;
-        const res = await fetch(url, {
+        const res = await this.fetchImpl(url, {
             method: 'PUT',
             headers: {
                 ...this.getHeaders(),
@@ -149,14 +164,14 @@ export class ControlPlaneApiClient {
         return await res.json() as { success: boolean; hash: string };
     }
     async listConsumers(): Promise<ConsumerListResponse> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers`, { headers: this.getHeaders() });
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers`, { headers: this.getHeaders() });
         if (!res.ok) throw await this.problem(res);
         const data = await res.json();
         return (Array.isArray(data) ? { items: data } : data) as ConsumerListResponse;
     }
 
     async getConsumer(project: string): Promise<ConsumerProfile> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(project)}`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(project)}`, {
             headers: this.getHeaders(),
         });
         if (!res.ok) throw await this.problem(res);
@@ -164,7 +179,7 @@ export class ControlPlaneApiClient {
     }
 
     async createConsumerSetup(payload: SetupConsumerPayload): Promise<{ id: string }> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers`, {
             method: 'POST',
             headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
@@ -174,7 +189,7 @@ export class ControlPlaneApiClient {
     }
 
     async createConsumer(profile: ConsumerProfile): Promise<ConsumerProfile> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers`, {
             method: 'POST',
             headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify(profile),
@@ -187,7 +202,7 @@ export class ControlPlaneApiClient {
         id: string,
         payload: { name?: string; profile: Record<string, unknown>; zones?: unknown[]; expected_version: number }
     ): Promise<ConsumerProfile> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}`, {
             method: 'PUT',
             headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
@@ -197,7 +212,7 @@ export class ControlPlaneApiClient {
     }
 
     async updateConsumer(project: string, profile: ConsumerProfile): Promise<ConsumerProfile> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(project)}`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(project)}`, {
             method: 'PUT',
             headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify(profile),
@@ -250,7 +265,7 @@ export class ControlPlaneApiClient {
     }
 
     async planConsumer(profile: ConsumerProfile): Promise<ConsumerPlan> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/plan`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/plan`, {
             method: 'POST',
             headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify(profile),
@@ -260,7 +275,7 @@ export class ControlPlaneApiClient {
     }
 
     async provisionConsumer(id: string, options: ProvisionConsumerOptions = {}): Promise<ProvisionConsumerResponse> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/provision`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/provision`, {
             method: 'POST',
             headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify(options),
@@ -270,7 +285,7 @@ export class ControlPlaneApiClient {
     }
 
     async getConsumerStackVersions(id: string): Promise<StackVersionsDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/stack-versions`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/stack-versions`, {
             headers: this.getHeaders(),
         });
         if (!res.ok) throw await this.problem(res);
@@ -278,7 +293,7 @@ export class ControlPlaneApiClient {
     }
 
     async saveConsumerStackVersions(id: string, versions: unknown[]): Promise<StackVersionsDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/stack-versions`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/stack-versions`, {
             method: 'PUT',
             headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify({ versions }),
@@ -288,7 +303,7 @@ export class ControlPlaneApiClient {
     }
 
     async getConsumerKnowledge(id: string): Promise<KnowledgeSummaryDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/knowledge`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/knowledge`, {
             headers: this.getHeaders(),
         });
         if (!res.ok) throw await this.problem(res);
@@ -297,7 +312,7 @@ export class ControlPlaneApiClient {
 
     async getConsumerKnowledgeDocs(id: string, query = ''): Promise<KnowledgeDocDto[]> {
         const qs = query.trim() ? `?q=${encodeURIComponent(query.trim())}` : '';
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/knowledge/docs${qs}`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/knowledge/docs${qs}`, {
             headers: this.getHeaders(),
         });
         if (!res.ok) throw await this.problem(res);
@@ -305,7 +320,7 @@ export class ControlPlaneApiClient {
     }
 
     async getConsumerKnowledgeEmbeddings(id: string): Promise<KnowledgeEmbeddingStatusDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/knowledge/embeddings`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/knowledge/embeddings`, {
             headers: this.getHeaders(),
         });
         if (!res.ok) throw await this.problem(res);
@@ -313,7 +328,7 @@ export class ControlPlaneApiClient {
     }
 
     async embedConsumerKnowledge(id: string): Promise<KnowledgeEmbeddingResultDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/knowledge/embed`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/knowledge/embed`, {
             method: 'POST',
             headers: this.getHeaders(),
         });
@@ -322,7 +337,7 @@ export class ControlPlaneApiClient {
     }
 
     async retrieveConsumerKnowledge(id: string, query: string, filters: { type?: string; status?: string } = {}): Promise<KnowledgeRetrievalDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/knowledge/retrieve`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/knowledge/retrieve`, {
             method: 'POST',
             headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify({ query, ...filters }),
@@ -332,7 +347,7 @@ export class ControlPlaneApiClient {
     }
 
     async checkConsumerKnowledge(id: string): Promise<KnowledgeCheckDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/knowledge/check`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/knowledge/check`, {
             method: 'POST',
             headers: this.getHeaders(),
         });
@@ -341,7 +356,7 @@ export class ControlPlaneApiClient {
     }
 
     async getConsumerKnowledgeDoc(id: string, docId: string): Promise<KnowledgeDocDetailDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/knowledge/docs/${encodeURIComponent(docId)}`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/knowledge/docs/${encodeURIComponent(docId)}`, {
             headers: this.getHeaders(),
         });
         if (!res.ok) throw await this.problem(res);
@@ -349,7 +364,7 @@ export class ControlPlaneApiClient {
     }
 
     async getConsumerKnowledgeFindings(id: string): Promise<KnowledgeFindingDto[]> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/knowledge/findings`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/knowledge/findings`, {
             headers: this.getHeaders(),
         });
         if (!res.ok) throw await this.problem(res);
@@ -357,7 +372,7 @@ export class ControlPlaneApiClient {
     }
 
     async indexConsumerKnowledge(id: string): Promise<KnowledgeSummaryDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/knowledge/index`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/knowledge/index`, {
             method: 'POST',
             headers: this.getHeaders(),
         });
@@ -366,25 +381,25 @@ export class ControlPlaneApiClient {
     }
 
     async getWorkerSourceStatus(id: string): Promise<WorkerSourceStatusDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/workers/sync/status`, { headers: this.getHeaders() });
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/workers/sync/status`, { headers: this.getHeaders() });
         if (!res.ok) throw await this.problem(res);
         return (await res.json()) as WorkerSourceStatusDto;
     }
 
     async syncWorkerSources(id: string): Promise<WorkerSourceStatusDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/workers/sync`, { method: 'POST', headers: this.getHeaders() });
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/workers/sync`, { method: 'POST', headers: this.getHeaders() });
         if (!res.ok) throw await this.problem(res);
         return (await res.json()) as WorkerSourceStatusDto;
     }
 
     async promoteWorkerProjection(id: string, workerId: string): Promise<any> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/workers/sync/promote/${encodeURIComponent(workerId)}`, { method: 'POST', headers: this.getHeaders() });
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/workers/sync/promote/${encodeURIComponent(workerId)}`, { method: 'POST', headers: this.getHeaders() });
         if (!res.ok) throw await this.problem(res);
         return res.json();
     }
 
     async getConsumerWorkers(id: string): Promise<WorkerConfigDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/workers`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/workers`, {
             headers: this.getHeaders(),
         });
         if (!res.ok) throw await this.problem(res);
@@ -392,7 +407,7 @@ export class ControlPlaneApiClient {
     }
 
     async getHosts(): Promise<HostDto[]> {
-        const res = await fetch(`${this.baseUrl}/api/v1/hosts`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/hosts`, {
             headers: this.getHeaders(),
         });
         if (!res.ok) throw await this.problem(res);
@@ -400,7 +415,7 @@ export class ControlPlaneApiClient {
     }
 
     async saveHost(host: { hostId: string; hostType: string; label: string }): Promise<HostDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/hosts/${encodeURIComponent(host.hostId)}`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/hosts/${encodeURIComponent(host.hostId)}`, {
             method: 'PUT',
             headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify({ hostType: host.hostType, label: host.label }),
@@ -412,7 +427,7 @@ export class ControlPlaneApiClient {
 
     /** Flattened runtime list used by worker placement (targets `runtimeKey`). */
     async getHostRuntimes(): Promise<HostRuntimeDto[]> {
-        const res = await fetch(`${this.baseUrl}/api/v1/host-runtimes`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/host-runtimes`, {
             headers: this.getHeaders(),
         });
         if (!res.ok) throw await this.problem(res);
@@ -438,7 +453,7 @@ export class ControlPlaneApiClient {
         };
         // Empty means "not supplied": the backend keeps/derive the default from the catalog.
         if (runtime.defaultModel?.trim()) body.defaultModel = runtime.defaultModel.trim();
-        const res = await fetch(`${this.baseUrl}/api/v1/hosts/${encodeURIComponent(runtime.hostId)}/runtimes/${encodeURIComponent(runtime.runtimeId)}`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/hosts/${encodeURIComponent(runtime.hostId)}/runtimes/${encodeURIComponent(runtime.runtimeId)}`, {
             method: 'PUT',
             headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
@@ -449,7 +464,7 @@ export class ControlPlaneApiClient {
     }
 
     async heartbeatHostRuntime(hostId: string, runtimeId: string): Promise<HostRuntimeDto | null> {
-        const res = await fetch(`${this.baseUrl}/api/v1/hosts/${encodeURIComponent(hostId)}/runtimes/${encodeURIComponent(runtimeId)}/heartbeat`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/hosts/${encodeURIComponent(hostId)}/runtimes/${encodeURIComponent(runtimeId)}/heartbeat`, {
             method: 'POST',
             headers: this.getHeaders(),
         });
@@ -466,7 +481,7 @@ export class ControlPlaneApiClient {
     }
 
     async listRequests(id: string, limit = 200): Promise<RequestSummaryDto[]> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/requests?limit=${encodeURIComponent(String(limit))}`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/requests?limit=${encodeURIComponent(String(limit))}`, {
             headers: this.getHeaders(),
         });
         if (!res.ok) throw await this.problem(res);
@@ -475,7 +490,7 @@ export class ControlPlaneApiClient {
     }
 
     async listPrompts(id: string, limit = 500): Promise<PromptSummaryDto[]> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/prompts?limit=${encodeURIComponent(String(limit))}`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/prompts?limit=${encodeURIComponent(String(limit))}`, {
             headers: this.getHeaders(),
         });
         if (!res.ok) throw await this.problem(res);
@@ -484,7 +499,7 @@ export class ControlPlaneApiClient {
     }
 
     async getRequestDetail(id: string, requestId: string): Promise<RequestDetailDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/requests/${encodeURIComponent(requestId)}`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/requests/${encodeURIComponent(requestId)}`, {
             headers: this.getHeaders(),
         });
         if (!res.ok) throw await this.problem(res);
@@ -493,7 +508,7 @@ export class ControlPlaneApiClient {
 
     /** P4/P5a — re-verify one sealed receipt; the server recomputes the hash, the client never does. */
     async verifyReceipt(id: string, receiptId: string): Promise<ReceiptVerificationDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/receipts/${encodeURIComponent(receiptId)}/verify`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/receipts/${encodeURIComponent(receiptId)}/verify`, {
             headers: this.getHeaders(),
         });
         if (!res.ok) throw await this.problem(res);
@@ -501,7 +516,7 @@ export class ControlPlaneApiClient {
     }
 
     async getConsumerObservations(id: string, limit = 100): Promise<ObservationDto[]> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/observations?limit=${encodeURIComponent(String(limit))}`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/observations?limit=${encodeURIComponent(String(limit))}`, {
             headers: this.getHeaders(),
         });
         if (!res.ok) throw await this.problem(res);
@@ -509,7 +524,7 @@ export class ControlPlaneApiClient {
     }
 
     async createConsumerObservation(id: string, body: Partial<ObservationDto> & { event: string }): Promise<ObservationDto | null> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/observations`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/observations`, {
             method: 'POST',
             headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
@@ -519,7 +534,7 @@ export class ControlPlaneApiClient {
     }
 
     async getConsumerWorkerPlacement(id: string): Promise<WorkerPlacementDto[]> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/worker-placement`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/worker-placement`, {
             headers: this.getHeaders(),
         });
         if (!res.ok) throw await this.problem(res);
@@ -527,7 +542,7 @@ export class ControlPlaneApiClient {
     }
 
     async saveConsumerWorkerPlacement(id: string, workerId: string, placement: WorkerPlacementDto): Promise<WorkerPlacementDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/workers/${encodeURIComponent(workerId)}/placement`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/workers/${encodeURIComponent(workerId)}/placement`, {
             method: 'PUT',
             headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -546,25 +561,25 @@ export class ControlPlaneApiClient {
     }
 
     async getConsumerFlows(id: string): Promise<FlowSummaryDto[]> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/flows`, { headers: this.getHeaders() });
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/flows`, { headers: this.getHeaders() });
         if (!res.ok) throw await this.problem(res);
         return (await res.json()) as FlowSummaryDto[];
     }
 
     async getPlugins(): Promise<PluginManifestDto[]> {
-        const res = await fetch(`${this.baseUrl}/api/v1/plugins`, { headers: this.getHeaders() });
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/plugins`, { headers: this.getHeaders() });
         if (!res.ok) throw await this.problem(res);
         return (await res.json()) as PluginManifestDto[];
     }
 
     async getConsumerPlugins(id: string): Promise<ConsumerPluginDto[]> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/plugins`, { headers: this.getHeaders() });
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/plugins`, { headers: this.getHeaders() });
         if (!res.ok) throw await this.problem(res);
         return (await res.json()) as ConsumerPluginDto[];
     }
 
     async getPluginProjects(id: string, pluginId: string): Promise<JiraProjectDto[]> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/plugins/${encodeURIComponent(pluginId)}/projects`, { headers: this.getHeaders() });
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/plugins/${encodeURIComponent(pluginId)}/projects`, { headers: this.getHeaders() });
         if (!res.ok) throw await this.problem(res);
         const body = await res.json() as any;
         if (body?.ok === false) throw { status: 200, detail: body.reason || 'PROJECT_DISCOVERY_FAILED' };
@@ -572,7 +587,7 @@ export class ControlPlaneApiClient {
     }
 
     async installPlugin(manifest: any): Promise<any> {
-        const res = await fetch(`${this.baseUrl}/api/v1/plugins`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/plugins`, {
             method: 'POST', headers: { ...this.getHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(manifest),
         });
         if (!res.ok) throw await this.problem(res);
@@ -580,26 +595,26 @@ export class ControlPlaneApiClient {
     }
 
     async removePlugin(pluginId: string): Promise<any> {
-        const res = await fetch(`${this.baseUrl}/api/v1/plugins/${encodeURIComponent(pluginId)}`, { method: 'DELETE', headers: this.getHeaders() });
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/plugins/${encodeURIComponent(pluginId)}`, { method: 'DELETE', headers: this.getHeaders() });
         if (!res.ok) throw await this.problem(res);
         return res.json();
     }
 
     async syncConsumerPlugin(id: string, pluginId: string): Promise<any> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/plugins/${encodeURIComponent(pluginId)}/sync`, { method: 'POST', headers: this.getHeaders() });
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/plugins/${encodeURIComponent(pluginId)}/sync`, { method: 'POST', headers: this.getHeaders() });
         if (!res.ok) throw await this.problem(res);
         return res.json();
     }
 
     async getProviderRecords(id: string, provider?: string): Promise<ProviderRecordDto[]> {
         const suffix = provider ? `?provider=${encodeURIComponent(provider)}` : '';
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/provider-records${suffix}`, { headers: this.getHeaders() });
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/provider-records${suffix}`, { headers: this.getHeaders() });
         if (!res.ok) throw await this.problem(res);
         return (await res.json()) as ProviderRecordDto[];
     }
 
     async configureConsumerPlugin(id: string, pluginId: string, payload: any): Promise<any> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/plugins/${encodeURIComponent(pluginId)}`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/plugins/${encodeURIComponent(pluginId)}`, {
             method: 'PUT', headers: { ...this.getHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
         });
         if (!res.ok) throw await this.problem(res);
@@ -607,7 +622,7 @@ export class ControlPlaneApiClient {
     }
 
     async testConsumerPlugin(id: string, pluginId: string): Promise<any> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/plugins/${encodeURIComponent(pluginId)}/test`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/plugins/${encodeURIComponent(pluginId)}/test`, {
             method: 'POST', headers: this.getHeaders(),
         });
         if (!res.ok) throw await this.problem(res);
@@ -615,26 +630,26 @@ export class ControlPlaneApiClient {
     }
 
     async getConsumerFlowProposal(id: string): Promise<FlowProposalDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/slp/flow-proposal`, { headers: this.getHeaders() });
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/slp/flow-proposal`, { headers: this.getHeaders() });
         if (!res.ok) throw await this.problem(res);
         return (await res.json()) as FlowProposalDto;
     }
 
     async applyConsumerFlowProposal(id: string): Promise<any> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/slp/flow-proposal/apply`, { method: 'POST', headers: this.getHeaders() });
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/slp/flow-proposal/apply`, { method: 'POST', headers: this.getHeaders() });
         if (!res.ok) throw await this.problem(res);
         return res.json();
     }
 
     async getConsumerDefaultFlow(id: string): Promise<FlowDefinitionDto | null> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/flows/default`, { headers: this.getHeaders() });
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/flows/default`, { headers: this.getHeaders() });
         if (!res.ok) throw await this.problem(res);
         const data = await res.json();
         return data && data.id ? data as FlowDefinitionDto : null;
     }
 
     async setConsumerDefaultFlow(id: string, flowId: string, version: number): Promise<any> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/flows/default`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/flows/default`, {
             method: 'PUT', headers: { ...this.getHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ flowId, version }),
         });
         if (!res.ok) throw await this.problem(res);
@@ -642,13 +657,13 @@ export class ControlPlaneApiClient {
     }
 
     async getConsumerFlow(id: string, flowId: string): Promise<FlowDefinitionDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/flows/${encodeURIComponent(flowId)}`, { headers: this.getHeaders() });
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/flows/${encodeURIComponent(flowId)}`, { headers: this.getHeaders() });
         if (!res.ok) throw await this.problem(res);
         return (await res.json()) as FlowDefinitionDto;
     }
 
     async saveConsumerFlow(id: string, flowId: string, flow: Partial<FlowDefinitionDto>): Promise<FlowDefinitionDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/flows/${encodeURIComponent(flowId)}`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/flows/${encodeURIComponent(flowId)}`, {
             method: 'PUT', headers: { ...this.getHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(flow),
         });
         if (!res.ok) throw await this.problem(res);
@@ -656,7 +671,7 @@ export class ControlPlaneApiClient {
     }
 
     async validateConsumerFlow(id: string, flowId: string, flow: Partial<FlowDefinitionDto>): Promise<FlowValidationDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/flows/${encodeURIComponent(flowId)}/validate`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/flows/${encodeURIComponent(flowId)}/validate`, {
             method: 'POST', headers: { ...this.getHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify(flow),
         });
         if (!res.ok) throw await this.problem(res);
@@ -664,7 +679,7 @@ export class ControlPlaneApiClient {
     }
 
     async publishConsumerFlow(id: string, flowId: string): Promise<any> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/flows/${encodeURIComponent(flowId)}/publish`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/flows/${encodeURIComponent(flowId)}/publish`, {
             method: 'POST', headers: this.getHeaders(),
         });
         if (!res.ok) throw await this.problem(res);
@@ -672,7 +687,7 @@ export class ControlPlaneApiClient {
     }
 
     async deleteConsumerFlowDraft(id: string, flowId: string): Promise<any> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/flows/${encodeURIComponent(flowId)}/draft`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/flows/${encodeURIComponent(flowId)}/draft`, {
             method: 'DELETE', headers: this.getHeaders(),
         });
         if (!res.ok) throw await this.problem(res);
@@ -680,7 +695,7 @@ export class ControlPlaneApiClient {
     }
 
     async getConsumerMaterialSummary(id: string): Promise<MaterialSummaryDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/material/summary`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/material/summary`, {
             headers: this.getHeaders(),
         });
         if (!res.ok) throw await this.problem(res);
@@ -688,7 +703,7 @@ export class ControlPlaneApiClient {
     }
 
     async deleteConsumerRule(id: string, ruleId: string): Promise<{ removed: boolean }> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/rules/${encodeURIComponent(ruleId)}`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/rules/${encodeURIComponent(ruleId)}`, {
             method: 'DELETE',
             headers: this.getHeaders(),
         });
@@ -697,7 +712,7 @@ export class ControlPlaneApiClient {
     }
 
     async getConsumerRules(id: string): Promise<RuleFileDto[]> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/rules`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/rules`, {
             headers: this.getHeaders(),
         });
         if (!res.ok) throw await this.problem(res);
@@ -705,7 +720,7 @@ export class ControlPlaneApiClient {
     }
 
     async previewConsumerRuleImport(id: string, files: Array<{ name: string; content: string }>): Promise<RuleImportPreviewDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/rules/import/preview`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/rules/import/preview`, {
             method: 'POST',
             headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify({ files }),
@@ -715,7 +730,7 @@ export class ControlPlaneApiClient {
     }
 
     async applyConsumerRuleImport(id: string, candidates: any[]): Promise<{ written: any[] }> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/rules/import/apply`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/rules/import/apply`, {
             method: 'POST',
             headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify({ candidates }),
@@ -725,7 +740,7 @@ export class ControlPlaneApiClient {
     }
 
     async getConsumerWorkerImports(id: string): Promise<WorkerImportRecordDto[]> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/workers/imports`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/workers/imports`, {
             headers: this.getHeaders(),
         });
         if (!res.ok) throw await this.problem(res);
@@ -733,7 +748,7 @@ export class ControlPlaneApiClient {
     }
 
     async recordConsumerWorkerImport(id: string, record: WorkerImportAuditDto): Promise<void> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/workers/import/audit`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/workers/import/audit`, {
             method: 'POST',
             headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify(record),
@@ -742,7 +757,7 @@ export class ControlPlaneApiClient {
     }
 
     async previewConsumerWorkerImport(id: string, files: Array<{ name: string; content: string }>): Promise<WorkerImportPreviewDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/workers/import/preview`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/workers/import/preview`, {
             method: 'POST',
             headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify({ files }),
@@ -752,7 +767,7 @@ export class ControlPlaneApiClient {
     }
 
     async checkConsumerWorker(id: string, workerId: string, action: { verb: string; path?: string; evidence?: any[] }): Promise<WorkerPolicyResultDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/workers/${encodeURIComponent(workerId)}/check`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/workers/${encodeURIComponent(workerId)}/check`, {
             method: 'POST',
             headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify(action),
@@ -762,7 +777,7 @@ export class ControlPlaneApiClient {
     }
 
     async saveConsumerWorkers(id: string, config: WorkerConfigDto): Promise<WorkerConfigDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/workers`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/workers`, {
             method: 'PUT',
             headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify(config),
@@ -772,7 +787,7 @@ export class ControlPlaneApiClient {
     }
 
     async getConsumerHosts(id: string): Promise<HostDiscoveryDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/hosts`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/hosts`, {
             headers: this.getHeaders(),
         });
         if (!res.ok) throw await this.problem(res);
@@ -780,7 +795,7 @@ export class ControlPlaneApiClient {
     }
 
     async getConsumerMcp(id: string): Promise<McpDiscoveryDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/mcp`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/mcp`, {
             headers: this.getHeaders(),
         });
         if (!res.ok) throw await this.problem(res);
@@ -789,7 +804,7 @@ export class ControlPlaneApiClient {
 
     async browseDirectories(path?: string): Promise<FsBrowseResponse> {
         const query = path ? `?path=${encodeURIComponent(path)}` : '';
-        const res = await fetch(`${this.baseUrl}/api/v1/fs/list${query}`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/fs/list${query}`, {
             headers: this.getHeaders(),
         });
         if (!res.ok) throw await this.problem(res);
@@ -797,13 +812,13 @@ export class ControlPlaneApiClient {
     }
 
     async resolveDirectory(name: string): Promise<FsResolveDirectoryResponse> {
-        const res = await fetch(`${this.baseUrl}/api/v1/fs/resolve-directory?name=${encodeURIComponent(name)}`, { headers: this.getHeaders() });
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/fs/resolve-directory?name=${encodeURIComponent(name)}`, { headers: this.getHeaders() });
         if (!res.ok) throw await this.problem(res);
         return (await res.json()) as FsResolveDirectoryResponse;
     }
 
     async getConsumerSetup(id: string): Promise<ConsumerSetupResponse> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/setup`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/setup`, {
             headers: this.getHeaders(),
         });
         if (!res.ok) throw await this.problem(res);
@@ -811,7 +826,7 @@ export class ControlPlaneApiClient {
     }
 
     async getLegacyHarness(id: string): Promise<LegacyHarnessReportDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/legacy-harness`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/legacy-harness`, {
             headers: this.getHeaders(),
         });
         if (!res.ok) throw await this.problem(res);
@@ -819,7 +834,7 @@ export class ControlPlaneApiClient {
     }
 
     async archiveLegacyHarness(id: string): Promise<LegacyHarnessArchiveDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/legacy-harness/archive`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/legacy-harness/archive`, {
             method: 'POST',
             headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify({}),
@@ -829,7 +844,7 @@ export class ControlPlaneApiClient {
     }
 
     async previewHarnessMigration(id: string): Promise<HarnessMigrationPreviewDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/harness-migration/preview`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/harness-migration/preview`, {
             headers: this.getHeaders(),
         });
         if (!res.ok) throw await this.problem(res);
@@ -837,7 +852,7 @@ export class ControlPlaneApiClient {
     }
 
     async applyHarnessMigration(id: string): Promise<HarnessMigrationResultDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/harness-migration/apply`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/harness-migration/apply`, {
             method: 'POST',
             headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify({}),
@@ -847,7 +862,7 @@ export class ControlPlaneApiClient {
     }
 
     async resolveMigrationConflict(id: string, entryId: string, strategy: 'keep-eso' | 'adopt-legacy'): Promise<ConflictResolutionResultDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/harness-migration/conflicts/${encodeURIComponent(entryId)}/resolve`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/harness-migration/conflicts/${encodeURIComponent(entryId)}/resolve`, {
             method: 'POST',
             headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify({ strategy }),
@@ -857,7 +872,7 @@ export class ControlPlaneApiClient {
     }
 
     async evaluateSufficiency(id: string, body: Record<string, unknown>): Promise<JudgmentResponseDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/sufficiency`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/sufficiency`, {
             method: 'POST',
             headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
@@ -867,7 +882,7 @@ export class ControlPlaneApiClient {
     }
 
     async decideJev(id: string, confidence: number): Promise<JevDecisionDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/jev/decide`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/jev/decide`, {
             method: 'POST',
             headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify({ confidence }),
@@ -877,13 +892,13 @@ export class ControlPlaneApiClient {
     }
 
     async learningProposals(id: string): Promise<{ consumerId: string; proposals: LearningProposalDto[] }> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/learning/proposals`, { headers: this.getHeaders() });
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/learning/proposals`, { headers: this.getHeaders() });
         if (!res.ok) throw await this.problem(res);
         return (await res.json()) as { consumerId: string; proposals: LearningProposalDto[] };
     }
 
     async learningAction(id: string, proposalId: string, action: 'approve' | 'reject' | 'apply' | 'revert', body: Record<string, unknown> = {}): Promise<LearningProposalDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/learning/proposals/${encodeURIComponent(proposalId)}/${action}`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/learning/proposals/${encodeURIComponent(proposalId)}/${action}`, {
             method: 'POST',
             headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
@@ -895,19 +910,19 @@ export class ControlPlaneApiClient {
     async graphImpact(id: string, query: Record<string, string | number | undefined>): Promise<GraphImpactResponseDto> {
         const params = new URLSearchParams();
         for (const [key, value] of Object.entries(query)) if (value !== undefined && value !== '') params.set(key, String(value));
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/graph/impact?${params.toString()}`, { headers: this.getHeaders() });
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/graph/impact?${params.toString()}`, { headers: this.getHeaders() });
         if (!res.ok) throw await this.problem(res);
         return (await res.json()) as GraphImpactResponseDto;
     }
 
     async getBoundaries(id: string): Promise<BoundaryViewDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/boundaries`, { headers: this.getHeaders() });
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/boundaries`, { headers: this.getHeaders() });
         if (!res.ok) throw await this.problem(res);
         return (await res.json()) as BoundaryViewDto;
     }
 
     async saveBoundaries(id: string, policies: FolderPolicyDto[], enforcement: 'audit' | 'enforce' = 'audit'): Promise<BoundaryViewDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/boundaries`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/boundaries`, {
             method: 'PUT',
             headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify({ policies, enforcement }),
@@ -917,7 +932,7 @@ export class ControlPlaneApiClient {
     }
 
     async createBoundaryGrant(id: string, body: Record<string, unknown>): Promise<BoundaryGrantDto> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/boundaries/grants`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/boundaries/grants`, {
             method: 'POST',
             headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
@@ -927,7 +942,7 @@ export class ControlPlaneApiClient {
     }
 
     async revokeBoundaryGrant(id: string, grantId: string): Promise<{ revoked: boolean }> {
-        const res = await fetch(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/boundaries/grants/${encodeURIComponent(grantId)}`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/boundaries/grants/${encodeURIComponent(grantId)}`, {
             method: 'DELETE',
             headers: this.getHeaders(),
         });
@@ -942,7 +957,7 @@ export class ControlPlaneApiClient {
      * page session; prompt text, evidence payloads and any other PII never leave the page.
      */
     async postUiEvent(event: { surface: string; consumerId?: string | null; session?: string | null }): Promise<void> {
-        const res = await fetch(`${this.baseUrl}/api/v1/telemetry/ui`, {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/telemetry/ui`, {
             method: 'POST',
             headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify({

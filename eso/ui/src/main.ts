@@ -27,6 +27,12 @@ bootstrapApplication(ShellComponent, {
                 new ControlPlaneApiClient({
                     baseUrl: API_BASE,
                     tokenProvider: () => globalThis.sessionStorage?.getItem('eso.auth') ?? null,
+                    onUnauthorized: () => {
+                        try { globalThis.sessionStorage?.removeItem('eso.auth'); } catch { /* private mode */ }
+                        if (typeof location === 'undefined' || location.pathname.startsWith('/login')) return;
+                        const returnUrl = `${location.pathname}${location.search}`;
+                        location.assign(`/login?returnUrl=${encodeURIComponent(returnUrl)}`);
+                    },
                 }),
         },
     ],
