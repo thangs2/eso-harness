@@ -217,18 +217,6 @@ export const WORKER_LABEL: Record<string, string> = {
     'worker-qc-2': 'QC 2',
 };
 
-/** Pipeline v2 stage ids → the rail glyph shown next to the step number (text glyphs, no icon package). */
-export const STAGE_GLYPH: Record<string, string> = {
-    'intake-law': '§',
-    'decision-jev': '◈',
-    'evidence-recon': '⌕',
-    sufficiency: '◐',
-    slp: '⌘',
-    execution: '▸',
-    seal: '⛨',
-    report: '▤',
-};
-
 /** Drill tab id → glyph; the tab keeps its label and count. */
 export const TAB_GLYPH: Record<string, string> = {
     waterfall: '≋',
