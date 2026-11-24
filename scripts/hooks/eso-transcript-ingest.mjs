@@ -50,14 +50,16 @@ let payload = {};
 try { payload = rawInput ? JSON.parse(rawInput) : {}; } catch { payload = {}; }
 if (payload.parentConversationId && payload.parentConversationId !== payload.conversationId) process.exit(0);
 
+const LAW_FILE_PATTERN = /(?:^|[\\/])(?:AGENTS|CLAUDE)\.md$/i;
 let parentTools = [];
 let parentTranscriptPath = typeof payload.transcriptPath === 'string' && existsSync(payload.transcriptPath) ? payload.transcriptPath : '';
 let parentInputTokens = 0;
 let parentOutputTokens = 0;
 let parentModel = '';
+const lawReads = new Map();
 if (parentTranscriptPath) {
     try {
-        const lines = readFileSync(payload.transcriptPath, 'utf8').trim().split('\n');
+        const lines = readFileSync(parentTranscriptPath, 'utf8').trim().split('\n');
         let start = -1;
         for (let i = lines.length - 1; i >= 0; i -= 1) {
             let step;
@@ -70,7 +72,18 @@ if (parentTranscriptPath) {
             for (let i = start; i < lines.length; i += 1) {
                 let step;
                 try { step = JSON.parse(lines[i]); } catch { continue; }
-                for (const tool of step.tool_calls || []) if (tool?.name) parentTools.push(tool.name);
+                for (const tool of step.tool_calls || []) {
+                    if (!tool?.name) continue;
+                    parentTools.push(tool.name);
+                    if (!/read|view|cat|open|show/i.test(String(tool.name))) continue;
+                    for (const value of Object.values(tool.args || {})) {
+                        const candidate = String(value ?? '').replace(/^["']|["']$/g, '').trim();
+                        if (LAW_FILE_PATTERN.test(candidate)) lawReads.set(candidate, String(tool.name));
+                    }
+                    const command = String(tool.args?.CommandLine || tool.args?.command || '');
+                    const shellRead = command.match(/(?:^|[;&|]\s*)(?:cat|head|tail|sed|less)\s+[^;&|]*((?:^|[\\/])(?:AGENTS|CLAUDE)\.md)\b/i);
+                    if (shellRead) lawReads.set(shellRead[1], String(tool.name));
+                }
                 if (Number.isFinite(Number(step.input_tokens))) parentInputTokens += Number(step.input_tokens);
                 if (Number.isFinite(Number(step.output_tokens))) parentOutputTokens += Number(step.output_tokens);
                 if (!parentModel && typeof step.model === 'string' && step.model.trim()) parentModel = step.model.trim();
@@ -185,6 +198,51 @@ for (const brainRoot of brainRoots) {
         }
     }
 }
+// B — law evidence: the Stop hook is where a completed transcript can prove a real read.
+// This is deliberately weaker than decision.recorded.refs: it says "the host read the file",
+// not "a decision relied on it". Stage 1 labels the source.
+for (const [lawPath, toolName] of lawReads) {
+    const relativePath = lawPath.startsWith(root) ? lawPath.slice(root.length + 1) : lawPath.split(/[\\/]/).pop();
+    let hash = null;
+    try { hash = createHash('sha256').update(readFileSync(lawPath)).digest('hex').slice(0, 16); } catch { /* file may be gone */ }
+    const lawId = createHash('sha256').update(`${parentTraceId}|${relativePath}`).digest('hex').slice(0, 16);
+    const observation = {
+        observationId: `obs-law-${lawId}`,
+        idempotencyKey: `host-law-loaded:${parentTraceId}:${lawId}`,
+        traceId: parentTraceId,
+        hostId: hostConfig.hostId,
+        runtimeKey: hostConfig.runtimeKey,
+        workerId: 'worker-lead',
+        event: 'law.loaded',
+        outcome: 'PASS',
+        at: new Date().toISOString(),
+        evidence: {
+            source: 'transcript-read',
+            host: hostConfig.hostId,
+            runtimeKey: hostConfig.runtimeKey,
+            conversationId: parentConversationId,
+            path: relativePath,
+            hash,
+            at: new Date().toISOString(),
+            tool: toolName,
+        },
+    };
+    try {
+        const response = await fetch(config.baseUrl.replace(/\/+$/, '') + '/api/v1/consumers/' + encodeURIComponent(config.consumer) + '/observations', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', authorization: 'Bearer ' + hostConfig.token },
+            body: JSON.stringify(observation),
+            signal: AbortSignal.timeout(3000),
+        });
+        if (!response.ok) throw new Error('HTTP ' + response.status + ' ' + (await response.text()).slice(0, 250));
+    } catch (error) {
+        try {
+            mkdirSync(dirname(outbox), { recursive: true });
+            appendFileSync(outbox, JSON.stringify({ observation, error: String(error?.message || error) }) + '\n');
+        } catch { /* never block */ }
+    }
+}
+
 // Parent turn completion: the Stop hook is the only place with provider usage + tool calls, so
 // post ONE worker.completed for the parent trace. Without it the grid has model but no In/Out/Calls/Tools.
 if (parentTranscriptPath && parentConversationId && parentTraceId && (parentInputTokens > 0 || parentOutputTokens > 0 || parentTools.length > 0 || parentModel)) {
