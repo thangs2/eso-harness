@@ -5,9 +5,11 @@ import { assertConsumerId, type PlatformStore } from '../../platform/registry/st
 import {
     RECEIPT_GENESIS_HASH,
     RECEIPT_SPEC_VERSION,
+    REQUEST_SPEC_REF,
     type EvidenceReceipt,
     type ReceiptEventDigest,
     type ReceiptPayload,
+    type ReceiptSpecRef,
     type ReceiptVerification,
     type ReceiptVerdictSummary,
     type TurnVerdict,
@@ -20,7 +22,8 @@ import { VerdictService } from '../verdict/verdict.service.js';
  * A receipt seals ESO's adjudication of one turn into a hash-chained, append-only record:
  *
  *   payload  = { specVersion, consumerId, traceId, verdict:{level,basis,actor,gaps,score},
- *                eventDigests:[{observationId,event,outcome,at}] }
+ *                eventDigests:[{observationId,event,outcome,at}],
+ *                specRef:{doc,version,section} }   ← B0-9, new receipts only
  *   hash     = sha256(canonicalJSON(payload))
  *   prev_hash= hash of the consumer's previous receipt, or GENESIS for the first one
  *   hmac     = HMAC-SHA256(key, prev_hash + hash), key = `${ESO_RECEIPT_KEY}:${consumerId}`
@@ -121,7 +124,15 @@ export function buildReceiptPayload(
         traceId,
         verdict: verdictSummary(verdict),
         eventDigests: eventDigests(observations, traceId),
+        // B0-9 — a new receipt commits to the normative spec it was adjudicated against. The
+        // reference only: no spec prose is sealed, and the doc is never read at runtime.
+        specRef: specRefOf(REQUEST_SPEC_REF),
     };
+}
+
+/** Project the shared constant onto the sealed shape (`anchor` is UI-only, never hashed). */
+function specRefOf(ref: typeof REQUEST_SPEC_REF): ReceiptSpecRef {
+    return { doc: ref.doc, version: ref.version, section: ref.section };
 }
 
 export class ReceiptService {

@@ -107,8 +107,46 @@ interface TurnVerdictView {
     computedAt: string;
 }
 
-/** The shared detail DTO predates P2; the verdict rides on the same payload, so it is added here. */
-type RequestDetailWithVerdict = RequestDetailDto & { verdict?: TurnVerdictView | null };
+/** P6c — one host-reported preflight signal; the fingerprint is optional even when the state is known. */
+interface HostPreflightSignal {
+    state: string;
+    fingerprint?: string;
+}
+
+/** P6c — calls the host reported for one recon adapter. */
+interface HostReconCall {
+    adapter: string;
+    calls: number;
+}
+
+/** P6c — distill outcome; `lessons` is optional because the host may report only `memorySaved`. */
+interface HostDistillSignal {
+    memorySaved: boolean;
+    lessons?: number;
+}
+
+/** P6c — `detail.signals`; every sub-field is independently `null` when the host did not report it. */
+interface HostSignalsView {
+    preflight: HostPreflightSignal | null;
+    recon: HostReconCall[] | null;
+    brainTier: string | null;
+    distill: HostDistillSignal | null;
+}
+
+/** B0-9 — `detail.spec`: a pointer to the normative doc. The page never fetches or copies the doc. */
+interface SpecRefView {
+    doc: string;
+    version: string;
+    section: string;
+    anchor: string;
+}
+
+/** The shared detail DTO predates P2/P6c/B0-9; those fields ride on the same payload, so they are added here. */
+type RequestDetailWithVerdict = RequestDetailDto & {
+    verdict?: TurnVerdictView | null;
+    signals?: HostSignalsView | null;
+    spec?: SpecRefView | null;
+};
 
 /**
  * Q5 — the only three states the page may report for server-side verification. It starts at
@@ -192,6 +230,23 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
                         </button>
                     }
                 </nav>
+
+                <section class="host-signals" aria-label="Host signals (P6c)">
+                    <header class="host-signals-head">
+                        <div><p class="eyebrow">Host-reported</p><h2>Host signals</h2></div>
+                        <span class="badge muted">not inferred by ESO</span>
+                    </header>
+                    @if (signals(); as s) {
+                        <div class="signal-strip">
+                            <div class="signal-tile"><span>Preflight</span><strong>{{ preflightLabel(s.preflight) }}</strong><small>{{ preflightFingerprint(s.preflight) }}</small></div>
+                            <div class="signal-tile"><span>Recon calls</span><strong>{{ reconLabel(s.recon) }}</strong><small>calls the host reported, per adapter</small></div>
+                            <div class="signal-tile"><span>Brain tier</span><strong>{{ brainTierLabel(s.brainTier) }}</strong><small>tier the host reported</small></div>
+                            <div class="signal-tile"><span>Distill</span><strong>{{ distillLabel(s.distill) }}</strong><small>lessons the host reported</small></div>
+                        </div>
+                    } @else {
+                        <p class="hint">No host signal was reported for this turn</p>
+                    }
+                </section>
 
                 <section class="endflow">
                     <header class="endflow-head">
@@ -369,6 +424,18 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
                                     }
                                 </ul>
                                 <p class="verdict-basis">{{ v.basis }}</p>
+                                <p class="spec-line">
+                                    @if (spec(); as ref) {
+                                        <span class="spec-label">Normative:</span>
+                                        <code>{{ ref.doc }}</code>
+                                        <span class="spec-version">v{{ ref.version }}</span>
+                                        <span class="spec-section">{{ ref.section }}</span>
+                                        <button type="button" class="copy-path" (click)="copySpecPath(ref.doc)">{{ specPathCopied() ? 'copied' : 'copy path' }}</button>
+                                    } @else {
+                                        <span class="spec-label">Normative:</span>
+                                        <span class="hint">no spec reference was returned</span>
+                                    }
+                                </p>
                             </div>
                             <div class="verdict-block">
                                 <h3><span class="q-no">Q3</span> Sufficiency</h3>
@@ -713,6 +780,21 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
         .verdict-meta time, .verdict-actor-id { color: var(--ink); font-size: var(--text-sm); overflow-wrap: anywhere; }
         .verdict-actor-role { color: var(--muted); font-size: var(--text-xs); }
         .verdict-basis { margin: 0; color: #cbd5e1; font-size: var(--text-sm); line-height: 1.5; overflow-wrap: anywhere; }
+        .spec-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); margin: 0; padding: var(--space-2) var(--space-3); border: 1px solid #1e2a3e; border-radius: var(--radius-sm); background: #0d1118; color: #cbd5e1; font-size: var(--text-xs); }
+        .spec-label { color: var(--muted); font-size: .5625rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+        .spec-line code { color: var(--brand); overflow-wrap: anywhere; }
+        .spec-version { color: var(--warn-ink); font-variant-numeric: tabular-nums; }
+        .spec-section { color: #cbd5e1; }
+        .copy-path { padding: var(--space-1) var(--space-2); border: 1px solid #253047; border-radius: var(--radius-sm); background: #131722; color: #8b97ab; font: inherit; font-size: .5625rem; cursor: pointer; }
+        .copy-path:hover { background: #162235; color: #e2e8f0; }
+        .host-signals { display: grid; gap: var(--space-2); padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-left: 3px solid #c084fc; border-radius: var(--radius-md); background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.35); }
+        .host-signals-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+        .host-signals-head h2 { margin: 0; font-size: var(--text-md); }
+        .signal-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: var(--space-2); }
+        .signal-tile { display: grid; gap: .0625rem; padding: var(--space-2) var(--space-3); border: 1px solid #1e2a3e; border-radius: var(--radius-sm); background: #0d1118; }
+        .signal-tile span { color: #64748b; font-size: .5625rem; letter-spacing: .06em; text-transform: uppercase; }
+        .signal-tile strong { color: #e2e8f0; font-size: var(--text-sm); font-weight: 600; overflow-wrap: anywhere; }
+        .signal-tile small { color: #64748b; font-size: .5625rem; overflow-wrap: anywhere; }
         .verdict-block { display: grid; gap: var(--space-2); padding-top: var(--space-3); border-top: 1px solid var(--line); }
         .verdict-block h3 { display: flex; align-items: baseline; gap: var(--space-2); margin: 0; font-size: var(--text-md); }
         .q-no { color: var(--muted); font-size: var(--text-xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
@@ -913,6 +995,15 @@ export class RequestDetailPage implements OnInit {
     /** P2 — ESO's adjudication of this turn; never derived from prompt text or worker status. */
     readonly verdict = computed<TurnVerdictView | null>(() => this.detail()?.verdict ?? null);
 
+    /** P6c — host-reported signals; `null` means the host reported nothing for this turn. */
+    readonly signals = computed<HostSignalsView | null>(() => this.detail()?.signals ?? null);
+
+    /** B0-9 — the normative doc reference; a pointer only, never the doc's prose. */
+    readonly spec = computed<SpecRefView | null>(() => this.detail()?.spec ?? null);
+
+    /** B0-9 — feedback for the copy affordance; only set after the clipboard actually accepted the path. */
+    readonly specPathCopied = signal(false);
+
     /** P5a — receipt summary for Q5; absent on payloads that predate the field, never fabricated. */
     readonly receipt = computed<RequestReceiptSummaryDto | null>(() => this.detail()?.receipt ?? null);
 
@@ -978,6 +1069,7 @@ export class RequestDetailPage implements OnInit {
         this.consumerId.set(query.get('consumer') || 'fineso');
         // Q5 — a new load invalidates the previous verdict; nothing is claimed verified until re-checked.
         this.receiptVerification.set('unavailable');
+        this.specPathCopied.set(false);
         let loaded: RequestDetailWithVerdict | null = null;
         try {
             loaded = await this.api.getRequestDetail(this.consumerId(), this.requestId());
@@ -1078,6 +1170,50 @@ export class RequestDetailPage implements OnInit {
     /** Q5 — a null receipt is a fact about P4, not a hash to invent. */
     receiptLabel(receiptId: string | null): string {
         return receiptId && receiptId.trim() ? receiptId : 'Not issued yet';
+    }
+
+    /** P6c — the preflight state the host reported; a missing signal is "not captured", not a default. */
+    preflightLabel(preflight: HostPreflightSignal | null): string {
+        const state = typeof preflight?.state === 'string' ? preflight.state.trim() : '';
+        return state || 'not captured';
+    }
+
+    /** P6c — the fingerprint is a separate optional field; its absence never blocks the state line. */
+    preflightFingerprint(preflight: HostPreflightSignal | null): string {
+        const fingerprint = typeof preflight?.fingerprint === 'string' ? preflight.fingerprint.trim() : '';
+        return fingerprint || 'fingerprint not captured';
+    }
+
+    /** P6c — total calls per adapter, exactly as reported; no calls reported ⇒ "not captured". */
+    reconLabel(recon: HostReconCall[] | null): string {
+        if (!recon || !recon.length) return 'not captured';
+        return recon.map((call) => `${call.adapter} ${call.calls}`).join(' · ');
+    }
+
+    /** P6c — the brain tier the host reported; this page has no fallback tier of its own. */
+    brainTierLabel(tier: string | null): string {
+        const value = typeof tier === 'string' ? tier.trim() : '';
+        return value || 'not captured';
+    }
+
+    /** P6c — distill outcome from `memorySaved` plus optional lesson count; nothing is inferred. */
+    distillLabel(distill: HostDistillSignal | null): string {
+        if (!distill) return 'not captured';
+        const saved = distill.memorySaved ? 'memory saved' : 'memory not saved';
+        return typeof distill.lessons === 'number' ? `${saved} · ${distill.lessons} lesson(s)` : saved;
+    }
+
+    /**
+     * B0-9 — copy the normative doc path. A denied/unavailable clipboard produces no feedback:
+     * the button never claims "copied" unless the clipboard accepted the write.
+     */
+    copySpecPath(path: string): void {
+        const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
+        if (!clipboard || typeof clipboard.writeText !== 'function') return;
+        void clipboard.writeText(path).then(
+            () => this.specPathCopied.set(true),
+            () => this.specPathCopied.set(false)
+        );
     }
 
     /** Q6 — the only mapping the page is allowed to make: level ⇒ next action. */

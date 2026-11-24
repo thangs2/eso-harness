@@ -1,6 +1,11 @@
 import { PlatformError } from '../../platform/registry/errors.js';
 import { assertConsumerId, type PlatformStore } from '../../platform/registry/store.js';
-import type { EvidenceReceipt, TurnVerdict, TurnVerdictLevel } from '../../platform/registry/types.js';
+import {
+    REQUEST_SPEC_REF,
+    type EvidenceReceipt,
+    type TurnVerdict,
+    type TurnVerdictLevel,
+} from '../../platform/registry/types.js';
 import type { ConfigSnapshotService } from '../config-snapshot/config-snapshot.service.js';
 import {
     BRAIN_TIERS,
@@ -196,6 +201,18 @@ export function receiptSummary(receipt: EvidenceReceipt): RequestReceiptSummary 
     };
 }
 
+/**
+ * B0-9 (option C) — a reference to the normative page spec, never its prose. The values come from
+ * `REQUEST_SPEC_REF` (`platform/registry/types.ts`), the one place that must stay equal to the doc's
+ * `sot_doc_version`; `qc/eso-request-spec-ref.test.mjs` enforces the equality at test time.
+ */
+export interface RequestSpecRef {
+    doc: string;
+    version: string;
+    section: string;
+    anchor: string;
+}
+
 export interface RequestDetail {
     request: {
         id: string;
@@ -243,6 +260,8 @@ export interface RequestDetail {
     signals: RequestSignals | null;
     /** P6b: configured pipeline vs observed worker path, so design↔runtime divergence is machine-readable. */
     graph: RequestRuntimeGraph;
+    /** B0-9: normative page spec this surface is built against — a pointer, not a copy of the doc. */
+    spec: RequestSpecRef;
 }
 
 export interface RequestRuntimeGraph {
@@ -255,7 +274,7 @@ export interface RequestRuntimeGraph {
 }
 
 /** Everything `buildRequest` can compute from observations alone; verdict, receipt and signals are appended in `get`. */
-type RequestDetailBase = Omit<RequestDetail, 'verdict' | 'receipt' | 'signals' | 'graph'>;
+type RequestDetailBase = Omit<RequestDetail, 'verdict' | 'receipt' | 'signals' | 'graph' | 'spec'>;
 
 function rowField(row: any, ...keys: string[]): any {
     for (const key of keys) {
@@ -804,6 +823,8 @@ export class RequestService {
             receipt: receiptSummary(sealed.receipt),
             signals: signalsOf(traceEvents),
             graph: runtimeGraphOf(traceEvents, base.pipeline),
+            // B0-9 — a constant pointer, identical for every request; see REQUEST_SPEC_REF.
+            spec: REQUEST_SPEC_REF,
         };
         detail.recon = await this.reconAdaptersFor(consumerId, detail);
         await this.enrichPipeline(consumerId, detail);

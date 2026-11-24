@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 
 import { MemoryPlatformStore } from '../src/platform/registry/store.js';
+import { REQUEST_SPEC_REF } from '../src/platform/registry/types.js';
 import { AuthService } from '../src/common/auth/auth.js';
 import { createPlatformServer } from '../src/common/http/server.js';
 
@@ -409,6 +410,15 @@ describe('HTTP contract — CR-010/011 routes', () => {
         // The digest is not a secret: a third party must be able to recompute/verify it (V3).
         assert.equal(detailBody.receipt.hash, receipt.hash);
         assert.equal(detailBody.receipt.hmacPresent, receipt.hmac !== null && receipt.hmac !== '');
+        // B0-9 — detail.spec points at the normative doc (reference only, no prose) and the receipt
+        // seals the same doc/version/section; the UI-only anchor stays out of the hashed bytes.
+        assert.deepEqual(detailBody.spec, { ...REQUEST_SPEC_REF });
+        assert.deepEqual(receipt.payload.specRef, {
+            doc: REQUEST_SPEC_REF.doc,
+            version: REQUEST_SPEC_REF.version,
+            section: REQUEST_SPEC_REF.section,
+        });
+        assert.equal(receipt.payload.specRef.anchor, undefined);
 
         // issue-or-get: the receipt route is idempotent per trace
         const again = await call(`/api/v1/consumers/receipto/requests/${traceId}/receipt`);

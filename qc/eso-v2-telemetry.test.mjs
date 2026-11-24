@@ -6,7 +6,8 @@
  *   - the observable call sites exist (2 surface opens + raw evidence expand);
  *   - the beacon is fire-and-forget (`.catch`, never awaited for render);
  *   - the request body carries ONLY surface/consumerId/session — no prompt, no evidence payload;
- *   - `raw.json.copy` is not emitted because the UI exposes no copy button.
+ *   - `raw.json.copy` is not emitted: the only copy affordance (B0-9) copies the normative spec
+ *     *doc path*, never raw JSON or evidence, and has no surface in the enum.
  *
  * Raw JSON opened in a terminal/transcript is not observable by ESO and must not be counted.
  *
@@ -96,11 +97,22 @@ test('SCN-V2-5 — summary is authenticated and computes the documented ratio', 
     assert.match(SERVICE, /unknown ui surface/);
 });
 
-test('SCN-V2-6 — raw.json.copy is skipped because no copy button exists', () => {
+test('SCN-V2-6 — raw.json.copy is not emitted; the only copy affordance copies the spec doc path', () => {
     // The enum keeps the name for a future copy action, but nothing emits it today.
     assert.match(TYPES, /'raw\.json\.copy'/);
     for (const source of UI_SOURCES) {
         assert.doesNotMatch(source, /raw\.json\.copy/);
+    }
+    // 2026-11-24 (B0-9 option C): the request page copies the normative *doc path* only — never raw
+    // JSON, evidence bytes or the prompt body — and emits no surface (the enum has none for it;
+    // inventing one would be exactly the fake event this test forbids).
+    assert.match(REQUEST, /\(click\)="copySpecPath\(ref\.doc\)"/);
+    assert.match(REQUEST, /clipboard\.writeText\(path\)/);
+    assert.equal(/clipboard\.writeText\(([^)]*)\)/.exec(REQUEST)?.[1], 'path');
+    // Exactly one clipboard call site in the page.
+    assert.equal((REQUEST.match(/navigator\.clipboard/g) ?? []).length, 1);
+    // No other page grew a clipboard call site.
+    for (const source of [OBSERVATORY, CLIENT]) {
         assert.doesNotMatch(source, /navigator\.clipboard/);
     }
 });

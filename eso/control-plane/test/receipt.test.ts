@@ -136,7 +136,17 @@ describe('P4 — receipt issue', () => {
 
         assert.equal(receipt.specVersion, 1);
         assert.equal(receipt.verdictLevel, 'allow');
-        assert.deepEqual(Object.keys(receipt.payload).sort(), ['consumerId', 'eventDigests', 'specVersion', 'traceId', 'verdict']);
+        assert.deepEqual(
+            Object.keys(receipt.payload).sort(),
+            ['consumerId', 'eventDigests', 'specRef', 'specVersion', 'traceId', 'verdict']
+        );
+        // B0-9 — the sealed spec reference is a pointer only: doc · version · section, no anchor, no prose.
+        assert.deepEqual(receipt.payload.specRef, {
+            doc: 'sdlc/08.ui-design/20.pages/20.request-detail.md',
+            version: '1.6.0',
+            section: '§6 Behavior spec',
+        });
+        assert.deepEqual(Object.keys(receipt.payload.specRef ?? {}).sort(), ['doc', 'section', 'version']);
         assert.deepEqual(
             Object.keys(receipt.payload.verdict).sort(),
             ['actor', 'basis', 'gaps', 'level', 'score']
@@ -220,6 +230,22 @@ describe('P4 — receipt verify', () => {
         await observe(store, consumerId, 'trace-ok', turn());
         const service = new ReceiptService(store);
         const receipt = await service.issue(consumerId, 'trace-ok');
+
+        const result = await service.verify(consumerId, receipt.receiptId);
+        assert.deepEqual(result, { ok: true, hashMatches: true, hmacMatches: true, chained: true });
+    });
+
+    test('a receipt sealed before B0-9 (no specRef) still verifies from its stored bytes', async () => {
+        const consumerId = 'receipt-unit';
+        const store = await setup(consumerId);
+        await observe(store, consumerId, 'trace-legacy-spec', turn());
+        const service = new ReceiptService(store);
+        const receipt = await service.issue(consumerId, 'trace-legacy-spec');
+
+        // Simulate a row written before the field existed: drop the key and re-seal the old bytes.
+        const row = (store as any).receipts.get(receipt.receiptId);
+        delete row.payload.specRef;
+        row.hash = hashPayload(row.payload);
 
         const result = await service.verify(consumerId, receipt.receiptId);
         assert.deepEqual(result, { ok: true, hashMatches: true, hmacMatches: true, chained: true });

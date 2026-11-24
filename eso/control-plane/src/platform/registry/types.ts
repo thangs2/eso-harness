@@ -172,6 +172,28 @@ export const RECEIPT_SPEC_VERSION = 1;
 export const RECEIPT_GENESIS_HASH = 'GENESIS';
 
 /**
+ * B0-9 (option C) — the normative page spec a request detail points at. ESO references the
+ * document; it never copies its prose into code or into a UI string.
+ *
+ * `version` MUST equal the doc's `sot_doc_version`: `qc/eso-request-spec-ref.test.mjs` reads the
+ * file and fails on drift. Nothing reads `sdlc/` at runtime — that tree is not shipped in images,
+ * so this constant is the only runtime copy and it must be bumped together with the doc.
+ */
+export const REQUEST_SPEC_REF = {
+    doc: 'sdlc/08.ui-design/20.pages/20.request-detail.md',
+    version: '1.6.0',
+    section: '§6 Behavior spec',
+    anchor: '#6-behavior-spec-std-page-behavior-1',
+} as const;
+
+/** The spec-ref fields a receipt seals. `anchor` is a UI convenience and stays out of the hashed bytes. */
+export interface ReceiptSpecRef {
+    doc: string;
+    version: string;
+    section: string;
+}
+
+/**
  * P4 — the only verdict fields a receipt seals. `ruleRefs`, `receiptId` and `computedAt` are
  * deliberately excluded: they are either derived later or would make the payload self-referential.
  */
@@ -201,6 +223,11 @@ export interface ReceiptPayload {
     traceId: string;
     verdict: ReceiptVerdictSummary;
     eventDigests: ReceiptEventDigest[];
+    /**
+     * B0-9 — set on receipts issued after the spec reference existed. Optional by design: payloads
+     * sealed earlier have no such key, and verification recomputes the hash from the stored bytes.
+     */
+    specRef?: ReceiptSpecRef;
 }
 
 /** One sealed receipt (`platform.evidence_receipt`, append-only, 1 row / trace). */
