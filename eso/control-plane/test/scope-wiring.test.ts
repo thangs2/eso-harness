@@ -15,6 +15,8 @@ import { join } from 'node:path';
 import { AuthService } from '../src/common/auth/auth.js';
 import { createPlatformServer } from '../src/common/http/server.js';
 import { JudgmentService } from '../src/modules/judgment/judgment.service.js';
+import { RequestService } from '../src/modules/requests/request.service.js';
+import { ScopeService } from '../src/modules/scope/scope.service.js';
 import { WorkerPolicyService } from '../src/modules/workers/worker-policy.service.js';
 import { MemoryPlatformStore } from '../src/platform/registry/store.js';
 
@@ -193,6 +195,7 @@ describe('P6 — POST /consumers/:id/scope/check returns the domain codes', () =
             const blockedBody = await blocked.json();
             assert.equal(blockedBody.allowed, false);
             assert.equal(blockedBody.code, 'BLOCKED_SCOPE');
+            assert.deepEqual((store as any).scopeDecisions, [], 'a check without traceId must not record');
 
             const empty = await check({ allowedFiles: ['src/**'], target: 'src/a.ts', emptyScope: true });
             assert.equal((await empty.json()).code, 'EMPTY_SCOPE');
@@ -205,5 +208,121 @@ describe('P6 — POST /consumers/:id/scope/check returns the domain codes', () =
         } finally {
             await app.close();
         }
+    });
+});
+
+describe('Q2 — scope decisions are recorded per trace', () => {
+    test('allowed and blocked checks record rows; a check without traceId records nothing', async () => {
+        const { store, root } = await consumerFixture('scope-decision', 'eso-q2-decision-');
+        mkdirSync(join(root, 'src'), { recursive: true });
+        mkdirSync(join(root, 'docs'), { recursive: true });
+        const service = new ScopeService(store);
+
+        const allowed = await service.check('scope-decision', {
+            allowedFiles: ['src/**'],
+            target: 'src/a.ts',
+            traceId: 'trace-q2-decision',
+            actor: { kind: 'operator', label: 'operator@test' },
+        });
+        assert.equal(allowed.allowed, true);
+
+        let rows = await store.listScopeDecisionsByTrace('scope-decision', 'trace-q2-decision');
+        assert.equal(rows.length, 1);
+        assert.ok(rows[0].decisionId);
+        assert.equal(rows[0].consumerId, 'scope-decision');
+        assert.equal(rows[0].traceId, 'trace-q2-decision');
+        assert.equal(rows[0].target, 'src/a.ts');
+        assert.equal(rows[0].allowed, true);
+        assert.equal(rows[0].code, null);
+        assert.equal(rows[0].message, null);
+        assert.deepEqual(rows[0].actor, { kind: 'operator', label: 'operator@test' });
+        assert.equal(Number.isNaN(new Date(rows[0].at).getTime()), false);
+
+        const blocked = await service.check('scope-decision', {
+            allowedFiles: ['src/**'],
+            target: 'docs/b.ts',
+            traceId: 'trace-q2-decision',
+        });
+        assert.equal(blocked.allowed, false);
+        assert.equal(blocked.code, 'BLOCKED_SCOPE');
+
+        rows = await store.listScopeDecisionsByTrace('scope-decision', 'trace-q2-decision');
+        assert.equal(rows.length, 2);
+        assert.equal(rows[0].target, 'docs/b.ts');
+        assert.equal(rows[0].allowed, false);
+        assert.equal(rows[0].code, 'BLOCKED_SCOPE');
+        assert.match(String(rows[0].message), /outside allowed_files/);
+        assert.equal(rows[0].actor, null);
+
+        const before = (store as any).scopeDecisions.length;
+        await service.check('scope-decision', { allowedFiles: ['src/**'], target: 'src/a.ts' });
+        assert.equal((store as any).scopeDecisions.length, before, 'no trace ⇒ no decision row');
+        assert.equal(
+            (store as any).scopeDecisions.every((row: any) => typeof row.traceId === 'string' && row.traceId.length > 0),
+            true,
+            'every recorded decision must name a trace'
+        );
+    });
+
+    test('detail.writeGate is the latest decision for the trace; two checks ⇒ latest wins', async () => {
+        const { store, root } = await consumerFixture('scope-detail', 'eso-q2-detail-');
+        mkdirSync(join(root, 'src'), { recursive: true });
+        const traceId = 'trace-q2-detail';
+        await store.insertObservation('scope-detail', {
+            observationId: 'q2-detail-obs-1',
+            traceId,
+            hostId: 'cursor',
+            runtimeKey: 'cursor:cursor-agent',
+            workerId: null,
+            event: 'prompt.submitted',
+            outcome: 'PASS',
+            evidence: { userQuery: 'why was this file write allowed?' },
+            at: '2026-11-24T10:00:00.000Z',
+            idempotencyKey: 'q2-detail-obs-1',
+        });
+        const service = new ScopeService(store);
+
+        await service.check('scope-detail', {
+            allowedFiles: ['src/**'],
+            target: 'src/first.ts',
+            traceId,
+            actor: { kind: 'operator', label: 'first@test' },
+        });
+        await service.check('scope-detail', {
+            allowedFiles: ['src/**'],
+            target: 'src/second.ts',
+            traceId,
+            actor: { kind: 'operator', label: 'second@test' },
+        });
+
+        const detail = await new RequestService(store).get('scope-detail', traceId);
+        assert.ok(detail.writeGate, 'detail.writeGate must carry the recorded decision');
+        assert.equal(detail.writeGate?.target, 'src/second.ts');
+        assert.equal(detail.writeGate?.allowed, true);
+        assert.equal(detail.writeGate?.code, null);
+        assert.deepEqual(detail.writeGate?.actor, { kind: 'operator', label: 'second@test' });
+        const rows = await store.listScopeDecisionsByTrace('scope-detail', traceId);
+        assert.equal(detail.writeGate?.decisionId, rows[0].decisionId);
+        assert.equal(rows.length, 2);
+    });
+
+    test('detail.writeGate is null when the turn recorded no scope decision', async () => {
+        const { store } = await consumerFixture('scope-none', 'eso-q2-none-');
+        const traceId = 'trace-q2-none';
+        await store.insertObservation('scope-none', {
+            observationId: 'q2-none-obs-1',
+            traceId,
+            hostId: 'cursor',
+            runtimeKey: 'cursor:cursor-agent',
+            workerId: null,
+            event: 'prompt.submitted',
+            outcome: 'PASS',
+            evidence: { userQuery: 'no write attempted' },
+            at: '2026-11-24T10:00:00.000Z',
+            idempotencyKey: 'q2-none-obs-1',
+        });
+
+        const detail = await new RequestService(store).get('scope-none', traceId);
+        assert.equal(detail.writeGate, null);
     });
 });

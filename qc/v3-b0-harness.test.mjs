@@ -148,7 +148,7 @@ test('b0 --fixture: ten items, numeric score, deterministic', (t) => {
     assert.deepEqual(strip(readJson(second)), strip(report), 'same fixture must produce the same report');
 });
 
-test('b0 signals fixture: detail.signals raises B0-1/4/6/8 without legacy evidence', () => {
+test('b0 fixture: projection proves B0-1; signals raise B0-4/6/8', () => {
     const row = (items, id) => items.find((item) => item.id === id);
     const legacy = scoreDetail(fixtureDetail());
     const signalled = scoreDetail(fixtureSignalDetail());
@@ -157,12 +157,12 @@ test('b0 signals fixture: detail.signals raises B0-1/4/6/8 without legacy eviden
         signalled.filter((item) => item.present).length > legacy.filter((item) => item.present).length,
         'signals must score higher than the legacy fixture',
     );
-    assert.equal(row(legacy, 'B0-1').present, false);
+    assert.equal(row(legacy, 'B0-1').present, true, 'decision projection is independent of signals');
     assert.equal(row(legacy, 'B0-6').present, false);
     assert.equal(row(legacy, 'B0-8').present, false);
 
     const proofs = {
-        'B0-1': /detail\.signals\.preflight\.state=HOT/,
+        'B0-1': /projection: verdict allow/,
         'B0-4': /detail\.signals\.recon: .*3 call\(s\)/,
         'B0-6': /SLP roles \d+/,
         'B0-8': /detail\.signals\.distill\.memorySaved=true/,

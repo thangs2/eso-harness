@@ -124,39 +124,30 @@ function unique(values) {
 /* Item detectors                                                      */
 /* ------------------------------------------------------------------ */
 
-function detectPreflight(detail) {
-    // P6a: a host-reported `detail.signals.preflight.state` is direct proof (B0-1).
-    const reported = detail?.signals?.preflight;
-    if (reported && typeof reported === 'object') {
-        const state = str(reported.state);
-        if (/^(HOT|WARM|COLD)$/.test(state)) {
-            const fingerprint = str(reported.fingerprint);
-            return {
-                present: true,
-                evidence: `detail.signals.preflight.state=${state}${fingerprint ? ` · fingerprint ${clip(fingerprint, 40)}` : ''}`,
-            };
-        }
+/**
+ * B0-1 — decision projection for host hooks (replaces the legacy COLD/WARM/HOT preflight).
+ *
+ * Legacy exported a preflight document so a host hook could read one object. In the sidecar model
+ * ESO does not own context injection, so the equivalent capability is: **the verdict, its receipt
+ * and the normative spec reference are all present and readable**. A cognitive state is host-owned
+ * and is never required here.
+ */
+function detectDecisionProjection(detail) {
+    const level = str(detail?.verdict?.level);
+    const receipt = detail?.receipt ?? {};
+    const receiptHash = str(receipt.hash ?? receipt.hashPrefix);
+    const specVersion = str(detail?.spec?.version);
+    const specDoc = str(detail?.spec?.doc);
+    if (level && receiptHash && specVersion) {
+        return {
+            present: true,
+            evidence: `projection: verdict ${level} · receipt ${clip(receiptHash, 16)} · spec ${specDoc ? path.basename(specDoc) : 'doc'} v${specVersion}`,
+        };
     }
-    const events = arr(detail?.events).filter((event) => /preflight|consent/i.test(str(event?.event)));
-    const checks = arr(detail?.checks).filter(
-        (check) => /preflight|consent|fingerprint/i.test(str(check?.checkId)) && /pass|ok/i.test(str(check?.status)),
-    );
-    const hits = collectKeyed(detail, ['preflight', 'preflightChecks', 'consent', 'fingerprint', 'fingerprints']).filter(({ value }) =>
-        meaningful(value),
-    );
-    const facts = unique([
-        ...hits.flatMap(({ value }) => {
-            if (typeof value === 'string') return [value];
-            if (value && typeof value === 'object') return Object.entries(value).slice(0, 3).map(([key, item]) => `${key}=${typeof item === 'object' ? '…' : item}`);
-            return [];
-        }),
-        ...events.map((event) => `event ${str(event.event)}`),
-        ...checks.map((check) => `check ${str(check.checkId)}`),
-    ]);
-    if (facts.length === 0) {
-        return { present: false, evidence: 'no HOT/WARM/COLD preflight, fingerprint G1/G2 or consent record' };
-    }
-    return { present: true, evidence: `preflight/consent: ${facts.slice(0, 4).join(', ')}` };
+    return {
+        present: false,
+        evidence: 'no decision projection (verdict + receipt + specRef) for host hooks',
+    };
 }
 
 function detectLawProof(detail) {
@@ -443,7 +434,7 @@ function detectGraph(detail) {
 }
 
 const DETECTORS = Object.freeze({
-    'B0-1': detectPreflight,
+    'B0-1': detectDecisionProjection,
     'B0-2': detectLawProof,
     'B0-3': detectDecision,
     'B0-4': detectRecon,
@@ -572,6 +563,9 @@ export function fixtureDetail() {
             outputTokens: 420,
             tokensEstimated: false,
         },
+        verdict: { level: 'allow', score: 100, gaps: [], basis: 'fixture verdict', ruleRefs: [], actor: null, receiptId: 'rcpt_fixture', computedAt: '2026-11-24T00:00:00.000Z' },
+        receipt: { receiptId: 'rcpt_fixture', hash: 'a'.repeat(64), hashPrefix: 'aaaaaaaaaaaa', hmacPresent: false, chained: false, specVersion: 1, verdictLevel: 'allow', createdAt: '2026-11-24T00:00:00.000Z' },
+        spec: { doc: 'sdlc/08.ui-design/20.pages/20.request-detail.md', version: '1.0.0', section: '§6 Behavior spec', anchor: '#6' },
         context: {},
         routing: { adapter: 'cursor', model: 'deepseek-chat', tier: null, effort: null, taskType: 'build' },
         checks: [

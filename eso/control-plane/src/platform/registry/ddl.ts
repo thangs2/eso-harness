@@ -144,6 +144,27 @@ export const EVIDENCE_RECEIPT_DDL = `CREATE TABLE IF NOT EXISTS platform.evidenc
 export const EVIDENCE_RECEIPT_CONSUMER_INDEX_DDL = `CREATE INDEX IF NOT EXISTS idx_evidence_receipt_consumer
     ON platform.evidence_receipt (consumer_id, created_at asc, receipt_id asc)`;
 
+/**
+ * Q2 — append-only record of file-write scope checks. One row per check that named a trace;
+ * a check without a trace cannot be attributed to a turn and is not recorded. The detail page
+ * reads the latest row for a trace, so the verdict never has to be re-interpreted into a gate.
+ */
+export const SCOPE_DECISION_TABLE = 'platform.scope_decision';
+export const SCOPE_DECISION_DDL = `CREATE TABLE IF NOT EXISTS platform.scope_decision (
+    decision_id text primary key,
+    consumer_id text not null,
+    trace_id    text,
+    target      text not null,
+    allowed     boolean not null,
+    code        text,
+    message     text,
+    actor       jsonb,
+    at          timestamptz not null default now()
+)`;
+
+export const SCOPE_DECISION_TRACE_INDEX_DDL = `CREATE INDEX IF NOT EXISTS idx_scope_decision_trace
+    ON platform.scope_decision (consumer_id, trace_id, at desc)`;
+
 export const PLATFORM_DDL: readonly string[] = [
     `CREATE SCHEMA IF NOT EXISTS platform`,
     `CREATE TABLE IF NOT EXISTS platform.consumer (
@@ -237,6 +258,8 @@ export const PLATFORM_DDL: readonly string[] = [
     TURN_VERDICT_CONSUMER_INDEX_DDL,
     EVIDENCE_RECEIPT_DDL,
     EVIDENCE_RECEIPT_CONSUMER_INDEX_DDL,
+    SCOPE_DECISION_DDL,
+    SCOPE_DECISION_TRACE_INDEX_DDL,
 ];
 
 export const CONSUMER_ID_PATTERN = /^[a-z0-9][a-z0-9-]{1,31}$/;

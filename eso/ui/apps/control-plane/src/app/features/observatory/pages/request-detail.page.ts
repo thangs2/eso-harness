@@ -141,11 +141,22 @@ interface SpecRefView {
     anchor: string;
 }
 
-/** The shared detail DTO predates P2/P6c/B0-9; those fields ride on the same payload, so they are added here. */
+/** Write gate — one recorded scope decision (`detail.writeGate`); the guard's record, never verdict-derived. */
+interface WriteGateView {
+    decisionId: string;
+    allowed: boolean;
+    code: string | null;
+    target: string;
+    at: string;
+    actor: Record<string, unknown> | null;
+}
+
+/** The shared detail DTO predates P2/P6c/B0-9 and the write gate; those fields ride on the same payload, so they are added here. */
 type RequestDetailWithVerdict = RequestDetailDto & {
     verdict?: TurnVerdictView | null;
     signals?: HostSignalsView | null;
     spec?: SpecRefView | null;
+    writeGate?: WriteGateView | null;
 };
 
 /**
@@ -434,6 +445,18 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
                                     } @else {
                                         <span class="spec-label">Normative:</span>
                                         <span class="hint">no spec reference was returned</span>
+                                    }
+                                </p>
+                                <p class="write-gate" aria-label="Write gate (Q2)">
+                                    <span class="write-gate-label">Write gate</span>
+                                    @if (writeGate(); as gate) {
+                                        <span class="badge" [class.ok]="gate.allowed" [class.bad]="!gate.allowed">{{ gate.allowed ? 'allowed' : 'blocked' }}</span>
+                                        @if (gate.code) { <code>{{ gate.code }}</code> } @else { <span class="hint">no code</span> }
+                                        <code class="write-gate-target">{{ gate.target }}</code>
+                                        <time>{{ relative(gate.at) }}</time>
+                                        @if (writeGateActor(gate.actor); as actor) { <span class="write-gate-actor">{{ actor }}</span> }
+                                    } @else {
+                                        <span class="hint">No scope decision was recorded for this turn</span>
                                     }
                                 </p>
                             </div>
@@ -785,6 +808,10 @@ const NEXT_STEP: Record<VerdictLevel, string> = {
         .spec-line code { color: var(--brand); overflow-wrap: anywhere; }
         .spec-version { color: var(--warn-ink); font-variant-numeric: tabular-nums; }
         .spec-section { color: #cbd5e1; }
+        .write-gate { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); margin: 0; padding: var(--space-2) var(--space-3); border: 1px solid #1e2a3e; border-radius: var(--radius-sm); background: #0d1118; color: #cbd5e1; font-size: var(--text-xs); }
+        .write-gate-label { color: var(--muted); font-size: .5625rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+        .write-gate code { color: var(--brand); overflow-wrap: anywhere; }
+        .write-gate time, .write-gate-actor { color: var(--muted); }
         .copy-path { padding: var(--space-1) var(--space-2); border: 1px solid #253047; border-radius: var(--radius-sm); background: #131722; color: #8b97ab; font: inherit; font-size: .5625rem; cursor: pointer; }
         .copy-path:hover { background: #162235; color: #e2e8f0; }
         .host-signals { display: grid; gap: var(--space-2); padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-left: 3px solid #c084fc; border-radius: var(--radius-md); background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.35); }
@@ -998,6 +1025,9 @@ export class RequestDetailPage implements OnInit {
     /** P6c — host-reported signals; `null` means the host reported nothing for this turn. */
     readonly signals = computed<HostSignalsView | null>(() => this.detail()?.signals ?? null);
 
+    /** Write gate — the latest recorded scope decision; `null` means no decision was recorded for this turn. */
+    readonly writeGate = computed<WriteGateView | null>(() => this.detail()?.writeGate ?? null);
+
     /** B0-9 — the normative doc reference; a pointer only, never the doc's prose. */
     readonly spec = computed<SpecRefView | null>(() => this.detail()?.spec ?? null);
 
@@ -1158,6 +1188,15 @@ export class RequestDetailPage implements OnInit {
     actorRole(actor: VerdictActor | null): string {
         const role = actor && typeof actor['role'] === 'string' ? actor['role'].trim() : '';
         return role || '';
+    }
+
+    /** Q2 write gate — the scope actor is free-form JSON; show only what it actually says. */
+    writeGateActor(actor: Record<string, unknown> | null): string {
+        if (!actor) return '';
+        const id = typeof actor['id'] === 'string' ? actor['id'].trim() : '';
+        const label = typeof actor['label'] === 'string' ? actor['label'].trim() : '';
+        const kind = typeof actor['kind'] === 'string' ? actor['kind'].trim() : '';
+        return [id || label, kind].filter(Boolean).join(' · ');
     }
 
     /** Q2 — `kind / path:line`, degrading honestly when path or line was not cited. */

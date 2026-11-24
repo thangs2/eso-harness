@@ -430,6 +430,72 @@ describe('HTTP contract — CR-010/011 routes', () => {
         assert.deepEqual(await verifyRoute.json(), { ok: true, hashMatches: true, hmacMatches: true, chained: true });
     });
 
+    test('Q2 — scope/check with traceId then GET detail shows writeGate', async () => {
+        const { call } = await fixture();
+        const { mkdtempSync, mkdirSync } = await import('node:fs');
+        const { tmpdir } = await import('node:os');
+        const { join } = await import('node:path');
+        const root = mkdtempSync(join(tmpdir(), 'eso-http-write-gate-'));
+        mkdirSync(join(root, 'src'), { recursive: true });
+        mkdirSync(join(root, 'docs'), { recursive: true });
+        const consumer = await call('/api/v1/consumers', {
+            method: 'POST',
+            body: JSON.stringify({ id: 'gateo', name: 'Gateo', root }),
+        });
+        assert.ok([200, 201].includes(consumer.status), `create consumer: ${consumer.status}`);
+
+        const traceId = 'trace-q2-gate';
+        const prompt = await call('/api/v1/consumers/gateo/observations', {
+            method: 'POST',
+            body: JSON.stringify({
+                traceId,
+                hostId: 'cursor',
+                runtimeKey: 'cursor:cursor-agent',
+                event: 'prompt.submitted',
+                evidence: { userQuery: 'why was this file write allowed?' },
+            }),
+        });
+        assert.ok([200, 201].includes(prompt.status), `prompt.submitted: ${prompt.status}`);
+
+        const allowed = await call('/api/v1/consumers/gateo/scope/check', {
+            method: 'POST',
+            body: JSON.stringify({
+                allowedFiles: ['src/**'],
+                target: 'src/a.ts',
+                traceId,
+                actor: { kind: 'operator', label: 'operator@test' },
+            }),
+        });
+        assert.equal(allowed.status, 200);
+        assert.equal((await allowed.json() as any).allowed, true);
+
+        const first = await call(`/api/v1/consumers/gateo/requests/${traceId}`);
+        assert.equal(first.status, 200);
+        const firstGate = (await first.json() as any).writeGate;
+        assert.equal(typeof firstGate.decisionId, 'string');
+        assert.equal(firstGate.allowed, true);
+        assert.equal(firstGate.code, null);
+        assert.equal(firstGate.target, 'src/a.ts');
+        assert.deepEqual(firstGate.actor, { kind: 'operator', label: 'operator@test' });
+        assert.equal(Number.isNaN(new Date(firstGate.at).getTime()), false);
+
+        // A later check on the same trace becomes the gate the detail reports.
+        const blocked = await call('/api/v1/consumers/gateo/scope/check', {
+            method: 'POST',
+            body: JSON.stringify({ allowedFiles: ['src/**'], target: 'docs/other.md', traceId }),
+        });
+        assert.equal(blocked.status, 200);
+        assert.equal((await blocked.json() as any).code, 'BLOCKED_SCOPE');
+
+        const second = await call(`/api/v1/consumers/gateo/requests/${traceId}`);
+        assert.equal(second.status, 200);
+        const secondGate = (await second.json() as any).writeGate;
+        assert.equal(secondGate.allowed, false);
+        assert.equal(secondGate.code, 'BLOCKED_SCOPE');
+        assert.equal(secondGate.target, 'docs/other.md');
+        assert.notEqual(secondGate.decisionId, firstGate.decisionId, 'latest decision wins');
+    });
+
     test('V2 telemetry — summary requires auth', async () => {
         await fixture();
         // The fixture always adds authorization; call the server without it through a raw fetch.

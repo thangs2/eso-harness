@@ -143,7 +143,7 @@ describe('P4 — receipt issue', () => {
         // B0-9 — the sealed spec reference is a pointer only: doc · version · section, no anchor, no prose.
         assert.deepEqual(receipt.payload.specRef, {
             doc: 'sdlc/08.ui-design/20.pages/20.request-detail.md',
-            version: '1.6.0',
+            version: '1.7.0',
             section: '§6 Behavior spec',
         });
         assert.deepEqual(Object.keys(receipt.payload.specRef ?? {}).sort(), ['doc', 'section', 'version']);

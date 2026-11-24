@@ -24,6 +24,7 @@ import type {
     ConsumerStatus,
     EvidenceReceipt,
     ListConsumersOptions,
+    ScopeDecision,
     StackVersionRecord,
     TurnVerdict,
     UiEvent,
@@ -118,6 +119,13 @@ export interface PlatformStore {
      */
     insertTurnVerdict(verdict: TurnVerdict): Promise<TurnVerdict>;
     getTurnVerdict(consumerId: string, traceId: string): Promise<TurnVerdict | null>;
+    /**
+     * Q2: append-only file-write scope decision. Every check with a trace id is a new row (a turn
+     * can attempt several writes); there is deliberately no update/delete member.
+     */
+    insertScopeDecision(decision: ScopeDecision): Promise<ScopeDecision>;
+    /** Newest first for one trace, so "the latest decision" is the first element. */
+    listScopeDecisionsByTrace(consumerId: string, traceId: string): Promise<ScopeDecision[]>;
     /**
      * P4: append-only sealed receipt, one row per trace. A repeated insert for the same
      * `(consumerId, traceId)` is a no-op that returns the stored row, so `issue` stays idempotent.
@@ -278,6 +286,8 @@ export class MemoryPlatformStore implements PlatformStore {
     private events: ConsumerEvent[] = [];
     private uiEvents: UiEvent[] = [];
     private turnVerdicts = new Map<string, TurnVerdict>();
+    /** Append order; `listScopeDecisionsByTrace` reverses it so equal timestamps still rank newest-first. */
+    private scopeDecisions: ScopeDecision[] = [];
     /** Receipts keyed by receipt id; Map iteration order is the chain append order. */
     private receipts = new Map<string, EvidenceReceipt>();
     private stackVersions = new Map<string, StackVersionRecord[]>();
@@ -464,6 +474,21 @@ export class MemoryPlatformStore implements PlatformStore {
         const row = this.turnVerdicts.get(traceId);
         if (!row || row.consumerId !== consumerId) return null;
         return clone(row);
+    }
+
+    async insertScopeDecision(decision: ScopeDecision): Promise<ScopeDecision> {
+        const stored = clone(decision);
+        this.scopeDecisions.push(stored);
+        return clone(stored);
+    }
+
+    async listScopeDecisionsByTrace(consumerId: string, traceId: string): Promise<ScopeDecision[]> {
+        return this.scopeDecisions
+            .filter((row) => row.consumerId === consumerId && row.traceId === traceId)
+            .slice()
+            .reverse() // newest insertion first; the stable sort below only reorders by timestamp
+            .sort((left, right) => right.at.localeCompare(left.at))
+            .map((row) => clone(row));
     }
 
     async insertReceipt(receipt: EvidenceReceipt): Promise<EvidenceReceipt> {
@@ -1426,6 +1451,37 @@ export class BunSqlPlatformStore implements PlatformStore {
             [consumerId, traceId]
         );
         return rows.length ? mapTurnVerdict(rows[0]) : null;
+    }
+
+    async insertScopeDecision(decision: ScopeDecision): Promise<ScopeDecision> {
+        const rows = await this.sql.unsafe(
+            `INSERT INTO platform.scope_decision
+             (decision_id, consumer_id, trace_id, target, allowed, code, message, actor, at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,COALESCE($9::timestamptz, now()))
+             RETURNING *`,
+            [
+                decision.decisionId,
+                decision.consumerId,
+                decision.traceId ?? null,
+                decision.target,
+                decision.allowed,
+                decision.code ?? null,
+                decision.message ?? null,
+                decision.actor ?? null,
+                decision.at ?? null,
+            ]
+        );
+        return mapScopeDecision(rows[0]);
+    }
+
+    async listScopeDecisionsByTrace(consumerId: string, traceId: string): Promise<ScopeDecision[]> {
+        const rows = await this.sql.unsafe(
+            `SELECT * FROM platform.scope_decision
+             WHERE consumer_id = $1 AND trace_id = $2
+             ORDER BY at DESC, decision_id DESC`,
+            [consumerId, traceId]
+        );
+        return rows.map(mapScopeDecision);
     }
 
     async insertReceipt(receipt: EvidenceReceipt): Promise<EvidenceReceipt> {
@@ -2489,6 +2545,21 @@ function mapTurnVerdict(row: any): TurnVerdict {
         ruleRefs: normalizeJsonArray(row.rule_refs ?? row.ruleRefs) as TurnVerdict['ruleRefs'],
         receiptId: (row.receipt_id ?? row.receiptId ?? null) as string | null,
         computedAt: toIso(row.computed_at ?? row.computedAt),
+    };
+}
+
+/** Q2 — one append-only scope decision row. `actor` is jsonb, so Bun may hand it back as text. */
+function mapScopeDecision(row: any): ScopeDecision {
+    return {
+        decisionId: String(row.decision_id ?? row.decisionId ?? ''),
+        consumerId: String(row.consumer_id ?? row.consumerId ?? ''),
+        traceId: (row.trace_id ?? row.traceId ?? null) as string | null,
+        target: String(row.target ?? ''),
+        allowed: row.allowed === true,
+        code: (row.code ?? null) as string | null,
+        message: (row.message ?? null) as string | null,
+        actor: parseJsonbValue(row.actor),
+        at: toIso(row.at),
     };
 }
 

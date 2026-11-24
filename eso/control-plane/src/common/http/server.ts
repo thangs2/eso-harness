@@ -734,13 +734,16 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
         return judgment.evaluate((request.params as any).id, (request.body as any) ?? {}, (request as any).actor);
     });
 
-    // P6 — per-actor file-write scope. Same domain guard the worker write path enforces.
+    // P6/Q2 — per-actor file-write scope. Same domain guard the worker write path enforces; when
+    // the body names a trace, the decision is recorded and later shown on the request detail.
     app.post('/api/v1/consumers/:id/scope/check', { preHandler: requireAuth }, async (request) => {
         const body = (request.body || {}) as any;
         return scope.check((request.params as any).id, {
             allowedFiles: body.allowedFiles,
             target: body.target,
             emptyScope: body.emptyScope === true,
+            traceId: body.traceId,
+            actor: body.actor,
         });
     });
 

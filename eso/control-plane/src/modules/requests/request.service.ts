@@ -262,6 +262,21 @@ export interface RequestDetail {
     graph: RequestRuntimeGraph;
     /** B0-9: normative page spec this surface is built against — a pointer, not a copy of the doc. */
     spec: RequestSpecRef;
+    /**
+     * Q2 — the latest recorded file-write scope decision for this turn, or `null` when the turn
+     * recorded none. This is the scope guard's own record; it is never inferred from the verdict.
+     */
+    writeGate: RequestWriteGate | null;
+}
+
+/** Q2 — one scope decision projected for the detail page (`detail.writeGate`). */
+export interface RequestWriteGate {
+    decisionId: string;
+    allowed: boolean;
+    code: string | null;
+    target: string;
+    at: string;
+    actor: Record<string, unknown> | null;
 }
 
 export interface RequestRuntimeGraph {
@@ -274,7 +289,7 @@ export interface RequestRuntimeGraph {
 }
 
 /** Everything `buildRequest` can compute from observations alone; verdict, receipt and signals are appended in `get`. */
-type RequestDetailBase = Omit<RequestDetail, 'verdict' | 'receipt' | 'signals' | 'graph' | 'spec'>;
+type RequestDetailBase = Omit<RequestDetail, 'verdict' | 'receipt' | 'signals' | 'graph' | 'spec' | 'writeGate'>;
 
 function rowField(row: any, ...keys: string[]): any {
     for (const key of keys) {
@@ -820,6 +835,10 @@ export class RequestService {
         // P2/P4/P5a — the detail is the proof surface: every detail response carries ESO's verdict,
         // the id of the receipt that seals it, and a summary of that receipt (never its full hash).
         const sealed = await this.sealed(consumerId, base.request.traceId);
+        // Q2 — the latest scope decision is read from the guard's own append-only record. The
+        // verdict and the gate are independent claims; neither is derived from the other.
+        const decisions = await this.store.listScopeDecisionsByTrace(consumerId, base.request.traceId);
+        const latest = decisions[0] ?? null;
         const detail: RequestDetail = {
             ...base,
             verdict: sealed.verdict,
@@ -828,6 +847,16 @@ export class RequestService {
             graph: runtimeGraphOf(traceEvents, base.pipeline),
             // B0-9 — a constant pointer, identical for every request; see REQUEST_SPEC_REF.
             spec: REQUEST_SPEC_REF,
+            writeGate: latest
+                ? {
+                    decisionId: latest.decisionId,
+                    allowed: latest.allowed,
+                    code: latest.code,
+                    target: latest.target,
+                    at: latest.at,
+                    actor: latest.actor,
+                }
+                : null,
         };
         detail.recon = await this.reconAdaptersFor(consumerId, detail);
         await this.enrichPipeline(consumerId, detail);

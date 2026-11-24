@@ -165,6 +165,25 @@ export interface TurnVerdict {
     computedAt: string;
 }
 
+/**
+ * Q2 — one recorded file-write scope decision (`platform.scope_decision`, append-only).
+ *
+ * A row is written only when the caller supplied a trace id; a check without a trace cannot be
+ * attributed to a turn and is deliberately not recorded. `code`/`message` mirror the domain
+ * refusal (null when allowed), and `actor` is stored verbatim as jsonb.
+ */
+export interface ScopeDecision {
+    decisionId: string;
+    consumerId: string;
+    traceId: string | null;
+    target: string;
+    allowed: boolean;
+    code: string | null;
+    message: string | null;
+    actor: Record<string, unknown> | null;
+    at: string;
+}
+
 /** P4 — the sealed spec version of a receipt payload. Bumping it changes the hashed bytes. */
 export const RECEIPT_SPEC_VERSION = 1;
 
@@ -181,7 +200,7 @@ export const RECEIPT_GENESIS_HASH = 'GENESIS';
  */
 export const REQUEST_SPEC_REF = {
     doc: 'sdlc/08.ui-design/20.pages/20.request-detail.md',
-    version: '1.6.0',
+    version: '1.7.0',
     section: '§6 Behavior spec',
     anchor: '#6-behavior-spec-std-page-behavior-1',
 } as const;
