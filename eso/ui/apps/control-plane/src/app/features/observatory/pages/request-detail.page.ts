@@ -57,7 +57,7 @@ import { toActionEvents, toFlowSteps, toTraceEvents } from './request-detail/req
 
                 <eso-request-hero [detail]="detail" [verdict]="verdict()" />
 
-                <eso-pipeline-stepper [stages]="detail.systemStages" [selectedStepId]="selectedStepId()" (stepSelected)="selectStep($event)" />
+                <eso-pipeline-stepper [stages]="detail.systemStages" [selectedStepId]="selectedStepId()" [evidencedSteps]="effectiveness()?.stepsWithEvidence ?? null" (stepSelected)="selectStep($event)" />
 
                 <eso-pipeline-flow
                     [steps]="flowSteps()"

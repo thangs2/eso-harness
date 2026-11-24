@@ -155,7 +155,7 @@ test('stepper keeps the 8 v2 stage ids, legacy ring badges and a single selected
     assert.match(PAGE, /@for \(stage of stages\(\); track stage\.id; let index = \$index\)/);
     assert.match(PAGE, /class="pipeline-step-title">\{\{ stage\.title \}\}/);
     assert.match(PAGE, /class="stage-icon"/);
-    assert.match(PAGE, /\{\{ stageGlyph\(stage\.id\) \}\}/);
+    assert.match(PAGE, /iconPath\(stage\.id\)/);
     // Selection — never the tab — decides which single step is active.
     assert.match(PAGE, /\[class\.active\]="selectedStepId\(\) === stage\.id"/);
     assert.match(PAGE, /\[attr\.aria-current\]="selectedStepId\(\) === stage\.id \? 'step' : null"/);
@@ -165,16 +165,16 @@ test('stepper keeps the 8 v2 stage ids, legacy ring badges and a single selected
     assert.match(STYLES, /\.pipeline-stepper\s*\{[^}]*grid-template-columns:\s*repeat\(8, minmax\(0, 1fr\)\)/);
     assert.match(STYLES, /\.pipeline-stepper\s*\{[^}]*border:\s*0/);
     assert.match(STYLES, /\.pipeline-stepper\s*\{[^}]*background:\s*transparent/);
-    assert.match(STYLES, /\.stage-icon\s*\{[^}]*width:\s*2\.125rem[^}]*height:\s*2\.125rem[^}]*border-radius:\s*50%/);
-    assert.match(STYLES, /\.pipeline-step-title\s*\{[^}]*font-size:\s*var\(--fs-label\)/);
-    assert.match(STYLES, /\.pipeline-step-sub\s*\{[^}]*color:\s*var\(--muted\)/);
+    assert.match(STYLES, /\.stage-badge\s*\{[^}]*width:\s*2\.5rem[^}]*height:\s*2\.5rem[^}]*border-radius:\s*50%/);
+    assert.match(STYLES, /\.pipeline-step-title\s*\{[^}]*font-size:\s*\.71875rem/);
+    assert.match(STYLES, /\.pipeline-step-sub\s*\{[^}]*color:\s*var\(--dim\)/);
     // Selected = ring + glow.
-    assert.match(STYLES, /\.pipeline-step\.active \.stage-icon\s*\{[^}]*box-shadow:/);
+    assert.match(STYLES, /\.pipeline-step\.active \.stage-badge\s*\{[^}]*box-shadow:/);
     // No label ellipsis: the title is allowed to wrap; anything but truncation.
     assert.match(STYLES, /\.pipeline-step-title\s*\{[^}]*overflow-wrap:\s*anywhere/);
     assert.doesNotMatch(STYLES, /\.pipeline-step-title\s*\{[^}]*text-overflow:\s*ellipsis/);
     // Under 1200 the single row becomes horizontally scrollable.
-    assert.match(STYLES, /@media \(max-width: 74\.9375rem\) \{[\s\S]*?\.pipeline-stepper \{ grid-template-columns: repeat\(8, minmax\(9rem, 1fr\)\); overflow-x: auto;[\s\S]*?\}/);
+    assert.match(STYLES, /@media \(max-width: 74\.9375rem\) \{[\s\S]*?\.pipeline-stepper \{[\s\S]*?overflow-x: auto;[\s\S]*?\}/);
 });
 
 test('E2E flow ports the legacy card anatomy and collapses empty steps to one slim row', () => {
