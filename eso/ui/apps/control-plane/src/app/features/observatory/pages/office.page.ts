@@ -71,7 +71,7 @@ const WORKERS: WorkerDef[] = [
                             <p class="eyebrow">Selected</p>
                             <strong>{{ workerById(id)?.label }}</strong>
                             <span>{{ workerById(id)?.lastEvent || 'no event' }}</span>
-                            <a [routerLink]="['/requests', workerById(id)?.traceId || '']" [queryParams]="{ consumer: consumerId() }">Open evidence →</a>
+                            <a [routerLink]="['/observatory/requests', workerById(id)?.traceId || '']" [queryParams]="{ consumer: consumerId() }">Open evidence →</a>
                         </section>
                     }
                 </aside>

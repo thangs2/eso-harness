@@ -624,10 +624,10 @@ export class ObservatoryPage implements OnInit, OnDestroy {
 
     openEvent(event: ObservationDto): void {
         if (event.event === 'prompt.submitted') {
-            void this.router.navigate(['/requests', event.traceId], { queryParams: { consumer: this.consumerId() } });
+            void this.router.navigate(['/observatory/requests', event.traceId], { queryParams: { consumer: this.consumerId() } });
             return;
         }
-        void this.router.navigate(['/requests', event.traceId], { queryParams: { consumer: this.consumerId() } });
+        void this.router.navigate(['/observatory/requests', event.traceId], { queryParams: { consumer: this.consumerId() } });
     }
 
     evidenceValue(event: ObservationDto, key: string): string {

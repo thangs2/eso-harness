@@ -94,7 +94,7 @@ interface ConversationGroup {
                                                         <span class="boundary">{{ row.boundaryIndex ?? index + 1 }}</span>
                                                     </td>
                                                     <td class="when" [title]="fullTime(row.startedAt)">{{ relative(row.startedAt) }}</td>
-                                                    <td class="col-query"><a class="query-link" [title]="row.userQuery" [routerLink]="['/requests', row.traceId]" [queryParams]="{ consumer: consumerId }">{{ queryPreview(row.userQuery) }}</a></td>
+                                                    <td class="col-query"><a class="query-link" [title]="row.userQuery" [routerLink]="['/observatory/requests', row.traceId]" [queryParams]="{ consumer: consumerId }">{{ queryPreview(row.userQuery) }}</a></td>
                                                     <td><span class="source-pill agent">agent</span></td>
                                                     <td><span class="status-badge" [class]="'status-' + statusTone(row.status)"><i class="dot"></i>{{ row.status }}</span></td>
                                                     <td><span class="verdict-badge" [class]="'verdict-' + verdictTone(row.decisionVerdict)">{{ row.decisionVerdict }}</span></td>
@@ -105,7 +105,7 @@ interface ConversationGroup {
                                                     <td class="num">{{ row.toolCount }}</td>
                                                     <td class="checks-cell" [class.checks-fail]="row.checksFail > 0" [title]="row.checksPass + ' pass / ' + row.checksFail + ' warn'">{{ checks(row) }}</td>
                                                     <td class="open-cell">
-                                                        <a class="cmd primary" [routerLink]="['/requests', row.traceId]" [queryParams]="{ consumer: consumerId }" title="Detail">→</a>
+                                                        <a class="cmd primary" [routerLink]="['/observatory/requests', row.traceId]" [queryParams]="{ consumer: consumerId }" title="Detail">→</a>
                                                         <button type="button" class="cmd stream" (click)="streamTrace.emit(row.traceId)" title="Play this trace in Live pulse">Stream</button>
                                                     </td>
                                                 </tr>
@@ -120,7 +120,7 @@ interface ConversationGroup {
                                                         <td>—</td>
                                                         <td class="model" [title]="prompt.model">{{ modelShort(prompt.model) }}</td>
                                                         <td class="num">{{ token(prompt.inputTokens) }}</td><td class="num" [title]="prompt.tokensEstimated ? 'Estimated from chars ÷ 4' : ''">{{ token(prompt.outputTokens) }}{{ prompt.tokensEstimated ? '~' : '' }}</td><td class="num">1</td><td class="num">0</td><td>—</td>
-                                                        <td class="open-cell"><a class="cmd primary" [routerLink]="['/requests', row.traceId]" [queryParams]="{ consumer: consumerId }" title="Detail">→</a></td>
+                                                        <td class="open-cell"><a class="cmd primary" [routerLink]="['/observatory/requests', row.traceId]" [queryParams]="{ consumer: consumerId }" title="Detail">→</a></td>
                                                     </tr>
                                                 }
                                                 }
@@ -150,7 +150,7 @@ interface ConversationGroup {
                                     </td>
                                         <td class="when" [title]="fullTime(row.startedAt)">{{ relative(row.startedAt) }}</td>
                                         <td><span class="ide-badge" [style.color]="hostColor(row.hostId)"><i class="dot" [style.background]="hostColor(row.hostId)"></i>{{ hostLabel(row.hostId) }}</span></td>
-                                        <td class="col-query"><a class="query-link" [title]="row.userQuery" [routerLink]="['/requests', row.traceId]" [queryParams]="{ consumer: consumerId }">{{ queryPreview(row.userQuery) }}</a></td>
+                                        <td class="col-query"><a class="query-link" [title]="row.userQuery" [routerLink]="['/observatory/requests', row.traceId]" [queryParams]="{ consumer: consumerId }">{{ queryPreview(row.userQuery) }}</a></td>
                                         <td><span class="source-pill agent">agent</span></td>
                                         <td><span class="status-badge" [class]="'status-' + statusTone(row.status)"><i class="dot"></i>{{ row.status }}</span></td>
                                         <td><span class="verdict-badge" [class]="'verdict-' + verdictTone(row.decisionVerdict)">{{ row.decisionVerdict }}</span></td>
@@ -161,7 +161,7 @@ interface ConversationGroup {
                                         <td class="num">{{ row.toolCount }}</td>
                                         <td class="checks-cell" [class.checks-fail]="row.checksFail > 0" [title]="row.checksPass + ' pass / ' + row.checksFail + ' warn'">{{ checks(row) }}</td>
                                         <td class="open-cell">
-                                            <a class="cmd primary" [routerLink]="['/requests', row.traceId]" [queryParams]="{ consumer: consumerId }" title="Detail">→</a>
+                                            <a class="cmd primary" [routerLink]="['/observatory/requests', row.traceId]" [queryParams]="{ consumer: consumerId }" title="Detail">→</a>
                                             <button type="button" class="cmd stream" (click)="streamTrace.emit(row.traceId)" title="Play this trace in Live pulse">Stream</button>
                                         </td>
                                         <td class="conv-id">{{ shortConversation(row.conversationId) }}</td>
@@ -176,7 +176,7 @@ interface ConversationGroup {
                                             <td><span class="status-badge" [class]="'status-' + statusTone(prompt.status)">{{ prompt.status }}</span></td>
                                             <td>—</td><td class="model">{{ modelShort(prompt.model) }}</td>
                                             <td class="num">{{ token(prompt.inputTokens) }}</td><td class="num" [title]="prompt.tokensEstimated ? 'Estimated from chars ÷ 4' : ''">{{ token(prompt.outputTokens) }}{{ prompt.tokensEstimated ? '~' : '' }}</td><td class="num">1</td><td class="num">0</td><td>—</td>
-                                            <td class="open-cell"><a class="cmd primary" [routerLink]="['/requests', row.traceId]" [queryParams]="{ consumer: consumerId }">→</a></td>
+                                            <td class="open-cell"><a class="cmd primary" [routerLink]="['/observatory/requests', row.traceId]" [queryParams]="{ consumer: consumerId }">→</a></td>
                                             <td class="conv-id"></td>
                                         </tr>
                                     }

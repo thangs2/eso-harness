@@ -224,7 +224,7 @@ export class ShellComponent {
     readonly onObservatory = computed(() => this.url().startsWith('/observatory') || this.url().startsWith('/work-overview'));
     readonly onGraph = computed(() => this.url().startsWith('/event-graph'));
     readonly onOffice = computed(() => this.url().startsWith('/office'));
-    readonly onRequests = computed(() => this.url().startsWith('/requests'));
+    readonly onRequests = computed(() => this.url().startsWith('/observatory/requests'));
     readonly activeConsumer = computed(() => this.consumers().find((item) => item.id === this.consumerId()) ?? null);
     readonly paletteOpen = signal(false);
     readonly paletteQuery = signal('');

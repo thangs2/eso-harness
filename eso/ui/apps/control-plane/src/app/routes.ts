@@ -41,9 +41,9 @@ export const APP_ROUTES: Routes = [
         pathMatch: 'full',
     },
     {
+        // legacy URL kept as a redirect: the detail belongs to Observatory.
         path: 'requests/:requestId',
-        canActivate: [authGuard],
-        loadComponent: () => import('./features/observatory/pages/request-detail.page.js').then((m) => m.RequestDetailPage),
+        redirectTo: 'observatory/requests/:requestId',
     },
     {
         path: 'observatory/events',
