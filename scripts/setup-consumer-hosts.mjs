@@ -202,6 +202,7 @@ process.exit(0);
 `;
 
 const INGEST_HOOK = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'hooks', 'eso-transcript-ingest.mjs'), 'utf8');
+const LAW_GATE_HOOK = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'hooks', 'eso-law-gate.mjs'), 'utf8');
 
 function headers() {
     return { authorization: AUTH_HEADER, 'content-type': 'application/json' };
@@ -262,6 +263,7 @@ function installHook(rootPath, host, token, runtimeKey, consumerId) {
     mkdirSync(hookDir, { recursive: true });
     writeFileSync(join(hookDir, 'eso-observe.mjs'), OBSERVE_HOOK, 'utf8');
     writeFileSync(join(hookDir, 'eso-transcript-ingest.mjs'), INGEST_HOOK, 'utf8');
+    writeFileSync(join(hookDir, 'eso-law-gate.mjs'), LAW_GATE_HOOK, 'utf8');
 
     const configFile = join(rootPath, '.harness', 'eso-host.json');
     const current = existsSync(configFile) ? readJson(configFile) : { baseUrl: BASE, consumer: '', hosts: {} };
@@ -290,6 +292,10 @@ function installHook(rootPath, host, token, runtimeKey, consumerId) {
         const ingestCommand = `bash -lc 'cd "\${PWD%/.agents}"; exec node .harness/hooks/eso-transcript-ingest.mjs --host agy'`;
         hooks['eso-transcript-ingest'] = {
             Stop: [{ type: 'command', command: ingestCommand }],
+        };
+        const lawGateCommand = `bash -lc 'cd "\${PWD%/.agents}"; exec node .harness/hooks/eso-law-gate.mjs --host agy'`;
+        hooks['eso-law-gate'] = {
+            PreToolUse: [{ matcher: '*', hooks: [{ type: 'command', command: lawGateCommand }] }],
         };
     } else if (host === 'cursor') {
         hooks.version = hooks.version ?? 1;
