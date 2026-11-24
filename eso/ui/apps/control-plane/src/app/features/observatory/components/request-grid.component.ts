@@ -305,8 +305,10 @@ interface ConversationGroup {
         .empty strong { color: #f1f5f9; }
         .form-error { color: #fca5a5; }
         .table-wrap.sticky { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
-        .boundary-cell { vertical-align: middle; white-space: nowrap; }
-        .boundary { margin-left: 7px; color: #94a3b8; font-variant-numeric: tabular-nums; }
+        .request-table .boundary-cell { position: relative; vertical-align: middle; text-align: center; white-space: nowrap; }
+        .boundary { display: inline-block; min-width: 1.25rem; margin-left: 0; color: #94a3b8; font-variant-numeric: tabular-nums; text-align: center; }
+        /* The expand chevron sits outside the flow so the number stays optically centred. */
+        .boundary-cell .expand-btn, .boundary-cell .expand-spacer { position: absolute; left: .25rem; top: 50%; transform: translateY(-50%); }
         .expand-btn { display: inline-grid; place-items: center; vertical-align: middle; flex: 0 0 24px; width: 24px; height: 24px; padding: 0; border: 1px solid #2b3b52; border-radius: 6px; background: #0d1118; color: #5aa9ff; cursor: pointer; transition: background .15s ease, border-color .15s ease, color .15s ease; }
         .expand-btn svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform .15s ease; }
         .expand-btn[aria-expanded='true'] svg { transform: rotate(90deg); }
