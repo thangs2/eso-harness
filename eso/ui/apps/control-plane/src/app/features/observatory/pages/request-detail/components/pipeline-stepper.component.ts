@@ -130,10 +130,12 @@ import type { StepperStageView } from '../request-detail.models.js';
         .pipeline-step.active .pipeline-step-title { color: var(--brand); }
         .pipeline-step.active .pipeline-step-sub { color: #bae6fd; }
         .pipeline-step.active .stage-no { color: #e0f2fe; border-color: rgba(56, 189, 248, .5); }
-        @media (max-width: 74.9375rem) {
-            .pipeline-stepper { grid-auto-flow: column; grid-auto-columns: minmax(10.5rem, 1fr); grid-template-columns: none; overflow-x: auto; padding-bottom: var(--space-2); scroll-snap-type: x proximity; }
-            .pipeline-step { scroll-snap-align: start; }
-            .pipeline-step:not(:last-child)::after { display: none; }
+        /* The app shell keeps a 260px navigator, so the content column is narrower than the
+           viewport. Two rows of four keep the labels readable instead of squeezing eight
+           columns (or hiding everything behind a horizontal scrollbar). */
+        @media (max-width: 100rem) {
+            .pipeline-stepper { grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: var(--space-3); }
+            .pipeline-step:nth-child(4n)::after { display: none; }
         }
         @media (prefers-reduced-motion: reduce) { .pipeline-step, .pipeline-step.active .stage-badge { transition: none; } }
     `],
