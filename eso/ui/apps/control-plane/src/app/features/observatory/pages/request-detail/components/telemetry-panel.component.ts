@@ -10,13 +10,13 @@ import { workerLabel as labelForWorker, type RequestDetailDto, type TokenSummary
         <section class="panel telemetry-panel">
             <header class="panel-head"><div><p class="eyebrow">Telemetry</p><h2>LLM calls / tools / files</h2></div><span class="badge muted">observed</span></header>
             <div class="token-tiles">
-                <div><span>Input est.</span><strong>{{ tokens().input ?? '—' }}</strong><small>chars/4</small></div>
-                <div><span>Output est.</span><strong>{{ tokens().output ?? '—' }}</strong><small>chars/4</small></div>
+                <div><span>{{ tokens().estimated ? 'Input est.' : 'Input' }}</span><strong>{{ tokens().input ?? '—' }}</strong><small>{{ tokens().estimated ? 'chars/4' : 'reported' }}</small></div>
+                <div><span>{{ tokens().estimated ? 'Output est.' : 'Output' }}</span><strong>{{ tokens().output ?? '—' }}</strong><small>{{ tokens().estimated ? 'chars/4' : 'reported' }}</small></div>
                 <div><span>Tools</span><strong>{{ toolCount() }}</strong><small>observed</small></div>
                 <div><span>Files</span><strong>{{ fileCount() }}</strong><small>observed</small></div>
             </div>
             <div class="table-wrap"><table class="telemetry-table">
-                <thead><tr><th>#</th><th>Worker</th><th>Model</th><th>Adapter</th><th>Duration</th><th>In est.</th><th>Out est.</th><th>Outcome</th></tr></thead>
+                <thead><tr><th>#</th><th>Worker</th><th>Model</th><th>Adapter</th><th>Duration</th><th>In</th><th>Out</th><th>Outcome</th></tr></thead>
                 <tbody>
                     @for (call of calls(); track call.id) {
                         <tr><td>{{ $index + 1 }}</td><td>{{ workerLabel(call.workerId) }}</td><td>{{ call.model }}</td><td>{{ call.adapter }}</td><td>{{ call.durationMs ? call.durationMs + ' ms' : '—' }}</td><td>{{ call.inputTokens ?? '—' }}</td><td>{{ call.outputTokens ?? '—' }}</td><td>{{ call.outcome }}</td></tr>
@@ -50,7 +50,7 @@ import { workerLabel as labelForWorker, type RequestDetailDto, type TokenSummary
 })
 export class TelemetryPanelComponent {
     readonly calls = input<RequestDetailDto['telemetry']['llmCalls']>([]);
-    readonly tokens = input<TokenSummaryView>({ input: null, output: null, estimated: false });
+    readonly tokens = input<TokenSummaryView>({ input: null, output: null, cacheRead: null, estimated: false });
     readonly toolCount = input<number>(0);
     readonly fileCount = input<number>(0);
 

@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, EventEmitter, Input, OnChanges, Out
 import { MatButtonModule } from '@angular/material/button';
 import { RouterLink } from '@angular/router';
 import { CONTROL_PLANE_API_CLIENT } from '../../../core/tokens.js';
+import { statusTone, verdictTone } from '../../../shared/status-tone.js';
 import type { HostDto, PromptSummaryDto, RequestSummaryDto } from '../../../../../../../libs/api-client/types.js';
 
 const PAGE_SIZE = 50;
@@ -428,7 +429,6 @@ export class RequestGridComponent implements OnChanges {
     shortConversation(value: string): string { return value.length > 16 ? `${value.slice(0, 16)}…` : value; }
     hostLabel(value: string): string { return HOST_META[value]?.label || value || 'Unknown'; }
     hostColor(value: string): string { return HOST_META[value]?.color || '#94a3b8'; }
-    statusTone(value: string): string { const status = String(value || '').toLowerCase(); if (status.includes('fail') || status.includes('block')) return 'bad'; if (status.includes('completed') || status.includes('pass')) return 'ok'; if (status.includes('submitted') || status.includes('progress') || status.includes('pending')) return 'warn'; return 'muted'; }
     /**
      * Chronological sequence, not display position. The list is newest-first, so the newest
      * prompt carries the highest number (8 → 1 top-to-bottom). A host-provided boundaryIndex wins.
@@ -440,7 +440,9 @@ export class RequestGridComponent implements OnChanges {
     }
 
     verdictText(value: string): string { return !value || value === '—' ? 'unknown' : value; }
-    verdictTone(value: string): string { const verdict = String(value || '').toUpperCase(); return verdict === '—' || !verdict ? 'muted' : verdict.includes('FAIL') || verdict.includes('BLOCK') ? 'bad' : ''; }
+    /** Templates resolve members, not module bindings; the mapping itself lives once in shared/status-tone. */
+    statusTone(value: string): string { return statusTone(value); }
+    verdictTone(value: string): string { return verdictTone(value); }
     modelShort(value: string): string { return !value || value === '—' ? 'not captured' : (value.split('/').pop() || value); }
     token(value: number | null): string { return value == null ? 'not captured' : new Intl.NumberFormat('en-US').format(value); }
     checks(row: RequestSummaryDto): string { if (!row.checksPass && !row.checksFail) return '—'; return `${row.checksPass}/${row.checksFail}`; }

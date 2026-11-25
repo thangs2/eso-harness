@@ -174,6 +174,8 @@ export interface JevView {
 export interface TokenSummaryView {
     input: number | null;
     output: number | null;
+    /** Prompt tokens served from the host cache. Reported separately from `input` by the host. */
+    cacheRead: number | null;
     estimated: boolean;
 }
 
@@ -293,4 +295,147 @@ export function shortIdOf(value: string | null | undefined): string {
     const id = typeof value === 'string' ? value.trim() : '';
     if (!id) return '—';
     return id.length > 16 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id;
+}
+
+/**
+ * One worker's share of the turn's token usage.
+ *
+ * The Cost card used to show only a trace-wide sum, which hides the per-worker burn that matters when
+ * several workers run. Every worker that joined the path gets a row: a worker with no reported usage
+ * keeps its row with `input`/`output` = null ("not captured"), because a missing measurement is not zero
+ * and ESO never estimates it.
+ *
+ * Precedence per worker: `telemetry.llmCalls` usage → `evidence.tokenSummary` on its events → nothing.
+ * The first is the host's own call record; the second is what it wrote on the event.
+ */
+export interface WorkerTokenUsageView {
+    workerId: string;
+    label: string;
+    model: string;
+    input: number | null;
+    output: number | null;
+    /** Prompt tokens this worker read from the cache; null when it was not reported. */
+    cacheRead: number | null;
+    /**
+     * The prompt as the worker actually paid for it: uncached input plus cache reads. The host reports
+     * these apart, and cache reads often dwarf the uncached part (measured 19,539 vs 3,434), so summing
+     * them is the only honest "how big was the prompt" figure. Null when neither was reported.
+     */
+    promptTotal: number | null;
+    calls: number;
+    estimated: boolean;
+    /** Sum of this worker's reported input+output; null when neither was reported. */
+    total: number | null;
+}
+
+/** A worker linked to prompt body by id, tolerating hosts that nest it under `evidence`. */
+function eventWorkerId(event: Record<string, any>): string {
+    const evidence = isRecord(event['evidence']) ? event['evidence'] : {};
+    return String(event['workerId'] || evidence['workerId'] || evidence['role'] || '').trim();
+}
+
+function isRecord(value: unknown): value is Record<string, any> {
+    return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+/**
+ * Two shapes reach this card and they spell the fields differently: a host call record
+ * (`inputTokens`/`outputTokens`) and an event `tokenSummary` (`input`/`output`). Accept both, or the
+ * event-only fallback silently reports "not captured" for usage the host did send.
+ */
+function usageOf(source: Record<string, any> | null): { input: number | null; output: number | null; cacheRead: number | null; estimated: boolean } {
+    if (!source) return { input: null, output: null, cacheRead: null, estimated: false };
+    const pick = (...keys: string[]): number | null => {
+        for (const key of keys) if (typeof source[key] === 'number') return source[key] as number;
+        return null;
+    };
+    return {
+        input: pick('inputTokens', 'input'),
+        output: pick('outputTokens', 'output'),
+        cacheRead: pick('cacheReadTokens', 'cacheRead'),
+        estimated: source['estimated'] === true,
+    };
+}
+
+/**
+ * Per-worker usage, ordered by prompt body's first observation of that worker (stable, not by size).
+ * Returns an empty array when the payload exposes no worker or no usage at all.
+ */
+export function workerTokenUsage(
+    events: ReadonlyArray<Record<string, any>>,
+    llmCalls: ReadonlyArray<Record<string, any>>,
+): WorkerTokenUsageView[] {
+    const order: string[] = [];
+    const remember = (id: string): void => {
+        if (id && !order.includes(id)) order.push(id);
+    };
+    for (const event of events || []) remember(eventWorkerId(event));
+    for (const call of llmCalls || []) remember(String(call['workerId'] || '').trim());
+
+    return order.map((workerId) => {
+        const calls = (llmCalls || []).filter((call) => String(call['workerId'] || '').trim() === workerId);
+        const eventWithUsage = (events || []).find((event) => {
+            const evidence = isRecord(event['evidence']) ? event['evidence'] : {};
+            return eventWorkerId(event) === workerId && isRecord(evidence['tokenSummary']);
+        });
+        const eventModel = eventWithUsage && isRecord(eventWithUsage['evidence']) ? eventWithUsage['evidence']['model'] : '';
+
+        // Host call records win; the event's own tokenSummary is the fallback. A worker that reported
+        // neither keeps null — the row still renders, marked "not captured".
+        let input: number | null = null;
+        let output: number | null = null;
+        let cacheRead: number | null = null;
+        let estimated = false;
+        if (calls.length) {
+            let anyReported = false;
+            for (const call of calls) {
+                const usage = usageOf(call);
+                if (usage.input === null && usage.output === null && usage.cacheRead === null) continue;
+                anyReported = true;
+                input = usage.input === null ? input : (input ?? 0) + usage.input;
+                output = usage.output === null ? output : (output ?? 0) + usage.output;
+                cacheRead = usage.cacheRead === null ? cacheRead : (cacheRead ?? 0) + usage.cacheRead;
+                estimated = estimated || usage.estimated;
+            }
+            if (!anyReported) {
+                input = null;
+                output = null;
+                cacheRead = null;
+            }
+        } else if (eventWithUsage) {
+            const usage = usageOf(eventWithUsage['evidence']['tokenSummary'] as Record<string, any>);
+            input = usage.input;
+            output = usage.output;
+            cacheRead = usage.cacheRead;
+            estimated = usage.estimated;
+        }
+        // No call record and no tokenSummary could still mean the host put usage on another event of
+        // the same worker; fall back to any event carrying one before declaring "not captured".
+        if (input === null && output === null && cacheRead === null && calls.length === 0 && !eventWithUsage) {
+            const fallback = (events || []).find((event) => {
+                const evidence = isRecord(event['evidence']) ? event['evidence'] : {};
+                return eventWorkerId(event) === workerId && isRecord(evidence['tokenSummary']);
+            });
+            if (fallback) {
+                const usage = usageOf(fallback['evidence']['tokenSummary'] as Record<string, any>);
+                input = usage.input;
+                output = usage.output;
+                cacheRead = usage.cacheRead;
+                estimated = usage.estimated;
+            }
+        }
+
+        return {
+            workerId,
+            label: workerLabel(workerId),
+            model: String(calls[0]?.['model'] || eventModel || '').trim(),
+            input,
+            output,
+            cacheRead,
+            promptTotal: input === null && cacheRead === null ? null : (input ?? 0) + (cacheRead ?? 0),
+            calls: calls.length,
+            estimated,
+            total: input === null && output === null ? null : (input ?? 0) + (output ?? 0),
+        };
+    });
 }

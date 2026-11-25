@@ -82,6 +82,8 @@ export interface RequestLlmCall {
     durationMs: number;
     inputTokens: number | null;
     outputTokens: number | null;
+    /** Prompt tokens served from the host's cache; null when the host did not report it. */
+    cacheReadTokens: number | null;
     estimated: boolean;
     outcome: string;
 }
@@ -183,6 +185,7 @@ export interface PromptSummary {
     promptText: string;
     inputTokens: number | null;
     outputTokens: number | null;
+    cacheReadTokens: number | null;
     tokensEstimated: boolean;
     at: string;
     status: string;
@@ -287,6 +290,8 @@ export interface RequestDetail {
         adapter: string;
         promptHash: string;
         promptLength: number;
+        requestHash?: string;
+        requestLength?: number;
     };
     requestMetrics: {
         callCount: number;
@@ -294,6 +299,7 @@ export interface RequestDetail {
         hasFailures: boolean;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
         tokensEstimated: boolean;
     };
     pipeline: RequestPipelineStage[];
@@ -373,12 +379,18 @@ function toEvent(row: any): RequestEvent {
     };
 }
 
-function tokenOf(evidence: Record<string, unknown>): { input: number | null; output: number | null; estimated: boolean } {
-    const token = evidence['tokenSummary'] as { input?: number; output?: number; estimated?: boolean } | undefined;
-    if (!token) return { input: null, output: null, estimated: false };
+/**
+ * Host usage. `cacheRead` is reported SEPARATELY from `input` (measured on real AGY transcripts:
+ * input 3,434 + cache_read 19,539 on the same response), so the prompt's true size is input + cacheRead.
+ * Keeping them apart is what lets the UI show a net input instead of a deceptively small number.
+ */
+function tokenOf(evidence: Record<string, unknown>): { input: number | null; output: number | null; cacheRead: number | null; estimated: boolean } {
+    const token = evidence['tokenSummary'] as { input?: number; output?: number; cacheRead?: number; estimated?: boolean } | undefined;
+    if (!token) return { input: null, output: null, cacheRead: null, estimated: false };
     return {
         input: typeof token.input === 'number' ? token.input : null,
         output: typeof token.output === 'number' ? token.output : null,
+        cacheRead: typeof token.cacheRead === 'number' ? token.cacheRead : null,
         estimated: token.estimated === true,
     };
 }
@@ -646,11 +658,13 @@ function buildRequest(consumerId: string, events: RequestEvent[]): RequestDetail
     });
     let inputTokens = 0;
     let outputTokens = 0;
+    let cacheReadTokens = 0;
     let estimated = false;
     const llmCalls: RequestLlmCall[] = workerEvents.map((event) => {
         const token = tokenOf(event.evidence);
         if (token.input !== null) inputTokens += token.input;
         if (token.output !== null) outputTokens += token.output;
+        if (token.cacheRead !== null) cacheReadTokens += token.cacheRead;
         estimated = estimated || token.estimated;
         return {
             id: event.observationId,
@@ -660,6 +674,7 @@ function buildRequest(consumerId: string, events: RequestEvent[]): RequestDetail
             durationMs: Number(event.evidence['durationMs']) || 0,
             inputTokens: token.input,
             outputTokens: token.output,
+            cacheReadTokens: token.cacheRead,
             estimated: token.estimated,
             outcome: event.outcome || '—',
         };
@@ -675,7 +690,7 @@ function buildRequest(consumerId: string, events: RequestEvent[]): RequestDetail
         { checkId: 'worker-events', status: workerEvents.length > 0 ? 'pass' : 'warn', detail: `${workerEvents.length} worker event(s)` },
         { checkId: 'outcome-contract', status: events.filter((event) => event.event !== 'prompt.submitted').every((event) => ['PASS', 'FAIL', 'BLOCKED', null].includes(event.outcome)) ? 'pass' : 'warn', detail: 'OUTCOME: PASS|FAIL|BLOCKED on every worker event' },
         { checkId: 'error-classification', status: events.some((event) => event.evidence['failureKind'] === 'INFRA') ? 'warn' : 'pass', detail: events.some((event) => event.evidence['failureKind'] === 'INFRA') ? 'infra failure observed' : 'no infra failure observed' },
-        { checkId: 'token-report', status: estimated ? 'warn' : 'skip', detail: estimated ? 'chars/4 estimate, not provider usage' : 'no token measurement' },
+        { checkId: 'token-report', status: (inputTokens !== null || outputTokens !== null) ? (estimated ? 'warn' : 'pass') : 'skip', detail: (inputTokens !== null || outputTokens !== null) ? (estimated ? 'chars/4 estimate, not provider usage' : 'usage reported by host') : 'no token measurement' },
         { checkId: 'tool-file-capture', status: tools.length || files.length ? 'pass' : 'skip', detail: tools.length || files.length ? `${tools.length} tools / ${files.length} files` : 'adapter does not expose tool/file operations' },
     ];
     return {
@@ -694,8 +709,10 @@ function buildRequest(consumerId: string, events: RequestEvent[]): RequestDetail
             runtimeKey: prompt.runtimeKey,
             model: String(evidence['model'] || '—'),
             adapter: String(evidence['adapter'] || '—'),
-            promptHash: String(evidence['requestHash'] || '—'),
-            promptLength: Number(evidence['requestLength']) || 0,
+            promptHash: String(evidence['requestHash'] || evidence['promptHash'] || '—'),
+            promptLength: Number(evidence['requestLength'] || evidence['promptLength']) || 0,
+            requestHash: String(evidence['requestHash'] || evidence['promptHash'] || '—'),
+            requestLength: Number(evidence['requestLength'] || evidence['promptLength']) || 0,
         },
         requestMetrics: {
             callCount: llmCalls.length,
@@ -703,6 +720,7 @@ function buildRequest(consumerId: string, events: RequestEvent[]): RequestDetail
             hasFailures: status === 'failed' || status === 'blocked',
             inputTokens: inputTokens || null,
             outputTokens: outputTokens || null,
+            cacheReadTokens: cacheReadTokens || null,
             tokensEstimated: estimated,
         },
         context,
@@ -1080,7 +1098,7 @@ export class RequestService {
                 const source = child ? (declaredKind === 'swarm' ? 'swarm' : 'subagent') : 'agent';
                 const sourcePrefix = source === 'swarm' ? 'swarm' : 'subagent';
                 const completionEvent = completion.get(`${traceId}:${workerId}`);
-                const token = (completionEvent?.evidence as Record<string, unknown> | undefined)?.['tokenSummary'] as { input?: number; output?: number; estimated?: boolean } | undefined;
+                const token = (completionEvent?.evidence as Record<string, unknown> | undefined)?.['tokenSummary'] as { input?: number; output?: number; cacheRead?: number; estimated?: boolean } | undefined;
                 items.push({
                     id: child ? `${sourcePrefix}-${workerId}:${traceId}` : `agent:${traceId}`,
                     observationId: event.observationId,
@@ -1098,6 +1116,7 @@ export class RequestService {
                     promptText: String(evidence['promptText'] || evidence['userQuery'] || ''),
                     inputTokens: typeof token?.input === 'number' ? token.input : null,
                     outputTokens: typeof token?.output === 'number' ? token.output : null,
+                    cacheReadTokens: typeof token?.cacheRead === 'number' ? token.cacheRead : null,
                     tokensEstimated: token?.estimated === true,
                     at: event.at,
                     status: completionEvent?.outcome || String(first.outcome || 'SUBMITTED'),

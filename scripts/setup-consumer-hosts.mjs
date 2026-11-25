@@ -130,10 +130,15 @@ const hash = createHash('sha256').update(conversationId + '|' + generationId + '
 const pick = (...values) => values.map((value) => (typeof value === 'string' ? value.trim() : value)).find((value) => value !== undefined && value !== null && value !== '') ?? '';
 const model = pick(payload.model, payload.model_id, payload.modelId, payload.model_name, payload.modelName, transcriptModel);
 const usage = payload.usage && typeof payload.usage === 'object' ? payload.usage : null;
+// cache_read_tokens is reported by the host SEPARATELY from input_tokens (measured on real AGY
+// transcripts: input 3,434 alongside cache_read 19,539), so it is forwarded as its own field rather
+// than folded into input. Dropping it made every cached prompt look far cheaper than it was.
+const cacheRead = Number(usage?.cache_read_tokens ?? usage?.cacheReadTokens ?? usage?.cacheRead);
 const tokenSummary = usage && (Number.isFinite(Number(usage.input_tokens ?? usage.inputTokens)) || Number.isFinite(Number(usage.output_tokens ?? usage.outputTokens)))
     ? {
         input: Number(usage.input_tokens ?? usage.inputTokens ?? 0),
         output: Number(usage.output_tokens ?? usage.outputTokens ?? 0),
+        ...(Number.isFinite(cacheRead) ? { cacheRead } : {}),
         estimated: false,
     }
     : null;

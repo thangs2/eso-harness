@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, HostListener, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostListener, computed, effect, inject, signal } from '@angular/core';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs/operators';
 import { MatMenuModule } from '@angular/material/menu';
@@ -39,8 +39,8 @@ const PAGE_LABELS: Record<string, string> = {
                             <span class="consumer-switcher"><span class="context-label">Consumer</span><strong>{{ activeConsumer()?.name || id }}</strong></span>
                             <span class="context-sep" aria-hidden="true">/</span>
                             <span class="context-page">{{ pageLabel() }}</span>
-                            <span class="status-chip" [class.status-chip-warn]="activeConsumer()?.status !== 'ready'">
-                                <span class="status-dot" aria-hidden="true"></span>{{ activeConsumer()?.status || 'loading' }}
+                            <span class="status-chip" [class.status-chip-warn]="consumerStatus() !== 'ready'">
+                                <span class="status-dot" aria-hidden="true"></span>{{ consumerStatus() }}
                             </span>
                         } @else {
                             <span class="context-page">{{ pageLabel() }}</span>
@@ -211,6 +211,11 @@ export class ShellComponent {
     private readonly url = signal(this.router.url);
     readonly menuOpen = signal(false);
     readonly consumers = signal<ConsumerListResponse['items']>([]);
+    readonly consumersLoaded = signal(false);
+    readonly consumerStatus = computed(() => {
+        const status = this.activeConsumer()?.status;
+        return status || (this.consumersLoaded() ? 'ready' : 'loading');
+    });
 
     readonly initials = computed(() => this.auth.user().slice(0, 2).toUpperCase());
     readonly consumerId = computed(() => {
@@ -259,6 +264,11 @@ export class ShellComponent {
     });
 
     constructor() {
+        effect(() => {
+            if (this.auth.isAuthenticated()) {
+                this.loadConsumers();
+            }
+        });
         this.loadConsumers();
         this.router.events.pipe(filter((event) => event instanceof NavigationEnd)).subscribe((event) => {
             this.url.set((event as NavigationEnd).urlAfterRedirects);
@@ -267,7 +277,13 @@ export class ShellComponent {
     }
 
     private loadConsumers(): void {
-        this.profiles.list().then((result) => this.consumers.set(result.items ?? [])).catch(() => this.consumers.set([]));
+        this.profiles.list().then((result) => {
+            this.consumers.set(result.items ?? []);
+            this.consumersLoaded.set(true);
+        }).catch(() => {
+            this.consumers.set([]);
+            this.consumersLoaded.set(true);
+        });
     }
 
     @HostListener('document:keydown', ['$event'])

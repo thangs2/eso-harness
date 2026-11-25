@@ -14,6 +14,7 @@ import { WaterfallPanelComponent } from './request-detail/components/waterfall-p
 import {
     TAB_GLYPH,
     shortIdOf,
+    workerTokenUsage,
     type ActionEventView,
     type EffectivenessView,
     type HostSignalsView,
@@ -73,6 +74,7 @@ import { toActionEvents, toFlowSteps, toTraceEvents } from './request-detail/req
                     [signals]="signals()"
                     [writeGate]="writeGate()"
                     [tokens]="tokenSummary()"
+                    [workers]="workerUsage()"
                     [llmCallCount]="detail.telemetry.llmCalls.length"
                     [toolCount]="detail.telemetry.tools.length"
                     [fileCount]="detail.telemetry.files.length"
@@ -114,8 +116,8 @@ import { toActionEvents, toFlowSteps, toTraceEvents } from './request-detail/req
         .detail-actions { display: flex; gap: var(--space-2); }
         .pill { padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: 62.44rem; background: var(--surface-3); color: #cbd5e1; font-size: var(--fs-secondary); line-height: 1.6; text-decoration: none; }
         .pill:hover { border-color: var(--brand); color: #ffffff; }
-        .tabs { display: flex; width: 100%; gap: 0; border-bottom: 1px solid var(--line); overflow-x: auto; }
-        .tabs button { display: inline-flex; flex: 1 1 0; align-items: center; justify-content: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font: inherit; font-size: var(--fs-secondary); font-weight: 600; cursor: pointer; white-space: nowrap; }
+        .tabs { display: flex; width: 100%; gap: 0; border-bottom: 1px solid var(--line); overflow-x: auto; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
+        .tabs button { display: inline-flex; flex: 1 1 auto; min-width: max-content; align-items: center; justify-content: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font: inherit; font-size: var(--fs-secondary); font-weight: 600; cursor: pointer; white-space: nowrap; }
         .tabs button:hover { color: var(--ink); }
         .tabs button:focus-visible { outline: .125rem solid var(--brand); outline-offset: -.125rem; }
         .tabs button.active { border-color: var(--brand); color: var(--brand); }
@@ -165,7 +167,20 @@ export class RequestDetailPage implements OnInit {
     readonly actionEvents = computed<ActionEventView[]>(() => toActionEvents(this.detail()?.events ?? []));
     readonly tokenSummary = computed<TokenSummaryView>(() => {
         const metrics = this.detail()?.requestMetrics;
-        return { input: metrics?.inputTokens ?? null, output: metrics?.outputTokens ?? null, estimated: metrics?.tokensEstimated === true };
+        return {
+            input: metrics?.inputTokens ?? null,
+            output: metrics?.outputTokens ?? null,
+            cacheRead: metrics?.cacheReadTokens ?? null,
+            estimated: metrics?.tokensEstimated === true,
+        };
+    });
+    /**
+     * Cost card — one row per worker that joined the path. The trace-wide sum above stays the headline,
+     * but the burn is per worker, so the card must not fold them into a single number.
+     */
+    readonly workerUsage = computed(() => {
+        const detail = this.detail();
+        return workerTokenUsage((detail?.events ?? []) as unknown as Record<string, any>[], (detail?.telemetry?.llmCalls ?? []) as unknown as Record<string, any>[]);
     });
 
     /** P2 — ESO's adjudication of this turn; never derived from prompt text or worker status. */

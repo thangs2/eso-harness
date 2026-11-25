@@ -503,6 +503,8 @@ export interface PromptSummaryDto {
     promptText: string;
     inputTokens: number | null;
     outputTokens: number | null;
+    /** Prompt tokens served from the host cache, reported apart from inputTokens. */
+    cacheReadTokens: number | null;
     tokensEstimated: boolean;
     at: string;
     status: string;
@@ -572,6 +574,7 @@ export interface RequestLlmCallDto {
     durationMs: number;
     inputTokens: number | null;
     outputTokens: number | null;
+    cacheReadTokens: number | null;
     estimated: boolean;
     outcome: string;
 }
@@ -594,6 +597,8 @@ export interface RequestDetailDto {
         adapter: string;
         promptHash: string;
         promptLength: number;
+        requestHash?: string;
+        requestLength?: number;
     };
     context: Record<string, unknown>;
     routing: Record<string, unknown>;
@@ -606,6 +611,7 @@ export interface RequestDetailDto {
         hasFailures: boolean;
         inputTokens: number | null;
         outputTokens: number | null;
+        cacheReadTokens: number | null;
         tokensEstimated: boolean;
     };
     pipeline: RequestPipelineStageDto[];
