@@ -402,7 +402,7 @@ protected hydrate(profile: ConsumerProfile): void {
         this.manifestRelations.set(Array.isArray(knowledge.manifest?.relations) ? knowledge.manifest.relations : this.manifestRelationOptions);
         this.manifestChecks.set(Array.isArray(knowledge.manifest?.checks) ? knowledge.manifest.checks : this.manifestCheckOptions);
         // BUG-35: no explicit consent field ⇒ OFF (was true = collect before opt-in)
-        this.consent.set(prof.observation?.consent ?? false);
+        this.setConsent(prof.observation?.consent ?? false);
         this.events.set(prof.observation?.events || ['prompt.submitted', 'turn.completed', 'tool.called']);
         const remoteVersions = this.remoteStackVersions();
         const savedVersions = remoteVersions.length > 0 ? remoteVersions : (Array.isArray(harness.stack?.versions) ? harness.stack.versions : []);
@@ -595,7 +595,7 @@ protected restoreDraft(): void {
             if (Array.isArray(draft.manifestFacets)) this.manifestFacets.set(draft.manifestFacets);
             if (Array.isArray(draft.manifestRelations)) this.manifestRelations.set(draft.manifestRelations);
             if (Array.isArray(draft.manifestChecks)) this.manifestChecks.set(draft.manifestChecks);
-            if (typeof draft.consent === 'boolean') this.consent.set(draft.consent);
+            if (typeof draft.consent === 'boolean') this.setConsent(draft.consent);
             if (Array.isArray(draft.events)) this.events.set(draft.events);
         } catch {
             // Ignore malformed drafts.

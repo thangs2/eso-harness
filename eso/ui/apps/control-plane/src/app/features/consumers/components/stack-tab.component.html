@@ -103,6 +103,43 @@
                                 }
                             </div>
                         </section>
+
+                        <section class="layer-group jev-group">
+                            <header class="group-head">
+                                <div><h2>Judgment · JEV</h2><p>Decision policy consumed by the host when evidence arrives. ESO stores the policy; the host owns execution.</p></div>
+                                <span class="jev-mode-tag" [class.muted]="vm().jevMode() === 'off'">{{ vm().jevMode() }}</span>
+                            </header>
+                            <div class="jev-body">
+                                <div class="jev-grid">
+                                    <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>JEV mode</mat-label>
+                                        <mat-select [ngModel]="vm().jevMode()" (ngModelChange)="vm().setJevMode($event)">
+                                            <mat-option value="off">Off — no JEV</mat-option>
+                                            <mat-option value="shadow">Shadow — evaluate only</mat-option>
+                                            <mat-option value="active">Active — decide within band</mat-option>
+                                        </mat-select>
+                                    </mat-form-field>
+                                    <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Auto threshold</mat-label><input matInput type="number" min="0" max="1" step="0.01" [ngModel]="vm().jevAutoThreshold()" (ngModelChange)="vm().setJevAutoThreshold($event)" [disabled]="vm().jevMode() === 'off'" aria-label="JEV auto threshold"></mat-form-field>
+                                    <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Confirm threshold</mat-label><input matInput type="number" min="0" max="1" step="0.01" [ngModel]="vm().jevConfirmThreshold()" (ngModelChange)="vm().setJevConfirmThreshold($event)" [disabled]="vm().jevMode() === 'off'" aria-label="JEV confirm threshold"></mat-form-field>
+                                </div>
+                                @if (vm().jevMode() !== 'off' && !vm().consent()) {
+                                    <div class="jev-warning" role="status">
+                                        <span>JEV <strong>{{ vm().jevMode() }}</strong> requires observation consent. Saving is blocked until consent is on.</span>
+                                        <button mat-stroked-button type="button" (click)="vm().selectTab('observation')">Go to Observation</button>
+                                    </div>
+                                } @else {
+                                    <p class="jev-note">Threshold rule: auto ≥ confirm. Empty thresholds leave the host default (0.8 / 0.5).</p>
+                                }
+                                <div class="jev-evaluate">
+                                    <mat-form-field appearance="outline" subscriptSizing="dynamic" class="jev-confidence"><mat-label>Confidence (0–1)</mat-label><input matInput type="number" min="0" max="1" step="0.01" [ngModel]="vm().jevConfidence()" (ngModelChange)="vm().setJevConfidence($event)"></mat-form-field>
+                                    <div class="jev-evaluate-actions">
+                                        <button mat-stroked-button type="button" [disabled]="vm().jevDecisionLoading()" (click)="vm().evaluateJev()">{{ vm().jevDecisionLoading() ? 'Evaluating…' : 'Evaluate decision' }}</button>
+                                        <small>Runs against the <strong>saved</strong> policy — save changes first to test a draft.</small>
+                                    </div>
+                                </div>
+                                @if (vm().jevDecision(); as decision) { <p class="jev-result">{{ decision.mode }} · {{ decision.band || '—' }} → {{ decision.decision }} · {{ decision.reason }}</p> }
+                                @if (vm().jevDecisionError(); as message) { <p class="form-error" role="alert">{{ message }}</p> }
+                            </div>
+                        </section>
                     </div>
 
                     <section class="rules-material">

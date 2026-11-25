@@ -241,6 +241,21 @@
         .group-head p { margin: 0; color: var(--muted); font-size: var(--text-sm); }
         .group-count { flex: none; color: var(--muted); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .06em; }
 
+        /* Stack · Judgment (JEV) — policy group; shipped with Stack, not Observation. */
+        .jev-body { display: grid; gap: var(--space-3); padding: var(--space-4); }
+        .jev-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
+        .jev-grid mat-form-field { width: 100%; }
+        .jev-mode-tag { flex: none; padding: 2px var(--space-2); border: 1px solid color-mix(in srgb, var(--brand) 45%, var(--line)); border-radius: 999px; color: var(--brand); font-size: var(--text-xs); font-weight: 650; text-transform: lowercase; }
+        .jev-mode-tag.muted { border-color: var(--line); color: var(--muted); }
+        .jev-note { margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.4; }
+        .jev-warning { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-3); padding: var(--space-2) var(--space-3); border: 1px solid color-mix(in srgb, var(--warn-ink) 35%, var(--line)); border-radius: var(--radius-sm); background: var(--warn-bg); font-size: var(--text-xs); }
+        .jev-warning span { color: var(--warn-ink); line-height: 1.45; }
+        .jev-evaluate { display: flex; align-items: flex-start; gap: var(--space-3); flex-wrap: wrap; }
+        .jev-evaluate .jev-confidence { width: 12rem; }
+        .jev-evaluate-actions { display: grid; gap: var(--space-1); justify-items: start; }
+        .jev-evaluate-actions small { color: var(--muted); font-size: var(--text-xs); }
+        .jev-result { margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.5; }
+
         /* Consumer picker panel styles */
         .mat-mdc-select-panel.consumer-picker-panel {
             background: var(--surface) !important;
@@ -372,5 +387,5 @@
         .saved-banner { border-left: 4px solid var(--brand); background: color-mix(in srgb, var(--surface) 88%, var(--brand)); padding: var(--space-3); border-radius: var(--radius-sm); margin: 0; }
         .loading-label { color: var(--muted); margin: 0; }
         .settings-loading { border: 1px solid var(--line); border-radius: var(--radius-md); padding: var(--space-5); background: var(--surface); }
-        @media (max-width: 1100px) { .settings-tabs { grid-auto-columns: minmax(180px, 1fr); } .host-grid { grid-template-columns: 1fr; } .layer-row { grid-template-columns: minmax(200px, 1fr) minmax(120px, .6fr) minmax(180px, 1fr) auto; gap: var(--space-3); height: auto; min-height: 100px; } .layer-columns { display: none; } }
-        @media (max-width: 700px) { .migration-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .settings-tabs { grid-auto-columns: minmax(170px, 1fr); width: 100%; } .settings-tabs .settings-tab { min-width: 0; overflow: hidden; } .form-grid, .stack-summary { grid-template-columns: 1fr; } .page-header { flex-direction: column; align-items: stretch; } .tab-panel { padding: var(--space-4); } .layer-row { grid-template-columns: 1fr; align-items: start; } .layer-state { justify-content: flex-start; } .group-head { flex-direction: column; } .settings-actions { position: static; flex-wrap: wrap; } }
+        @media (max-width: 1100px) { .settings-tabs { grid-auto-columns: minmax(180px, 1fr); } .host-grid { grid-template-columns: 1fr; } .layer-row { grid-template-columns: minmax(200px, 1fr) minmax(120px, .6fr) minmax(180px, 1fr) auto; gap: var(--space-3); height: auto; min-height: 100px; } .layer-columns { display: none; } .jev-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        @media (max-width: 700px) { .migration-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .settings-tabs { grid-auto-columns: minmax(170px, 1fr); width: 100%; } .settings-tabs .settings-tab { min-width: 0; overflow: hidden; } .form-grid, .stack-summary, .jev-grid { grid-template-columns: 1fr; } .page-header { flex-direction: column; align-items: stretch; } .tab-panel { padding: var(--space-4); } .layer-row { grid-template-columns: 1fr; align-items: start; } .layer-state { justify-content: flex-start; } .group-head { flex-direction: column; } .settings-actions { position: static; flex-wrap: wrap; } }

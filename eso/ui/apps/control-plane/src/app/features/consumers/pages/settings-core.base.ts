@@ -28,7 +28,7 @@ import {
     splitList,
 } from './consumer-settings.models.js';
 import type { HostProfile, LayerId, LegacyHostProfile, PluginEntry, StackLayer, StackVersion, StackVersionStatus, WorkerEdge, WorkerEntry } from './consumer-settings.models.js';
-import type { ConsumerProfile, HostDto, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, McpProviderDto, WorkerConfigDto, EvidenceRequirementDto, FlowSummaryDto, FlowDefinitionDto, HostRuntimeDto, LegacyHarnessReportDto, HarnessMigrationPreviewDto } from '../../../../../../../libs/api-client/types.js';
+import type { ConsumerProfile, HostDto, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, McpProviderDto, WorkerConfigDto, EvidenceRequirementDto, FlowSummaryDto, FlowDefinitionDto, HostRuntimeDto, LegacyHarnessReportDto, HarnessMigrationPreviewDto, JevDecisionDto } from '../../../../../../../libs/api-client/types.js';
 
 /**
  * Only remaining occurrence of the pre-P0.3 host-binding key: settings saved by an older UI.
@@ -65,7 +65,7 @@ readonly saved = signal(false);
 
 readonly currentDraft = computed(() => JSON.stringify({
         name: this.name(), owner: this.owner(), locale: this.locale(), tags: this.tags(), description: this.description(),
-        consent: this.consent(), events: this.events(), jevMode: this.jevMode(), jevAuto: this.jevAutoThreshold(), jevConfirm: this.jevConfirmThreshold(),
+        consent: this.jevAutoConsented() ? true : this.consent(), events: this.events(), jevMode: this.jevMode(), jevAuto: this.jevAutoThreshold(), jevConfirm: this.jevConfirmThreshold(),
         stack: { version: this.activeStackVersion(), status: this.stackStatus(), layers: this.stackLayers(), versions: this.stackVersions() },
         hosts: { profiles: this.hostProfiles(), developers: this.developers(), detected: this.formationHostIds(), plugins: this.plugins() },
     }));
@@ -83,16 +83,27 @@ protected readonly current = signal<ConsumerProfile | null>(null);
 
 readonly activeTab = signal('profile');
 
-readonly lastTab = 'observation';
+/**
+ * Finish = last required decision, and the last required decision is the evidence/governance boundary,
+ * not observation consent (which is an opt-in that can legitimately stay off). Tab order stays
+ * profile → … → boundaries → observation for discovery, while `lastTab` marks where provisioning ends.
+ */
+readonly lastTab = 'boundaries';
+
+/** Tabs ordered after the Finish anchor (currently Observation) still offer Finish, never a dead "Next →". */
+readonly isAfterLastTab = computed(() => {
+        const ids = this.tabs.map((tab) => tab.id);
+        return ids.indexOf(this.activeTab()) > ids.indexOf(this.lastTab);
+    });
 
 readonly tabs = [
         { id: 'profile', n: 1, label: 'Profile', hint: 'Identity & metadata' },
-        { id: 'stack', n: 2, label: 'Stack', hint: 'Policy & versions' },
+        { id: 'stack', n: 2, label: 'Stack', hint: 'Policy & versions · JEV' },
         { id: 'hosts', n: 3, label: 'Host Bindings', hint: 'Developer × host runtime' },
         { id: 'workers', n: 4, label: 'Agent Workers', hint: 'Agent identities & roles' },
         { id: 'knowledge', n: 5, label: 'Knowledge', hint: 'Knowledge & Artifact Governance' },
         { id: 'boundaries', n: 6, label: 'Boundaries', hint: 'Read / write / index policy' },
-        { id: 'observation', n: 7, label: 'Observatory', hint: 'Evidence & JEV' },
+        { id: 'observation', n: 7, label: 'Observation', hint: 'Consent & event scope' },
     ];
 
 readonly consumerId = this.route.snapshot.paramMap.get('id') || 'unknown';
@@ -116,6 +127,72 @@ readonly description = signal('');
 readonly jevMode = signal<'off' | 'shadow' | 'active'>('off');
 
 readonly jevConfidence = signal('0.9');
+
+/**
+ * Set only when `setJevMode` flipped consent on as a side effect. Excluded from the dirty baseline so the form
+ * does not claim "Unsaved changes" for a value the operator never typed; the pending JEV choice still shows,
+ * because JEV mode/thresholds are part of the same draft.
+ */
+private readonly jevAutoConsented = signal(false);
+
+/** Explicit consent write (toggle or hydrate) always wins and clears the auto-consent marker. */
+setConsent(value: boolean): void {
+        this.consent.set(value);
+        this.jevAutoConsented.set(false);
+    }
+
+/**
+ * JEV lives on the Stack tab (policy surface), so the Stack component drives the page draft through these
+ * setters instead of its own state. Keeping the signals on the page is what makes Save/dirty see JEV edges.
+ */
+setJevMode(mode: 'off' | 'shadow' | 'active'): void {
+        const consentWasOff = !this.consent();
+        this.jevMode.set(mode);
+        // Consent is the prerequisite of shadow/active; refuse to leave a draft that Save will reject.
+        if (mode !== 'off') this.consent.set(true);
+        this.jevAutoConsented.set(mode !== 'off' && consentWasOff);
+    }
+
+readonly jevAutoThreshold = signal('');
+
+readonly jevConfirmThreshold = signal('');
+
+setJevAutoThreshold(value: string): void {
+        this.jevAutoThreshold.set(value);
+    }
+
+setJevConfirmThreshold(value: string): void {
+        this.jevConfirmThreshold.set(value);
+    }
+
+setJevConfidence(value: string): void {
+        this.jevConfidence.set(value);
+    }
+
+/** JEV evaluate probe lives with the policy controls on the Stack tab. It reads the saved policy, not the draft. */
+readonly jevDecision = signal<JevDecisionDto | null>(null);
+
+readonly jevDecisionLoading = signal(false);
+
+readonly jevDecisionError = signal('');
+
+evaluateJev(): void {
+        const confidence = Number(this.jevConfidence());
+        if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) {
+            this.jevDecisionError.set('Confidence must be between 0 and 1.');
+            return;
+        }
+        this.jevDecisionLoading.set(true);
+        this.jevDecisionError.set('');
+        this.service.decideJev(this.consumerId, confidence)
+            .then((decision) => this.jevDecision.set(decision))
+            .catch((error: unknown) => {
+                const detail = (error as { detail?: unknown })?.detail;
+                const message = (error as { message?: unknown })?.message;
+                this.jevDecisionError.set(typeof detail === 'string' ? detail : typeof message === 'string' ? message : 'Could not evaluate JEV decision');
+            })
+            .finally(() => this.jevDecisionLoading.set(false));
+    }
 
 readonly legacyHarness = signal<LegacyHarnessReportDto | null>(null);
 
@@ -153,10 +230,6 @@ readonly migrationConflicts = computed(() => (this.migrationPreview()?.entries |
 readonly finishPrompt = signal(false);
 
 readonly finishing = signal(false);
-
-readonly jevAutoThreshold = signal('');
-
-readonly jevConfirmThreshold = signal('');
 
 readonly stackLayers = signal<StackLayer[]>(defaultStackLayers());
 
@@ -381,10 +454,12 @@ ngOnInit(): void {
             void this.router.navigate(['/consumers', id, 'plugins'], { replaceUrl: true });
             return;
         }
-        const tab = requestedTab === 'jira' ? 'knowledge' : requestedTab;
+        // Legacy deep link: `?tab=observatory` (the tab was renamed to `observation`) still resolves.
+        const tab = requestedTab === 'jira' ? 'knowledge' : requestedTab === 'observatory' ? 'observation' : requestedTab;
         if (tab && this.tabs.some((item) => item.id === tab)) this.activeTab.set(tab);
         this.route.queryParamMap.subscribe((params) => {
-            const next = params.get('tab');
+            const requested = params.get('tab');
+            const next = requested === 'observatory' ? 'observation' : requested;
             if (next && this.tabs.some((item) => item.id === next)) this.activeTab.set(next);
             const nextSection = params.get('section') || params.get('subtab');
             if (nextSection && ['overview', 'sources', 'contract', 'index', 'manifest'].includes(nextSection)) {

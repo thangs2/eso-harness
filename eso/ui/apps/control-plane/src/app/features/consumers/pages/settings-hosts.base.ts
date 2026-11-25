@@ -306,6 +306,9 @@ finish(): void {
 
 selectTab(id: string): void {
         this.activeTab.set(id);
+        // A save/validation error raised on one tab must not follow the operator to another tab.
+        this.error.set(null);
+        this.errorCode.set('');
         this.router.navigate([], {
             relativeTo: this.route,
             queryParams: { tab: id, section: id === 'knowledge' ? this.knowledgeSection() : null },
