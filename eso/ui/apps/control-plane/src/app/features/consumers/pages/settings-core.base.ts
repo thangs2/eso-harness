@@ -97,7 +97,9 @@ readonly tabs = [
 
 readonly consumerId = this.route.snapshot.paramMap.get('id') || 'unknown';
 
-readonly consumers = signal<{ id: string; name?: string }[]>([]);
+readonly consumers = signal<{ id: string; name?: string; status?: string; version?: number }[]>([]);
+
+readonly currentConsumer = computed(() => this.consumers().find((c) => c.id === this.consumerId) ?? { id: this.consumerId, name: this.name() || this.consumerId, status: 'ready' });
 
 protected readonly hydrated = signal(false);
 
@@ -399,7 +401,7 @@ ngOnInit(): void {
             if (requestedSection === 'manifest') this.selectedKnowledgeTopic.set('agent-manifests');
             if (requestedSection === 'sources') this.selectedKnowledgeTopic.set('knowledge-base');
         }
-        this.service.list().then((result) => this.consumers.set((result.items ?? []).map((item) => ({ id: item.id, name: item.name })))).catch(() => this.consumers.set([]));
+        this.service.list().then((result) => this.consumers.set((result.items ?? []).map((item) => ({ id: item.id, name: item.name, status: item.status, version: item.version })))).catch(() => this.consumers.set([]));
         Promise.all([
             this.service.get(id),
             this.service.getMcp(id).catch(() => ({ consumerId: id, root: '', sources: [], providers: [], warnings: [] })),

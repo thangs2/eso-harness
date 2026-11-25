@@ -209,6 +209,7 @@ process.exit(0);
 const INGEST_HOOK = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'hooks', 'eso-transcript-ingest.mjs'), 'utf8');
 const LAW_GATE_HOOK = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'hooks', 'eso-law-gate.mjs'), 'utf8');
 const MODE_ROUTER_HOOK = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'slp-mode-router.mjs'), 'utf8');
+const MODE_GUARD_HOOK = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'hooks', 'eso-mode-guard.mjs'), 'utf8');
 const ESO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
 function headers() {
@@ -272,6 +273,7 @@ function installHook(rootPath, host, token, runtimeKey, consumerId) {
     writeFileSync(join(hookDir, 'eso-transcript-ingest.mjs'), INGEST_HOOK, 'utf8');
     writeFileSync(join(hookDir, 'eso-law-gate.mjs'), LAW_GATE_HOOK, 'utf8');
     writeFileSync(join(hookDir, 'eso-mode-router.mjs'), MODE_ROUTER_HOOK, 'utf8');
+    writeFileSync(join(hookDir, 'eso-mode-guard.mjs'), MODE_GUARD_HOOK, 'utf8');
 
     const configFile = join(rootPath, '.harness', 'eso-host.json');
     const current = existsSync(configFile) ? readJson(configFile) : { baseUrl: BASE, consumer: '', hosts: {} };
@@ -306,6 +308,10 @@ function installHook(rootPath, host, token, runtimeKey, consumerId) {
         hooks['eso-law-gate'] = {
             PreToolUse: [{ matcher: '*', hooks: [{ type: 'command', command: lawGateCommand }] }],
         };
+        const modeGuardCommand = `bash -lc 'cd "\${PWD%/.agents}"; exec node .harness/hooks/eso-mode-guard.mjs --host agy'`;
+        hooks['eso-mode-guard'] = {
+            PreInvocation: [{ type: 'command', command: modeGuardCommand }],
+        };
     } else if (host === 'cursor') {
         hooks.version = hooks.version ?? 1;
         hooks.hooks = hooks.hooks || {};
@@ -314,6 +320,8 @@ function installHook(rootPath, host, token, runtimeKey, consumerId) {
         hooks.hooks = hooks.hooks || {};
         const entry = { hooks: [{ type: 'command', command }] };
         hooks.hooks.UserPromptSubmit = mergeList(hooks.hooks.UserPromptSubmit, [entry], (item) => JSON.stringify(item?.hooks?.[0]?.command || item));
+        const modeGuard = { hooks: [{ type: 'command', command: 'node .harness/hooks/eso-mode-guard.mjs --host dsh' }] };
+        hooks.hooks.UserPromptSubmit = mergeList(hooks.hooks.UserPromptSubmit, [modeGuard], (item) => JSON.stringify(item?.hooks?.[0]?.command || item));
     }
     writeJson(hookFile, hooks);
     const written = readJson(hookFile);

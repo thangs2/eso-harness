@@ -39,6 +39,49 @@ import { SettingsKnowledgeBase } from './settings-knowledge.base.js';
 import type { QuartetProfileType } from './settings-core.base.js';
 @Directive()
 export abstract class SettingsTailBase extends SettingsKnowledgeBase {
+    readonly switchingEnv = signal(false);
+    readonly isEsoEnv = computed(() => !this.legacyHarness()?.detected && this.migrationConflictCount() === 0 && this.migrationNewCount() === 0);
+
+    async switchToEsoEnv(): Promise<void> {
+        if (this.switchingEnv()) return;
+        this.switchingEnv.set(true);
+        this.migrationError.set('');
+        this.migrationNotice.set('');
+        this.legacyError.set('');
+        try {
+            if (this.migrationConflictCount() > 0) {
+                throw new Error('Resolve conflicts before switching to ESO environment.');
+            }
+            if (this.legacyHarness()?.detected) {
+                await this.service.archiveLegacyHarness(this.consumerId);
+                this.legacyHarness.set({ consumerId: this.consumerId, detected: false, entries: [], archivePath: null });
+            }
+            if (this.migrationNewCount() > 0) {
+                await this.service.applyHarnessMigration(this.consumerId);
+                this.migrationPreview.set(null);
+            }
+            const currentProfiles = this.hostProfiles();
+            const updatedProfiles = currentProfiles.map((hp) => ({
+                ...hp,
+                memorySource: 'eso-native',
+                codeGraphSource: 'eso-native',
+            }));
+            this.hostProfiles.set(updatedProfiles);
+            this.save();
+            await this.service.provision(this.consumerId);
+            await Promise.all([
+                this.service.getLegacyHarness(this.consumerId).then((r) => this.legacyHarness.set(r)).catch(() => {}),
+                this.service.previewHarnessMigration(this.consumerId).then((p) => this.migrationPreview.set(p)).catch(() => {}),
+            ]);
+            this.migrationNotice.set('Successfully switched to ESO Native environment! Schema provisioned and capabilities bound to ESO Native.');
+        } catch (err: unknown) {
+            const errorObj = err as { detail?: string; message?: string };
+            this.migrationError.set(errorObj?.detail || errorObj?.message || 'Could not switch to ESO environment');
+        } finally {
+            this.switchingEnv.set(false);
+        }
+    }
+
 openHosts(): void {
         void this.router.navigate(['/hosts']);
     }

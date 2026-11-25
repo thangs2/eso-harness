@@ -1,20 +1,67 @@
 <div class="settings-page">
             <header class="page-header">
-                <div>
+                <div class="page-header-title">
                     <p class="eyebrow">Consumer settings</p>
                     <h1>{{ name() || route.snapshot.paramMap.get('id') }}</h1>
                     <p class="subtitle">Define the canonical stack; bind host runtimes to developers and published stack versions.</p>
                 </div>
-                <mat-form-field appearance="outline" subscriptSizing="dynamic" density="-4" class="settings-consumer-picker">
-                    <mat-label>Switch consumer</mat-label>
-                    <mat-select [value]="consumerId" (selectionChange)="switchConsumer($event.value)" aria-label="Switch consumer">
-                        @for (consumer of consumers(); track consumer.id) {
-                            <mat-option [value]="consumer.id">{{ consumer.name || consumer.id }}</mat-option>
-                        }
-                    </mat-select>
-                </mat-form-field>
+                <div class="header-consumer-selector">
+                    <mat-form-field appearance="outline" subscriptSizing="dynamic" class="settings-consumer-picker">
+                        <mat-label>Active consumer</mat-label>
+                        <mat-select
+                            [value]="consumerId"
+                            (selectionChange)="switchConsumer($event.value)"
+                            aria-label="Switch active consumer"
+                            panelClass="consumer-picker-panel"
+                        >
+                            <mat-select-trigger>
+                                <div class="consumer-trigger-content">
+                                    <span class="consumer-status-indicator" [class.ready]="currentConsumer().status === 'ready'"></span>
+                                    <strong class="consumer-trigger-name">{{ currentConsumer().name || consumerId }}</strong>
+                                    <code class="consumer-trigger-id">{{ consumerId }}</code>
+                                </div>
+                            </mat-select-trigger>
+                            @for (consumer of consumers(); track consumer.id) {
+                                <mat-option [value]="consumer.id" class="consumer-option-item">
+                                    <div class="consumer-option-row">
+                                        <span class="consumer-status-indicator" [class.ready]="consumer.status === 'ready'"></span>
+                                        <div class="consumer-option-copy">
+                                            <span class="consumer-option-name">{{ consumer.name || consumer.id }}</span>
+                                            <code class="consumer-option-id">{{ consumer.id }}</code>
+                                        </div>
+                                        @if (consumer.status) {
+                                            <span class="consumer-option-badge" [class.ready]="consumer.status === 'ready'">{{ consumer.status }}</span>
+                                        }
+                                        @if (consumer.id === consumerId) {
+                                            <span class="consumer-active-check" aria-hidden="true">✓</span>
+                                        }
+                                    </div>
+                                </mat-option>
+                            }
+                        </mat-select>
+                    </mat-form-field>
+                </div>
             </header>
 
+
+            <section class="environment-status-bar" [class.eso-native]="isEsoEnv()" aria-label="Environment status">
+                <div class="env-badge">
+                    <span class="env-dot"></span>
+                    <strong>Environment: {{ isEsoEnv() ? 'ESO Native' : 'Legacy / Hybrid' }}</strong>
+                </div>
+                <div class="env-details">
+                    <span>Memory: <strong>ESO Native</strong> (agentmemory fallback)</span> ·
+                    <span>Code Graph: <strong>ESO Native</strong></span> ·
+                    <span>Doc Graph: <strong>Postgres ({{ consumerId }})</strong></span>
+                </div>
+                @if (!isEsoEnv()) {
+                    <div class="env-action">
+                        <button mat-flat-button color="primary" type="button" [disabled]="switchingEnv() || migrationConflictCount() > 0" (click)="switchToEsoEnv()">
+                            {{ switchingEnv() ? 'Switching…' : 'Switch to ESO Environment' }}
+                        </button>
+                    </div>
+                }
+            </section>
 
             @if (error(); as message) { <p class="form-error" role="alert">@if (errorCode()) { <strong>{{ errorCode() }}</strong> — }{{ message }}</p> }
             @if (saved()) { <p class="saved-banner" role="status">Settings saved.</p> }
@@ -76,6 +123,7 @@
                     <div class="migration-actions">
                         <button mat-stroked-button type="button" [disabled]="migrationLoading() || migrationApplying()" (click)="previewHarnessMigration()">{{ migrationLoading() ? 'Previewing…' : 'Refresh preview' }}</button>
                         <button mat-flat-button color="primary" type="button" [disabled]="migrationApplying() || migrationNewCount() === 0 || migrationConflictCount() > 0" (click)="applyHarnessMigration()">{{ migrationApplying() ? 'Migrating…' : (migrationConflictCount() > 0 ? 'Resolve conflicts first' : (migrationNewCount() > 0 ? 'Migrate ' + migrationNewCount() + ' new' : 'No new files to migrate')) }}</button>
+                        <button mat-flat-button color="primary" class="switch-eso-button" type="button" [disabled]="switchingEnv() || migrationConflictCount() > 0" (click)="switchToEsoEnv()">{{ switchingEnv() ? 'Switching…' : 'Switch to ESO Environment' }}</button>
                     </div>
                 </section>
             }
@@ -117,6 +165,7 @@
                         } @else {
                             <button mat-flat-button color="primary" type="button" [disabled]="legacyArchiving()" (click)="legacyArchiveConfirm.set(true)">Archive legacy</button>
                         }
+                        <button mat-flat-button color="primary" class="switch-eso-button" type="button" [disabled]="switchingEnv() || migrationConflictCount() > 0" (click)="switchToEsoEnv()">{{ switchingEnv() ? 'Switching…' : 'Switch to ESO Environment' }}</button>
                     </div>
                 </details>
             }

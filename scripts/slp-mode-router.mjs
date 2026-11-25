@@ -13,16 +13,55 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+/** Execution shape of an SLP run: isolated subagents (default) or a persistent swarm. */
+export const SWARM_SCOPE = new Set(['all', 'build', 'qc']);
+
+function parseSwarm(rest) {
+    const match = rest.match(/^\s*swarm(?:\s*=\s*([a-z-]+))?\b\s*([\s\S]*)$/i);
+    if (!match) return { swarm: null, rest };
+    const scope = String(match[1] || 'all').toLowerCase();
+    if (!SWARM_SCOPE.has(scope)) return { swarm: null, rest, swarmError: `swarm scope must be one of ${[...SWARM_SCOPE].join('|')}` };
+    return { swarm: scope, rest: String(match[2] || '') };
+}
+
+function parseSlpOnly(key, rest) {
+    const parsed = parseSwarm(rest);
+    if (parsed.swarmError) return { slp: true, task: '', key, swarm: null, error: parsed.swarmError };
+    return { slp: true, task: parsed.rest.trim(), key, swarm: parsed.swarm, error: null };
+}
+
 export function parseModePrompt(input) {
     const text = String(input ?? '').trim();
-    const match = text.match(/^(?:impl\s+(\S+)\s+slp\s+g\s+)?mode\s*=\s*([AB])\b\s*([\s\S]*)$/i);
-    if (!match) return { mode: 'A', slp: false, task: text, key: null, error: 'missing mode=A|B directive' };
-    const [, key = null, rawMode, rest] = match;
-    const task = String(rest || '').trim();
+    const match = text.match(/^mode\s*=\s*([AB])\b\s*(?:impl\s+(\S+)\s+slp\s+g\s+)?([\s\S]*)$/i);
+    if (!match) {
+        // `impl <KEY> slp g [swarm]` carries no mode: SLP runs on the host that received the prompt.
+        const slpOnly = text.match(/^impl\s+(\S+)\s+slp\s+g\s+([\s\S]*)$/i);
+        if (slpOnly) return { ...parseSlpOnly(slpOnly[1], String(slpOnly[2] || '')), mode: null };
+        const filtered = text.match(/^(?:impl\s+(\S+)\s+slp\s+g\s+)?(swarm(?:\s*=\s*[a-z-]+)?)\b\s*([\s\S]*)$/i);
+        if (filtered) {
+            const parsed = parseSwarm(filtered[2]);
+            const task = parsed.rest.trim();
+            return {
+                mode: null,
+                slp: Boolean(filtered[1]),
+                key: filtered[1] || null,
+                swarm: parsed.swarm,
+                task,
+                error: parsed.swarmError || (task ? null : 'directive needs a task'),
+            };
+        }
+        return { mode: 'A', slp: false, task: text, key: null, swarm: null, error: 'missing mode=A|B directive' };
+    }
+    const [, rawMode, implKey = null, rawRest] = match;
+    const parsed = parseSwarm(String(rawRest || ''));
+    const task = parsed.rest.trim();
     const mode = rawMode.toUpperCase();
-    if (!task) return { mode, slp: Boolean(key), key: key || null, task: '', error: 'mode directive needs a task' };
-    if (/\bto\s*=/i.test(task)) return { mode, slp: Boolean(key), key: key || null, task, error: '`to=` is not allowed; target comes from worker placement' };
-    return { mode, slp: Boolean(key), key: key || null, task, error: null };
+    const base = { mode, slp: Boolean(implKey), key: implKey || null, swarm: parsed.swarm };
+    if (parsed.swarmError) return { ...base, task, error: parsed.swarmError };
+    if (parsed.swarm && mode === 'B') return { ...base, task, error: 'swarm + mode=B is not supported; swarm workers must stay on the local host' };
+    if (!task) return { ...base, task: '', error: 'mode directive needs a task' };
+    if (/\bto\s*=/i.test(task)) return { ...base, task, error: '`to=` is not allowed; target comes from worker placement' };
+    return { ...base, task, error: null };
 }
 
 export function chooseTarget({ mode, localRuntime, placement }) {
@@ -108,6 +147,8 @@ function runHostRuntime(esoRoot, args) {
 export async function routeMode(input, options = {}) {
     const parsed = parseModePrompt(input);
     if (parsed.error) throw new Error(parsed.error);
+    if (parsed.slp && parsed.mode) throw new Error('SLP + mode is not wired yet; use mode=A|B standalone or run SLP separately');
+    if (parsed.slp && !parsed.mode) throw new Error('SLP-only prompts are executed by the SLP skill, not the mode router');
     const config = readConfig();
     if (!config.consumer) throw new Error('missing consumer in .harness/eso-host.json');
     if (!config.esoRoot) throw new Error('missing esoRoot in .harness/eso-host.json (or ESO_ROOT)');

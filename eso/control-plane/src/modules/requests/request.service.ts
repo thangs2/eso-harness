@@ -831,6 +831,10 @@ export class RequestService {
             return [];
         }).filter(Boolean))];
         const lawState = lawRefs.length ? 'decision' : lawLoaded.length ? 'loaded' : observedTools.length ? 'missing' : 'not-exercised';
+        const shapeMarkers = events
+            .map((event) => String(event.evidence['executionShape'] || event.evidence['subagentKind'] || ''))
+            .filter((value) => value === 'swarm' || value === 'subagent');
+        const executionShape = shapeMarkers.includes('swarm') ? 'swarm' : shapeMarkers.includes('subagent') ? 'subagent' : 'not reported';
         const decisions = events.filter((event) => event.event === 'decision.recorded');
         const decision = decisions[decisions.length - 1];
         const winner = typeof decision?.evidence['winner'] === 'string' ? String(decision.evidence['winner']) : null;
@@ -933,15 +937,18 @@ export class RequestService {
                 // SLP replaces the legacy brain tier (flash/pro): who does what is a role assignment,
                 // not a model-routing decision. The stage reports the assigned roles, not a tier claim.
                 id: 'slp', stepNumber: 5, title: 'SLP Orchestration',
-                sub: `${roleNames.length} role(s) · ${observedWorkers.length}/${detail.pipeline.length} worker(s)`,
+                sub: `${roleNames.length} role(s) · ${observedWorkers.length}/${detail.pipeline.length} worker(s) · ${executionShape}`,
                 status: roleNames.length >= 3 ? 'ok' : 'info', tab: 'telemetry',
                 details: [
                     { label: 'Roles', value: roleNames.length ? roleNames.slice(0, 3).join(', ') : 'not captured', detail: 'config worker.role assignment' },
-                    { label: 'Workers', value: `${observedWorkers.length}/${detail.pipeline.length} observed`, detail: `${detail.events.length} event(s) in trace` },
                     {
-                        label: 'Lead',
-                        value: detail.context['role'] ? String(detail.context['role']) : 'not captured',
-                        detail: detail.context['workerId'] ? String(detail.context['workerId']) : 'no worker context',
+                        label: 'Workers',
+                        value: `${observedWorkers.length}/${detail.pipeline.length} observed · ${executionShape}`,
+                        detail: executionShape === 'swarm'
+                            ? `${detail.events.length} event(s) · swarm workers (post_message / read_board / swarm_wait); Lead owns the blackboard`
+                            : executionShape === 'subagent'
+                                ? `${detail.events.length} event(s) · isolated subagent invocations`
+                                : `${detail.events.length} event(s) · no execution-shape marker on the trace`,
                     },
                 ],
             },

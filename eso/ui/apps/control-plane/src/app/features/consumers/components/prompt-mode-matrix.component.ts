@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
 interface MatrixRow {
     host: string;
     prompt: string;
-    mode: 'A' | 'B' | 'SLP' | '—';
+    mode: 'A' | 'B' | 'SLP' | 'SWARM' | '—';
     protocol: string;
     target: string;
     tone: 'ok' | 'warn' | 'bad' | 'info';
@@ -76,6 +76,10 @@ interface MatrixRow {
                         <strong>SLP + mode</strong>
                         <p>Not wired: the router rejects <code>impl … slp g mode=…</code> instead of dispatching wrongly.</p>
                     </div>
+                    <div>
+                        <strong>Swarm</strong>
+                        <p>AGY-only execution shape for SLP: <code>impl K slp g swarm</code> or <code>swarm=build|qc</code>. One shape per run; never with Mode B.</p>
+                    </div>
                 </div>
 
                 <p class="pm-footnote">
@@ -110,12 +114,13 @@ interface MatrixRow {
         .pm-mode[data-mode='A'] { border-color: color-mix(in srgb, #38bdf8 50%, var(--line)); color: #7dd3fc; }
         .pm-mode[data-mode='B'] { border-color: color-mix(in srgb, #a78bfa 50%, var(--line)); color: #c4b5fd; }
         .pm-mode[data-mode='SLP'] { border-color: color-mix(in srgb, #34d399 45%, var(--line)); color: #6ee7b7; }
+        .pm-mode[data-mode='SWARM'] { border-color: color-mix(in srgb, #c084fc 50%, var(--line)); color: #d8b4fe; }
         .pm-chip { display: inline-flex; align-items: center; padding: 1px var(--space-2); border: 1px solid var(--line); border-radius: 999px; background: var(--surface-2); font-size: .6875rem; font-weight: 650; white-space: nowrap; }
         .pm-chip.ok { border-color: color-mix(in srgb, #34d399 45%, var(--line)); color: #6ee7b7; }
         .pm-chip.warn { border-color: color-mix(in srgb, #fbbf24 45%, var(--line)); color: #fcd34d; }
         .pm-chip.info { border-color: color-mix(in srgb, #38bdf8 45%, var(--line)); color: #7dd3fc; }
         .pm-chip.bad { border-color: color-mix(in srgb, #f87171 45%, var(--line)); color: #fca5a5; }
-        .pm-notes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); }
+        .pm-notes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
         .pm-notes > div { display: grid; gap: var(--space-1); padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface-2); }
         .pm-notes strong { color: var(--ink); font-size: var(--text-sm); }
         .pm-notes p { margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.5; }
@@ -136,7 +141,11 @@ export class PromptModeMatrixComponent {
         { host: 'AGY', prompt: 'mode=B review X', mode: 'B', protocol: 'inject → router → host-runtime dispatch', target: 'dsh:main-chat', tone: 'ok' },
         { host: 'DSH', prompt: 'mode=B review X', mode: 'B', protocol: 'inject → router → dispatch', target: 'agy:agy', tone: 'ok' },
         { host: 'Cursor', prompt: 'mode=B review X', mode: 'B', protocol: 'skill → router → dispatch', target: 'agy:agy', tone: 'warn' },
-        { host: 'any', prompt: 'impl ESO-123 slp g', mode: 'SLP', protocol: 'SLP skill → subagents', target: 'host hiện tại', tone: 'info' },
+        { host: 'any', prompt: 'impl ESO-123 slp g', mode: 'SLP', protocol: 'SLP skill → subagents (default)', target: 'host hiện tại', tone: 'info' },
+        { host: 'AGY', prompt: 'impl ESO-123 slp g swarm', mode: 'SWARM', protocol: 'inject → SLP skill → swarm workers + board', target: 'AGY local', tone: 'ok' },
+        { host: 'AGY', prompt: 'impl ESO-123 slp g swarm=qc', mode: 'SWARM', protocol: 'inject → SLP skill → swarm chỉ phase qc', target: 'AGY local', tone: 'ok' },
+        { host: 'DSH', prompt: 'impl ESO-123 slp g swarm', mode: 'SWARM', protocol: 'guard blocks (ESO_SWARM_SUPPORTED=1 to opt in)', target: '—', tone: 'bad' },
+        { host: 'any', prompt: 'mode=B impl ESO-123 slp g swarm', mode: 'SWARM', protocol: 'router rejects (swarm stays local)', target: '—', tone: 'bad' },
         { host: 'any', prompt: 'impl ESO-123 slp g mode=A|B', mode: 'SLP', protocol: 'router rejects (not wired)', target: '—', tone: 'bad' },
         { host: 'any', prompt: 'mode=B … to=dsh:main-chat', mode: 'B', protocol: 'router rejects (target from placement)', target: '—', tone: 'bad' },
         { host: 'any', prompt: 'mode=A (no task)', mode: 'A', protocol: 'router rejects (task required)', target: '—', tone: 'bad' },

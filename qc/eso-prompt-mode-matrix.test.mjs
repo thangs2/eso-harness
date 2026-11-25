@@ -17,6 +17,9 @@ test('matrix covers host × prompt × mode × protocol', () => {
   assert.match(UI, /mode=A review X/);
   assert.match(UI, /mode=B review X/);
   assert.match(UI, /to=dsh:main-chat/);
+  assert.match(UI, /impl ESO-123 slp g swarm/);
+  assert.match(UI, /mode: 'SWARM'/);
+  assert.match(UI, /swarm=qc/);
 });
 
 test('status tones distinguish hard injector, skill-followed and rejected', () => {
@@ -30,6 +33,12 @@ test('documented matrix matches the rendered contract', () => {
   assert.match(DOC, /\| 4 \| AGY \| `mode=A review X`/);
   assert.match(DOC, /### 9\.1 Protocol matrix/);
   assert.match(DOC, /\| \*\*Cursor\*\* \| `beforeSubmitPrompt` \|/);
+});
+
+test('swarm rules are stated in the panel', () => {
+  assert.match(UI, /AGY-only execution shape for SLP/);
+  assert.match(UI, /One shape per run; never with Mode B/);
+  assert.match(UI, /ESO_SWARM_SUPPORTED=1/);
 });
 
 test('matrix explains that target comes from placement, never the prompt', () => {

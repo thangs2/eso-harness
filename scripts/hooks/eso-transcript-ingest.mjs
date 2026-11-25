@@ -178,6 +178,8 @@ for (const brainRoot of brainRoots) {
                     conversationId: entry.name,
                     parentConversationId,
                     subagentKind: isSwarm ? 'swarm' : isSubagent ? 'subagent' : 'unknown',
+                    executionShape: isSwarm ? 'swarm' : isSubagent ? 'subagent' : 'unknown',
+                    swarmScope: isSwarm ? (modeArg === 'swarm' && argValue('--swarm-scope') ? argValue('--swarm-scope') : 'all') : null,
                     boundaryIndex: 0,
                 },
             };

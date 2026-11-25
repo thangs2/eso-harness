@@ -3,14 +3,15 @@ import assert from 'node:assert/strict';
 import { parseModePrompt, chooseTarget } from '../scripts/slp-mode-router.mjs';
 
 test('mode=A|B is a standalone prompt directive', () => {
-  assert.deepEqual(parseModePrompt('mode=A review file X'), { mode: 'A', slp: false, task: 'review file X', key: null, error: null });
-  assert.deepEqual(parseModePrompt('mode=B review file X'), { mode: 'B', slp: false, task: 'review file X', key: null, error: null });
+  assert.deepEqual(parseModePrompt('mode=A review file X'), { mode: 'A', slp: false, task: 'review file X', key: null, swarm: null, error: null });
+  assert.deepEqual(parseModePrompt('mode=B review file X'), { mode: 'B', slp: false, task: 'review file X', key: null, swarm: null, error: null });
 });
 
-test('SLP is optional and mode still parses', () => {
-  const parsed = parseModePrompt('impl ESO-123 slp g mode=B run the pack');
+test('SLP with mode keeps the mode and the ticket key', () => {
+  const parsed = parseModePrompt('mode=B impl ESO-123 slp g run the pack');
   assert.equal(parsed.mode, 'B');
   assert.equal(parsed.slp, true);
+  assert.equal(parsed.key, 'ESO-123');
   assert.equal(parsed.task, 'run the pack');
 });
 

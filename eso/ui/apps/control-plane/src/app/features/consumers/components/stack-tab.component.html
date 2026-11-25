@@ -1,6 +1,7 @@
 <section class="tab-panel" role="tabpanel">
                     <div class="stack-summary">
                         <div><span>Stack version</span><strong>v{{ vm().activeStackVersion() }} · {{ vm().stackStatus() }}</strong></div>
+                        <div><span>Environment</span><strong [class.env-eso]="vm().isEsoEnv()">{{ vm().isEsoEnv() ? 'ESO Native' : 'Legacy / Hybrid' }}</strong></div>
                         <div><span>Layers</span><strong>{{ vm().enabledLayerCount() }} / {{ vm().stackLayers().length }} active</strong></div>
                         <div><span>Host bindings</span><strong>{{ vm().hostProfiles().length }}</strong></div>
                     </div>

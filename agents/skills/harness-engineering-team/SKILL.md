@@ -11,6 +11,8 @@ description: Runs one eso-harness ticket through SLP — scout, plan, disjoint s
 Operator shorthand: `impl <KEY> slp g` — implement the ticket through SLP with the guardrails in `core.slp.mdc` §4.1
 (scope · status · contract · evidence).
 
+Execution shape (optional): add `swarm` or `swarm=build|qc` — see §5.1. Default is isolated subagents.
+
 Workers: `agents/subagents/*-runtime.md` (**7**) — each host receives the generated copy under `<tree>/agents/`. Blackboard DAG:
 workers speak only to the Lead (Antigravity: `invoke_subagent`).
 
@@ -68,6 +70,24 @@ without asking again.
 8. **Audit** — spawn `audit` on the diff. `AUDIT_FAIL` ⇒ `fixbug` ↺ step 6. **3** rounds ⇒ **S-GATE 2**.
 9. **Human In Review** — Lead writes comment + label + rollup. **No** `Done`: that is S's signature.
 10. **QC** — when the operator asks: spawn `qc` (scenario results in response; temporary log `/tmp/slp/qc/`). **S-GATE 3**: S signs `Done`.
+
+## 5.1 Execution shape — subagent (default) vs swarm
+
+| Shape | Prompt | When | Constraint |
+|---|---|---|---|
+| `subagent` | `impl <KEY> slp g` | default; any host | isolated children, results returned per worker |
+| `swarm` | `impl <KEY> slp g swarm` | AGY only; long parallel build/qc fan-out | persistent workers, shared board |
+| `swarm=build` / `swarm=qc` | `impl <KEY> slp g swarm=qc` | only that phase fans out | other phases stay subagents |
+
+Rules for swarm:
+
+1. **AGY only.** On another host the router blocks the prompt; do not silently fall back.
+2. **One shape per run.** Never mix swarm and subagent in the same turn.
+3. **Lead owns the board.** Workers post to the Lead (`post_message` → `read_board`); no worker-to-worker authority.
+4. **Close before answering.** Lead MUST `swarm_wait` until every swarm worker finishes; a worker alive after the answer is
+   an unclosed run.
+5. **No Mode B.** `mode=B … slp g swarm` is rejected: persistent workers cross the trace boundary.
+6. **Evidence.** Observations must carry `executionShape` (`swarm` | `subagent`) so the trace shows how SLP ran.
 
 ## 6. `audit` rubric (summary — details in rule §6)
 
