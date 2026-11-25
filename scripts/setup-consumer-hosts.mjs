@@ -208,6 +208,8 @@ process.exit(0);
 
 const INGEST_HOOK = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'hooks', 'eso-transcript-ingest.mjs'), 'utf8');
 const LAW_GATE_HOOK = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'hooks', 'eso-law-gate.mjs'), 'utf8');
+const MODE_ROUTER_HOOK = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'slp-mode-router.mjs'), 'utf8');
+const ESO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 
 function headers() {
     return { authorization: AUTH_HEADER, 'content-type': 'application/json' };
@@ -269,11 +271,13 @@ function installHook(rootPath, host, token, runtimeKey, consumerId) {
     writeFileSync(join(hookDir, 'eso-observe.mjs'), OBSERVE_HOOK, 'utf8');
     writeFileSync(join(hookDir, 'eso-transcript-ingest.mjs'), INGEST_HOOK, 'utf8');
     writeFileSync(join(hookDir, 'eso-law-gate.mjs'), LAW_GATE_HOOK, 'utf8');
+    writeFileSync(join(hookDir, 'eso-mode-router.mjs'), MODE_ROUTER_HOOK, 'utf8');
 
     const configFile = join(rootPath, '.harness', 'eso-host.json');
     const current = existsSync(configFile) ? readJson(configFile) : { baseUrl: BASE, consumer: '', hosts: {} };
     current.baseUrl = BASE;
     current.consumer = consumerId;
+    current.esoRoot = ESO_ROOT;
     current.hosts = current.hosts || {};
     current.hosts[host] = { hostId: host, runtimeKey, token };
     writeJson(configFile, current);
