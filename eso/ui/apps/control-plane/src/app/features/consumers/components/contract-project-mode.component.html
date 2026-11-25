@@ -1,0 +1,60 @@
+<section class="contract-card" [class.active]="active()" (click)="selectTopic.emit()">
+    <header class="card-head">
+        <div class="head-copy">
+            <h3>Project mode</h3>
+            <p>Choose whether this consumer follows an SDLC artifact contract.</p>
+        </div>
+        <span class="scope-pill" [class.muted]="!sdlcEnabled()">
+            {{ sdlcEnabled() ? 'SDLC' : 'Lightweight' }}
+        </span>
+    </header>
+
+    <div class="project-mode-grid" (click)="$event.stopPropagation()">
+        <div class="mode-item">
+            <span class="item-label">Standard</span>
+            <mat-slide-toggle
+                [ngModel]="sdlcEnabled()"
+                (ngModelChange)="sdlcChange.emit($event)">
+                Apply SDLC
+            </mat-slide-toggle>
+            <small>{{ sdlcEnabled() ? 'Artifact contract enforced' : 'Lightweight project' }}</small>
+        </div>
+
+        <div class="mode-item" [class.item-disabled]="!sdlcEnabled()">
+            <span class="item-label">Pipeline</span>
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Preset</mat-label>
+                <mat-select
+                    [ngModel]="pipeline()"
+                    [disabled]="!sdlcEnabled()"
+                    (ngModelChange)="pipelineChange.emit($event)">
+                    @for (opt of pipelineOptions(); track opt.id) {
+                        <mat-option [value]="opt.id">{{ opt.label }}</mat-option>
+                    }
+                </mat-select>
+            </mat-form-field>
+            <small class="hint-text">{{ pipelineHint() }}</small>
+        </div>
+
+        <div class="mode-item" [class.item-disabled]="!sdlcEnabled()">
+            <span class="item-label">Change management</span>
+            <mat-checkbox
+                [checked]="crProcess()"
+                [disabled]="!sdlcEnabled()"
+                (change)="crProcessChange.emit($event.checked)">
+                CR process
+            </mat-checkbox>
+            <small>Reopen: S7 (Req) · S8 (API) · S12 (Packet) · S14 (Code). Authority never reverses.</small>
+        </div>
+    </div>
+
+    <footer class="card-footer">
+        <p class="contract-note">
+            @if (sdlcEnabled()) {
+                <span>SDLC artifact contract applies. Root: <code>sdlc/</code> (managed artifacts).</span>
+            } @else {
+                <span>No <code>sdlc/</code> folder. Knowledge base still indexes README, docs, and decisions.</span>
+            }
+        </p>
+    </footer>
+</section>

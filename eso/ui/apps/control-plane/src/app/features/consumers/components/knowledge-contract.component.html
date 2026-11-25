@@ -1,0 +1,65 @@
+<div class="contract-layout">
+    <div class="contract-main">
+        <eso-contract-project-mode
+            [sdlcEnabled]="vm().sdlcEnabled()"
+            [pipeline]="vm().sdlcPipeline()"
+            [pipelineOptions]="vm().pipelineOptions"
+            [pipelineHint]="vm().pipelineHint()"
+            [crProcess]="vm().crProcess()"
+            [active]="vm().selectedKnowledgeTopic() === 'pipeline'"
+            (sdlcChange)="vm().sdlcEnabled.set($event)"
+            (pipelineChange)="vm().sdlcPipeline.set($event)"
+            (crProcessChange)="vm().crProcess.set($event)"
+            (selectTopic)="vm().selectKnowledgeTopic('pipeline')"
+        />
+
+        <eso-contract-governance
+            [sdlcEnabled]="vm().sdlcEnabled()"
+            [selectedTopic]="vm().selectedKnowledgeTopic()"
+            [documentStatusRequired]="vm().documentStatusRequired()"
+            [openRegisterRequired]="vm().openRegisterRequired()"
+            [crossCheckRequired]="vm().crossCheckRequired()"
+            [buildEnforcementRequired]="vm().buildEnforcementRequired()"
+            [preflightRequired]="vm().preflightRequired()"
+            [goNoGoRequired]="vm().goNoGoRequired()"
+            [pipelineContractRequired]="vm().pipelineContractRequired()"
+            (documentStatusChange)="vm().documentStatusRequired.set($event)"
+            (openRegisterChange)="vm().openRegisterRequired.set($event)"
+            (crossCheckChange)="vm().crossCheckRequired.set($event)"
+            (buildEnforcementChange)="vm().buildEnforcementRequired.set($event)"
+            (preflightChange)="vm().preflightRequired.set($event)"
+            (goNoGoChange)="vm().goNoGoRequired.set($event)"
+            (pipelineContractChange)="vm().pipelineContractRequired.set($event)"
+            (topicSelect)="vm().selectKnowledgeTopic($event)"
+        />
+
+        <eso-contract-spectrum
+            [profile]="vm().quartetProfile()"
+            [types]="vm().quartetTypes()"
+            [active]="vm().selectedKnowledgeTopic() === 'quartet'"
+            (profileChange)="vm().quartetProfile.set($event)"
+            (selectTopic)="vm().selectKnowledgeTopic('quartet')"
+        />
+    </div>
+
+    <div class="contract-aside">
+        <eso-contract-detail
+            [selectedTopic]="vm().selectedKnowledgeTopic()"
+            [detail]="vm().knowledgeDetail()"
+            [trace]="vm().knowledgeTrace()"
+            [pipelineGroups]="vm().pipelineGroups()"
+            [crossCheckGroups]="vm().crossCheckGroups()"
+            [dorConditions]="vm().dorConditions"
+            [dodConditions]="vm().dodConditions"
+            (openDiagram)="vm().openDiagram.set($event)"
+        />
+    </div>
+</div>
+
+@if (vm().openDiagram()) {
+    <eso-contract-diagram-lightbox
+        [title]="vm().diagramTitle()"
+        [src]="vm().diagramSrc()"
+        (close)="vm().openDiagram.set(null)"
+    />
+}

@@ -6,13 +6,24 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
-import { KnowledgeOverviewComponent } from '../components/knowledge-overview.component.js';
+import { KnowledgeContractComponent } from './knowledge-contract.component.js';
+import { KnowledgeOverviewComponent } from './knowledge-overview.component.js';
 import type { ConsumerSettingsPage } from '../pages/consumer-settings.page.js';
 
 @Component({
     selector: 'eso-knowledge-tab',
     standalone: true,
-    imports: [FormsModule, MatButtonModule, MatCheckboxModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatSlideToggleModule, KnowledgeOverviewComponent],
+    imports: [
+        FormsModule,
+        MatButtonModule,
+        MatCheckboxModule,
+        MatFormFieldModule,
+        MatInputModule,
+        MatSelectModule,
+        MatSlideToggleModule,
+        KnowledgeOverviewComponent,
+        KnowledgeContractComponent,
+    ],
     templateUrl: './knowledge-tab.component.html',
     encapsulation: ViewEncapsulation.None,
     changeDetection: ChangeDetectionStrategy.OnPush,

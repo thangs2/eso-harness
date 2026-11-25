@@ -1,0 +1,117 @@
+<section class="contract-card">
+    <header class="card-head">
+        <div class="head-copy">
+            <h3>Governance</h3>
+            <p>What must be true before work moves forward.</p>
+        </div>
+        <span class="scope-pill" [class.muted]="!sdlcEnabled()">
+            {{ sdlcEnabled() ? 'enforced' : 'off' }}
+        </span>
+    </header>
+
+    <div class="governance-list">
+        <div
+            class="gov-row"
+            [class.active]="isTopicActive('document-status')"
+            (click)="topicSelect.emit('document-status')">
+            <mat-checkbox
+                [checked]="documentStatusRequired()"
+                [disabled]="!sdlcEnabled()"
+                (click)="$event.stopPropagation()"
+                (change)="documentStatusChange.emit($event.checked)">
+                Document status register
+            </mat-checkbox>
+            <small class="gov-hint">exists · conforms · connected</small>
+        </div>
+
+        <div
+            class="gov-row"
+            [class.active]="isTopicActive('open-register')"
+            (click)="topicSelect.emit('open-register')">
+            <mat-checkbox
+                [checked]="openRegisterRequired()"
+                [disabled]="!sdlcEnabled()"
+                (click)="$event.stopPropagation()"
+                (change)="openRegisterChange.emit($event.checked)">
+                OPEN register
+            </mat-checkbox>
+            <small class="gov-hint">single source · decision path</small>
+        </div>
+
+        <div
+            class="gov-row"
+            [class.active]="isTopicActive('cross-check')"
+            (click)="topicSelect.emit('cross-check')">
+            <mat-checkbox
+                [checked]="crossCheckRequired()"
+                [disabled]="!sdlcEnabled()"
+                (click)="$event.stopPropagation()"
+                (change)="crossCheckChange.emit($event.checked)">
+                Cross-check catalogue
+            </mat-checkbox>
+            <small class="gov-hint">CHK1 · X1…X42 · 47 quantitative checks</small>
+        </div>
+
+        <div
+            class="gov-row"
+            [class.active]="isTopicActive('build-enforcement')"
+            (click)="topicSelect.emit('build-enforcement')">
+            <mat-checkbox
+                [checked]="buildEnforcementRequired()"
+                [disabled]="!sdlcEnabled()"
+                (click)="$event.stopPropagation()"
+                (change)="buildEnforcementChange.emit($event.checked)">
+                Build enforcement
+            </mat-checkbox>
+            <small class="gov-hint">E1…E10 · READY packets only</small>
+        </div>
+
+        <div
+            class="gov-row"
+            [class.active]="isTopicActive('preflight')"
+            (click)="topicSelect.emit('preflight')">
+            <mat-checkbox
+                [checked]="preflightRequired()"
+                [disabled]="!sdlcEnabled()"
+                (click)="$event.stopPropagation()"
+                (change)="preflightChange.emit($event.checked)">
+                Preflight before slice
+            </mat-checkbox>
+            <small class="gov-hint">CHK3 · DoR 8/8 pre-code + X3 1:1</small>
+        </div>
+
+        <div
+            class="gov-row"
+            [class.active]="isTopicActive('go-no-go')"
+            (click)="topicSelect.emit('go-no-go')">
+            <mat-checkbox
+                [checked]="goNoGoRequired()"
+                [disabled]="!sdlcEnabled()"
+                (click)="$event.stopPropagation()"
+                (change)="goNoGoChange.emit($event.checked)">
+                Go / No-Go before increment
+            </mat-checkbox>
+            <small class="gov-hint">CHK2 · Docs Ready + Packets</small>
+        </div>
+
+        <div
+            class="gov-row"
+            [class.active]="isTopicActive('pipeline-contract')"
+            (click)="topicSelect.emit('pipeline-contract')">
+            <mat-checkbox
+                [checked]="pipelineContractRequired()"
+                [disabled]="!sdlcEnabled()"
+                (click)="$event.stopPropagation()"
+                (change)="pipelineContractChange.emit($event.checked)">
+                Pipeline contract gates
+            </mat-checkbox>
+            <small class="gov-hint">S1–S17 · G1–G16 · CHK1-3</small>
+        </div>
+    </div>
+
+    <footer class="card-footer">
+        <p class="contract-note">
+            Lifecycle: <code>raw → proposed → approved → retired</code>. Gate hierarchy: <code>REQ ∩ AC ∩ SCN ∩ IF ∩ DATA + BIP/FIP</code>.
+        </p>
+    </footer>
+</section>

@@ -1,0 +1,172 @@
+<aside class="detail-panel" aria-live="polite">
+    @if (detail(); as d) {
+        <header class="detail-head">
+            <span class="eyebrow">{{ d.eyebrow }}</span>
+            <h3 class="detail-title">{{ d.title }}</h3>
+            <p class="detail-desc">{{ d.description }}</p>
+        </header>
+
+        <section class="detail-card">
+            <h4 class="card-title">Trace</h4>
+            <dl class="trace-grid">
+                @for (item of trace(); track item.label) {
+                    <div class="trace-item">
+                        <dt>{{ item.label }}</dt>
+                        <dd>{{ item.value }}</dd>
+                    </div>
+                }
+            </dl>
+        </section>
+
+        @if (selectedTopic() === 'pipeline') {
+            <section class="detail-card">
+                <h4 class="card-title">Pipeline flow · S1…S17</h4>
+                <div class="pipeline-flow">
+                    @for (group of pipelineGroups(); track group.id) {
+                        <div class="pipeline-group">
+                            <div class="group-header">
+                                <span class="group-id">{{ group.id }}</span>
+                                <strong class="group-title">{{ group.title }}</strong>
+                            </div>
+                            <div class="stages-list">
+                                @for (stage of group.stages; track stage.id) {
+                                    <div class="stage-row">
+                                        <b class="stage-id">{{ stage.id }}</b>
+                                        <span class="role-badge" [attr.data-role]="stage.role">{{ stage.role }}</span>
+                                        <div class="stage-body">
+                                            <span class="stage-label">{{ stage.label }}</span>
+                                            <small class="stage-folder">{{ stage.artifact }}</small>
+                                        </div>
+                                        <em class="gate-tag">{{ stage.gate }}</em>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+                <p class="section-note">Dashed CR edges reopen S7 / S8 / S12 / S14; gates G1–G16 are document conditions.</p>
+            </section>
+
+            <section class="detail-card">
+                <h4 class="card-title">Inspection checkpoints · CHK1 · CHK3 · CHK2</h4>
+                <div class="checkpoint-flow">
+                    <div class="checkpoint-card">
+                        <div class="checkpoint-header">
+                            <strong>CHK1 · Requirements cross-checks</strong>
+                            <span class="checkpoint-timing">After S7 (BA · PO)</span>
+                        </div>
+                        <p>Cross-checks <code>X1, X2, X4–X7, X16–X20</code>. Traceability & format consistency across Vision, Objectives, BRD, PRD, FRD, SRS, US/AC before tech phase.</p>
+                    </div>
+                    <div class="checkpoint-card">
+                        <div class="checkpoint-header">
+                            <strong>CHK3 · Pre-flight DoR</strong>
+                            <span class="checkpoint-timing">After S13 (Per slice)</span>
+                        </div>
+                        <p>Pre-flight DoR 8/8 pre-code stages (0–7) + <code>X3</code> (1:1 AC ↔ SCN) + Work packet §9 READY. Must pass before a slice enters S14 implementation.</p>
+                    </div>
+                    <div class="checkpoint-card">
+                        <div class="checkpoint-header">
+                            <strong>CHK2 · Go / No-Go dashboard</strong>
+                            <span class="checkpoint-timing">Before S14 (Increment)</span>
+                        </div>
+                        <p><code>Docs Ready</code> (REQ ∩ US/AC ∩ SCN ∩ IF ∩ DATA + BIP/FIP) + <code>X8, X8a, X9, X10, X21, X22, X34–X36</code>. Gate for epic implementation.</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="detail-card">
+                <h4 class="card-title">Definition of Ready / Done</h4>
+                <div class="definition-grid">
+                    <div class="definition-card">
+                        <strong>DoR</strong>
+                        <small>Allowed to start?</small>
+                        <ul>
+                            @for (cond of dorConditions(); track cond) {
+                                <li>{{ cond }}</li>
+                            }
+                        </ul>
+                        <em>Fail → Backlog + needs-dor</em>
+                    </div>
+                    <div class="definition-card">
+                        <strong>DoD</strong>
+                        <small>Done?</small>
+                        <ul>
+                            @for (cond of dodConditions(); track cond) {
+                                <li>{{ cond }}</li>
+                            }
+                        </ul>
+                        <em>Fail → remains In Progress</em>
+                    </div>
+                </div>
+                <p class="section-note">DoR applies to Story and Task only. Epic is a container; Subtask inherits from parent; Bug must be reproducible. DoR is a gate, not a Jira status.</p>
+            </section>
+
+            <section class="detail-card">
+                <h4 class="card-title">Diagrams</h4>
+                <div class="diagram-grid">
+                    <button type="button" class="diagram-card" (click)="openDiagram.emit('main')">
+                        <img src="assets/diagrams/01.main-pipeline.png" alt="Main SDLC pipeline">
+                        <div class="diagram-caption">
+                            <strong>Main pipeline</strong>
+                            <small>17 stages · 16 gates</small>
+                        </div>
+                    </button>
+                    <button type="button" class="diagram-card" (click)="openDiagram.emit('cr')">
+                        <img src="assets/diagrams/02.cr-pipeline.png" alt="CR pipeline">
+                        <div class="diagram-caption">
+                            <strong>CR pipeline</strong>
+                            <small>change request flow</small>
+                        </div>
+                    </button>
+                    <button type="button" class="diagram-card" (click)="openDiagram.emit('intent')">
+                        <img src="assets/diagrams/03.intent-pipeline.png" alt="Intent pipeline">
+                        <div class="diagram-caption">
+                            <strong>Intent pipeline</strong>
+                            <small>P → G/O → BRD/PRD</small>
+                        </div>
+                    </button>
+                </div>
+            </section>
+
+            <section class="detail-card">
+                <h4 class="card-title">Pipeline specification</h4>
+                <dl class="spec-list">
+                    @for (item of d.items; track item.label) {
+                        <div class="spec-item">
+                            <dt>{{ item.label }}</dt>
+                            <dd>{{ item.value }}</dd>
+                        </div>
+                    }
+                </dl>
+            </section>
+        }
+
+        @if (selectedTopic() === 'cross-check') {
+            <section class="detail-card">
+                <h4 class="card-title">Catalogue groups</h4>
+                <div class="check-groups">
+                    @for (group of crossCheckGroups(); track group.label) {
+                        <div class="check-group-row">
+                            <strong>{{ group.label }}</strong>
+                            <span class="check-ids">{{ group.ids }}</span>
+                        </div>
+                    }
+                </div>
+            </section>
+        }
+
+        @if (selectedTopic() !== 'pipeline') {
+            <section class="detail-card">
+                <h4 class="card-title">Specification details</h4>
+                <dl class="spec-list">
+                    @for (item of d.items; track item.label) {
+                        <div class="spec-item">
+                            <dt>{{ item.label }}</dt>
+                            <dd>{{ item.value }}</dd>
+                        </div>
+                    }
+                </dl>
+            </section>
+        }
+    }
+</aside>

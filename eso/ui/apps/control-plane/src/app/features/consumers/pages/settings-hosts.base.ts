@@ -306,7 +306,12 @@ finish(): void {
 
 selectTab(id: string): void {
         this.activeTab.set(id);
-        this.router.navigate([], { relativeTo: this.route, queryParams: { tab: id }, queryParamsHandling: 'merge', replaceUrl: true });
+        this.router.navigate([], {
+            relativeTo: this.route,
+            queryParams: { tab: id, section: id === 'knowledge' ? this.knowledgeSection() : null },
+            queryParamsHandling: 'merge',
+            replaceUrl: true,
+        });
     }
 
 openConsumerPlugins(): void {

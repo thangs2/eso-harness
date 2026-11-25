@@ -126,89 +126,12 @@
                         }
                     </section>
 
-                    <div class="knowledge-layout" [class.zone-hidden]="vm().knowledgeSection() === 'overview' || vm().knowledgeSection() === 'index'" [class.knowledge-layout-single]="vm().knowledgeSection() === 'sources'">
+                    @if (vm().knowledgeSection() === 'contract') {
+                        <eso-knowledge-contract [vm]="vm()" />
+                    }
+
+                    <div class="knowledge-layout" [class.zone-hidden]="vm().knowledgeSection() !== 'sources' && vm().knowledgeSection() !== 'manifest'" [class.knowledge-layout-single]="vm().knowledgeSection() === 'sources'">
                         <div class="knowledge-main">
-                            <section class="knowledge-section knowledge-selectable knowledge-contract-section" [class.zone-hidden]="vm().knowledgeSection() !== 'contract'" [class.active]="vm().selectedKnowledgeTopic() === 'pipeline'" (click)="vm().selectKnowledgeTopic('pipeline')">
-                                <header class="knowledge-section-head"><div><h3>Project mode</h3><p>Choose whether this consumer follows an SDLC artifact contract.</p></div><span class="scope-badge" [class.muted-badge]="!vm().sdlcEnabled()">{{ vm().sdlcEnabled() ? 'SDLC' : 'Lightweight' }}</span></header>
-                                <div class="project-mode-grid">
-                                    <div class="project-mode-item">
-                                        <span class="control-label">Standard</span>
-                                        <mat-slide-toggle [ngModel]="vm().sdlcEnabled()" (ngModelChange)="vm().sdlcEnabled.set($event)">Apply SDLC</mat-slide-toggle>
-                                        <small>{{ vm().sdlcEnabled() ? 'Artifact contract enforced' : 'Lightweight project' }}</small>
-                                    </div>
-                                    <div class="project-mode-item" [class.item-disabled]="!vm().sdlcEnabled()">
-                                        <span class="control-label">Pipeline</span>
-                                        <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Preset</mat-label>
-                                            <mat-select [ngModel]="vm().sdlcPipeline()" [disabled]="!vm().sdlcEnabled()" (ngModelChange)="vm().sdlcPipeline.set($event)">
-                                                @for (pipeline of vm().pipelineOptions; track pipeline.id) { <mat-option [value]="pipeline.id">{{ pipeline.label }}</mat-option> }
-                                            </mat-select>
-                                        </mat-form-field>
-                                        <small>{{ vm().pipelineHint() }}</small>
-                                    </div>
-                                    <div class="project-mode-item" [class.item-disabled]="!vm().sdlcEnabled()">
-                                        <span class="control-label">Change management</span>
-                                        <mat-checkbox [checked]="vm().crProcess()" [disabled]="!vm().sdlcEnabled()" (change)="vm().crProcess.set($event.checked)">CR process</mat-checkbox>
-                                        <small>Reopen the affected stage with version+1.</small>
-                                    </div>
-                                </div>
-                                <p class="knowledge-note">{{ vm().sdlcEnabled() ? 'SDLC artifact contract applies. Root: sdlc/ (managed artifacts).' : 'No sdlc/ folder. Knowledge base still indexes README, docs, and decisions.' }}</p>
-                            </section>
-
-                            <section class="knowledge-section knowledge-selectable knowledge-contract-section" [class.zone-hidden]="vm().knowledgeSection() !== 'contract'" [class.active]="vm().selectedKnowledgeTopic() === 'document-status' || vm().selectedKnowledgeTopic() === 'open-register' || vm().selectedKnowledgeTopic() === 'cross-check' || vm().selectedKnowledgeTopic() === 'build-enforcement' || vm().selectedKnowledgeTopic() === 'preflight' || vm().selectedKnowledgeTopic() === 'go-no-go' || vm().selectedKnowledgeTopic() === 'pipeline-contract'">
-                                <header class="knowledge-section-head"><div><h3>Governance</h3><p>What must be true before work moves forward.</p></div><span class="scope-badge" [class.muted-badge]="!vm().sdlcEnabled()">{{ vm().sdlcEnabled() ? 'enforced' : 'off' }}</span></header>
-                                <div class="governance-controls">
-                                    <div class="governance-row" [class.active]="vm().selectedKnowledgeTopic() === 'document-status'" (click)="vm().selectKnowledgeTopic('document-status')">
-                                        <mat-checkbox [checked]="vm().documentStatusRequired()" [disabled]="!vm().sdlcEnabled()" (change)="vm().documentStatusRequired.set($event.checked)">Document status register</mat-checkbox>
-                                        <small>exists · conforms · connected</small>
-                                    </div>
-                                    <div class="governance-row" [class.active]="vm().selectedKnowledgeTopic() === 'open-register'" (click)="vm().selectKnowledgeTopic('open-register')">
-                                        <mat-checkbox [checked]="vm().openRegisterRequired()" [disabled]="!vm().sdlcEnabled()" (change)="vm().openRegisterRequired.set($event.checked)">OPEN register</mat-checkbox>
-                                        <small>question · owner · unblock</small>
-                                    </div>
-                                    <div class="governance-row" [class.active]="vm().selectedKnowledgeTopic() === 'cross-check'" (click)="vm().selectKnowledgeTopic('cross-check')">
-                                        <mat-checkbox [checked]="vm().crossCheckRequired()" [disabled]="!vm().sdlcEnabled()" (change)="vm().crossCheckRequired.set($event.checked)">Cross-check catalogue</mat-checkbox>
-                                        <small>47 checks · X1…X42</small>
-                                    </div>
-                                    <div class="governance-row" [class.active]="vm().selectedKnowledgeTopic() === 'build-enforcement'" (click)="vm().selectKnowledgeTopic('build-enforcement')">
-                                        <mat-checkbox [checked]="vm().buildEnforcementRequired()" [disabled]="!vm().sdlcEnabled()" (change)="vm().buildEnforcementRequired.set($event.checked)">Build enforcement</mat-checkbox>
-                                        <small>E1–E10 · READY only</small>
-                                    </div>
-                                    <div class="governance-row" [class.active]="vm().selectedKnowledgeTopic() === 'preflight'" (click)="vm().selectKnowledgeTopic('preflight')">
-                                        <mat-checkbox [checked]="vm().preflightRequired()" [disabled]="!vm().sdlcEnabled()" (change)="vm().preflightRequired.set($event.checked)">Preflight before slice</mat-checkbox>
-                                        <small>one work package</small>
-                                    </div>
-                                    <div class="governance-row" [class.active]="vm().selectedKnowledgeTopic() === 'go-no-go'" (click)="vm().selectKnowledgeTopic('go-no-go')">
-                                        <mat-checkbox [checked]="vm().goNoGoRequired()" [disabled]="!vm().sdlcEnabled()" (change)="vm().goNoGoRequired.set($event.checked)">Go / No-Go before increment</mat-checkbox>
-                                        <small>whole increment · marks OK/P/OUT/—</small>
-                                    </div>
-                                    <div class="governance-row" [class.active]="vm().selectedKnowledgeTopic() === 'pipeline-contract'" (click)="vm().selectKnowledgeTopic('pipeline-contract')">
-                                        <mat-checkbox [checked]="vm().pipelineContractRequired()" [disabled]="!vm().sdlcEnabled()" (change)="vm().pipelineContractRequired.set($event.checked)">Pipeline contract gates</mat-checkbox>
-                                        <small>S1–S14 · G1–G13 · CR loop</small>
-                                    </div>
-                                </div>
-                                <p class="knowledge-note">Lifecycle: <code>raw → proposed → approved → retired</code>. Catalogue index says 47 checks; the file title says 29 — title is stale and must be fixed.</p>
-                            </section>
-
-                            <section class="knowledge-section knowledge-selectable knowledge-contract-section" [class.zone-hidden]="vm().knowledgeSection() !== 'contract'" [class.active]="vm().selectedKnowledgeTopic() === 'quartet'" (click)="vm().selectKnowledgeTopic('quartet')">
-                                <header class="knowledge-section-head"><div><h3>Task quartet</h3><p>Task decomposition for work management. Provider-independent.</p></div></header>
-                                <mat-form-field appearance="outline"><mat-label>Quartet profile</mat-label>
-                                    <mat-select [ngModel]="vm().quartetProfile()" (ngModelChange)="vm().quartetProfile.set($event)">
-                                        <mat-option value="standard">Standard · unit · impl · coverage · qc</mat-option>
-                                        <mat-option value="extended">Extended · add load · stress</mat-option>
-                                    </mat-select>
-                                </mat-form-field>
-                                <div class="quartet-list">
-                                    @for (type of vm().quartetTypes(); track type.id) {
-                                        <div class="quartet-row" [class.quartet-out]="!type.included">
-                                            <code>{{ type.id }}</code>
-                                            <span>{{ type.note }}</span>
-                                            <em>{{ type.included ? 'included' : 'out' }}</em>
-                                        </div>
-                                    }
-                                </div>
-                                <p class="knowledge-note">BA is OUT when acceptance criteria are clear. Jira is optional; tasks can live in the repo.</p>
-                            </section>
-
                             <section class="knowledge-section knowledge-selectable knowledge-source-section" [class.zone-hidden]="vm().knowledgeSection() !== 'sources'" [class.active]="vm().selectedKnowledgeTopic() === 'knowledge-base'" (click)="vm().selectKnowledgeTopic('knowledge-base')">
                                 <header class="knowledge-section-head"><div><h3>Knowledge base</h3><p>Artifacts held for this consumer, by kind and reader.</p></div></header>
                                 <div class="knowledge-block">
@@ -346,7 +269,7 @@
                             </section>
                         </div>
 
-                        <aside class="knowledge-detail" aria-live="polite" [class.zone-hidden]="vm().knowledgeSection() !== 'contract' && vm().knowledgeSection() !== 'manifest'">
+                        <aside class="knowledge-detail" aria-live="polite" [class.zone-hidden]="vm().knowledgeSection() !== 'manifest' && (vm().knowledgeSection() !== 'sources' || vm().selectedKnowledgeTopic() !== 'knowledge-base')">
                             @if (vm().knowledgeDetail(); as detail) {
                                 <p class="eyebrow">{{ detail.eyebrow }}</p>
                                 <h3>{{ detail.title }}</h3>
@@ -360,91 +283,6 @@
                                         }
                                     </dl>
                                 </section>
-
-                                @if (vm().selectedKnowledgeTopic() === 'pipeline') {
-                                    <section class="detail-section">
-                                        <h4>Pipeline flow · S1…S14</h4>
-                                        <div class="pipeline-flow">
-                                            @for (group of vm().pipelineGroups(); track group.id) {
-                                                <div class="pipeline-group">
-                                                    <div class="pipeline-group-title"><span>{{ group.id }}</span><strong>{{ group.title }}</strong></div>
-                                                    <div class="pipeline-stages">
-                                                        @for (stage of group.stages; track stage.id) {
-                                                            <div class="pipeline-stage"><b>{{ stage.id }}</b><span>{{ stage.label }}</span><em>{{ stage.gate }}</em></div>
-                                                        }
-                                                    </div>
-                                                </div>
-                                            }
-                                        </div>
-                                        <p class="detail-note">Dashed CR edges reopen S6 / S7 / S8 / S11; gates G1–G13 are document conditions.</p>
-                                    </section>
-
-                                    <section class="detail-section">
-                                        <h4>Definition of Ready / Done</h4>
-                                        <div class="definition-grid">
-                                            <div class="definition-card">
-                                                <strong>DoR</strong>
-                                                <small>Allowed to start?</small>
-                                                <ul>
-                                                    @for (condition of vm().dorConditions; track condition) { <li>{{ condition }}</li> }
-                                                </ul>
-                                                <em>Fail → Backlog + needs-dor</em>
-                                            </div>
-                                            <div class="definition-card">
-                                                <strong>DoD</strong>
-                                                <small>Done?</small>
-                                                <ul>
-                                                    @for (condition of vm().dodConditions; track condition) { <li>{{ condition }}</li> }
-                                                </ul>
-                                                <em>Fail → remains In Progress</em>
-                                            </div>
-                                        </div>
-                                        <p class="detail-note">DoR applies to Story and Task only. Epic is a container; Subtask inherits from parent; Bug must be reproducible. DoR is a gate, not a Jira status.</p>
-                                    </section>
-
-                                    <section class="detail-section">
-                                        <h4>Diagrams</h4>
-                                        <div class="diagram-grid">
-                                            <button type="button" class="diagram-card" (click)="vm().openDiagram.set('main')">
-                                                <img src="assets/diagrams/01.main-pipeline.png" alt="Main SDLC pipeline">
-                                                <strong>Main pipeline</strong>
-                                                <small>14 stages · 13 gates</small>
-                                            </button>
-                                            <button type="button" class="diagram-card" (click)="vm().openDiagram.set('cr')">
-                                                <img src="assets/diagrams/02.cr-pipeline.png" alt="CR pipeline">
-                                                <strong>CR pipeline</strong>
-                                                <small>change request flow</small>
-                                            </button>
-                                            <button type="button" class="diagram-card" (click)="vm().openDiagram.set('intent')">
-                                                <img src="assets/diagrams/03.intent-pipeline.png" alt="Intent pipeline">
-                                                <strong>Intent pipeline</strong>
-                                                <small>P → G → BRD/PRD</small>
-                                            </button>
-                                        </div>
-                                    </section>
-                                }
-
-                                @if (vm().selectedKnowledgeTopic() === 'cross-check') {
-                                    <section class="detail-section">
-                                        <h4>Catalogue groups</h4>
-                                        <div class="check-groups">
-                                            @for (group of vm().crossCheckGroups(); track group.label) {
-                                                <div><strong>{{ group.label }}</strong><span>{{ group.ids }}</span></div>
-                                            }
-                                        </div>
-                                    </section>
-                                }
-
-                                @if (vm().selectedKnowledgeTopic() === 'quartet') {
-                                    <section class="detail-section">
-                                        <h4>Work hierarchy</h4>
-                                        <div class="hierarchy-list">
-                                            @for (row of vm().taskHierarchy(); track row.model) {
-                                                <div><strong>{{ row.model }}</strong><span>{{ row.detail }}</span></div>
-                                            }
-                                        </div>
-                                    </section>
-                                }
 
                                 @if (vm().selectedKnowledgeTopic() === 'knowledge-base') {
                                     <section class="detail-section">
@@ -504,13 +342,4 @@
                             }
                         </aside>
                     </div>
-
-                    @if (vm().openDiagram(); as diagram) {
-                        <div class="diagram-lightbox" role="dialog" aria-modal="true" (click)="vm().openDiagram.set(null)">
-                            <div class="diagram-lightbox-panel" (click)="$event.stopPropagation()">
-                                <header><strong>{{ vm().diagramTitle() }}</strong><button mat-stroked-button type="button" (click)="vm().openDiagram.set(null)">Close</button></header>
-                                <div class="diagram-lightbox-body"><img [src]="vm().diagramSrc()" [alt]="vm().diagramTitle()"></div>
-                            </div>
-                        </div>
-                    }
                 </section>

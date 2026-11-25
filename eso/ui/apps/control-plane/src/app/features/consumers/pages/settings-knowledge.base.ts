@@ -45,32 +45,32 @@ readonly knowledgeFindingsCount = computed(() => this.knowledgeSummary()?.findin
 
 back(): void { const id = this.route.snapshot.paramMap.get('id'); this.router.navigate(['/consumers', id]); }
 
-pipelineGroups(): Array<{ id: string; title: string; stages: Array<{ id: string; label: string; gate: string }> }> {
+pipelineGroups(): Array<{ id: string; title: string; stages: Array<{ id: string; label: string; role: string; gate: string; artifact: string }> }> {
         return [
-            { id: 'A', title: 'Requirements', stages: [
-                { id: 'S1', label: 'Pain / vision', gate: 'G1' },
-                { id: 'S2', label: 'Goals / obj', gate: 'G2' },
-                { id: 'S3', label: 'BRD', gate: 'G3' },
-                { id: 'S4', label: 'PRD', gate: 'G4' },
-                { id: 'S5', label: 'FRD', gate: 'G5' },
-                { id: 'S6', label: 'SRS', gate: 'G6' },
-                { id: 'S7', label: 'US / AC', gate: 'G7' },
+            { id: 'A', title: 'Requirements (PO · BA)', stages: [
+                { id: 'S1', label: 'Pain & Vision', role: 'PO', gate: 'G1', artifact: '04.inception/01.vision' },
+                { id: 'S2', label: 'Goals & Objectives', role: 'PO (PM)', gate: 'G2', artifact: '04.inception/03.objectives' },
+                { id: 'S3', label: 'BRD (Business Req)', role: 'BA', gate: 'G3', artifact: '05.requirements/01.specification/02.brd' },
+                { id: 'S4', label: 'PRD (Product Req)', role: 'PO', gate: 'G4', artifact: '05.requirements/01.specification/01.prd' },
+                { id: 'S5', label: 'FRD (Functional Req)', role: 'BA', gate: 'G5', artifact: '05.requirements/01.specification/03.frd' },
+                { id: 'S6', label: 'SRS (System Req)', role: 'BA', gate: 'G6', artifact: '05.requirements/01.specification/04.srs' },
+                { id: 'S7', label: 'US & AC (User Stories)', role: 'BA', gate: 'G7', artifact: '06.analysis/01.us & 02.ac' },
             ] },
-            { id: 'B', title: 'Technical', stages: [
-                { id: 'S8', label: 'Contracts API', gate: 'G8' },
-                { id: 'S9', label: 'Data schema', gate: 'G9' },
-                { id: 'S10', label: 'Architecture C4', gate: 'G10' },
+            { id: 'B', title: 'Technical Design (TECH)', stages: [
+                { id: 'S8', label: 'API Contracts', role: 'TECH', gate: 'G8', artifact: '07.design/02.api' },
+                { id: 'S9', label: 'Data Schema', role: 'TECH', gate: 'G9', artifact: '07.design/03.data' },
+                { id: 'S10', label: 'Architecture C4 & NFR', role: 'TECH', gate: 'G10', artifact: '07.design/01.architecture' },
             ] },
-            { id: 'C', title: 'Breakdown', stages: [
-                { id: 'S11', label: 'WBS', gate: 'G11' },
-                { id: 'S12', label: 'BIP / FIP', gate: 'G12' },
-                { id: 'S13', label: 'SCN test', gate: 'G13' },
+            { id: 'C', title: 'Breakdown & Test Spec (PM · TECH · QC)', stages: [
+                { id: 'S11', label: 'WBS & Work Packages', role: 'PM', gate: 'G11', artifact: '08.work-breakdown/01.wbs' },
+                { id: 'S12', label: 'BIP / FIP Packets', role: 'TECH', gate: 'G12', artifact: '08.work-breakdown/02.packets' },
+                { id: 'S13', label: 'SCN Matrix & RTM', role: 'QC', gate: 'G13', artifact: '06.analysis/03.scn & 04.rtm' },
             ] },
-            { id: 'D', title: 'Delivery', stages: [
-                { id: 'S14', label: 'Code TDD', gate: 'G14' },
-                { id: 'S15', label: 'Run SCN', gate: 'G15' },
-                { id: 'S16', label: 'DoD', gate: 'G16' },
-                { id: 'S17', label: 'Done', gate: '—' },
+            { id: 'D', title: 'Delivery & Acceptance (DEV · QC · PM · HUMAN)', stages: [
+                { id: 'S14', label: 'Code & Unit TDD', role: 'DEV', gate: 'G14', artifact: 'packages/* / apps/*' },
+                { id: 'S15', label: 'Run SCN & Test Evidence', role: 'QC', gate: 'G15', artifact: '09.test-plan/02.test-runs' },
+                { id: 'S16', label: 'DoD & Acceptance Review', role: 'QC & PM', gate: 'G16', artifact: '12.phases/*/06.acceptance' },
+                { id: 'S17', label: 'Human Sign-off (Done)', role: 'HUMAN', gate: '—', artifact: '12.phases/*/07.closure' },
             ] },
         ];
     }
@@ -232,10 +232,12 @@ diagramTitle(): string {
 
 pipelineHint(): string {
         switch (this.sdlcPipeline()) {
-            case 'ba-dev': return 'Requirements → implementation';
-            case 'dev-qc': return 'Implementation → verification';
-            case 'qc': return 'Verification only';
-            default: return '14 stages · 13 gates';
+            case 'req-tech': return 'PO/BA requirements → TECH design (S1–S10)';
+            case 'build-qc': return 'PM breakdown → DEV code → QC SCN (S11–S16)';
+            case 'ba-dev': return 'PO/BA requirements → TECH design (S1–S10)';
+            case 'dev-qc': return 'PM breakdown → DEV code → QC SCN (S11–S16)';
+            case 'qc': return 'Verification & acceptance only';
+            default: return '17 stages · 16 gates · 3 checkpoints';
         }
     }
 
@@ -273,6 +275,12 @@ showKnowledgeSection(section: 'overview' | 'sources' | 'contract' | 'index' | 'm
         if (section === 'contract') this.selectedKnowledgeTopic.set('pipeline');
         if (section === 'manifest') this.selectedKnowledgeTopic.set('agent-manifests');
         if (section === 'sources') this.selectedKnowledgeTopic.set('knowledge-base');
+        void this.router.navigate([], {
+            relativeTo: this.route,
+            queryParams: { section },
+            queryParamsHandling: 'merge',
+            replaceUrl: true,
+        });
     }
 
 selectKnowledgeTopic(topic: string): void {
@@ -319,67 +327,74 @@ knowledgeDetail(): { eyebrow: string; title: string; description: string; items:
                 };
             case 'cross-check':
                 return {
-                    eyebrow: 'Governance · cross-check',
+                    eyebrow: 'Governance · cross-check (CHK1)',
                     title: 'Cross-check catalogue',
-                    description: 'A status claim is invalid unless the catalogue passes. The current source title says 29; the table contains 47 checks — that discrepancy must be reconciled.',
+                    description: 'Quantitative verification checks across the pipeline: CHK1 (Requirements after S7), G13/CHK3 (AC↔SCN after S13), and CHK2 (Increment before S14).',
                     items: [
-                        { label: 'Catalogue', value: 'X1…X42 · 47 checks' },
-                        { label: 'Links', value: 'X1 · X28 · X40' },
+                        { label: 'Catalogue', value: 'X1…X42 · 47 quantitative checks' },
+                        { label: 'CHK1 (Req)', value: 'X1, X2, X4–X7, X16–X20 (Vision, Obj, BRD, PRD, FRD, SRS, US/AC)' },
+                        { label: 'CHK3 (Slice)', value: 'X3 (1:1 AC ↔ SCN) + 8/8 pre-code stages 0–7' },
+                        { label: 'CHK2 (Incr)', value: 'X8/X8a (packet), X9 (API↔Data), X10 (revision), X21/X22/X34–X36' },
                         { label: 'Trace & shape', value: 'X3 · X4 · X7 · X8a · X11–X20' },
                         { label: 'Delivery', value: 'X8 · X22 · X33–X39 · X42' },
-                        { label: 'UI', value: 'X14 prototype · X15 reachable flow' },
+                        { label: 'UI & paths', value: 'X14 prototype · X15 reachable flow · X28 paths' },
                         { label: 'Rule', value: 'Missing check = no status claim.' },
                     ],
                 };
             case 'preflight':
                 return {
-                    eyebrow: 'Governance · preflight',
-                    title: 'Preflight before a slice',
-                    description: 'Checks one slice before implementation. It is narrower than Go/No-Go, which covers the whole increment.',
+                    eyebrow: 'Governance · preflight (CHK3)',
+                    title: 'Preflight before slice (CHK3)',
+                    description: 'Pre-flight DoR per slice after S13. Verifies all 8 pre-code stages (0–7), 1:1 AC ↔ SCN mapping (X3), and implementation packet §9 = READY before code.',
                     items: [
-                        { label: 'Scope', value: 'one slice / one work package' },
-                        { label: 'Reads', value: 'document status · BIP/FIP · SCN · marks' },
-                        { label: 'Pass', value: 'all required slots OK or P with an open id' },
-                        { label: 'Fail', value: 'no work proceeds; gap must be named' },
+                        { label: 'Scope', value: 'One atomic work package / slice (S11 WBS leaf)' },
+                        { label: 'Pre-flight DoR', value: 'All 8 pre-code stages (0–7) marked OK or P with open id' },
+                        { label: 'Check X3', value: '1:1 bidirectional mapping: Acceptance Criteria ↔ SCN' },
+                        { label: 'Packet', value: 'BIP (BE) / FIP (FE) §9 = READY; DRAFT/OPEN blocks build' },
+                        { label: 'Pass / Fail', value: 'Pass → proceed to S14; Fail → remains Backlog + needs-dor' },
                     ],
                 };
             case 'go-no-go':
                 return {
-                    eyebrow: 'Governance · go / no-go',
-                    title: 'Go / No-Go for an increment',
-                    description: 'Dashboard over the whole increment. It answers what blocks the epic — not what blocks one slice.',
+                    eyebrow: 'Governance · go / no-go (CHK2)',
+                    title: 'Go / No-Go increment dashboard (CHK2)',
+                    description: 'Dashboard over the entire increment before S14 code. Ensures Docs Ready criteria and cross-checks are satisfied before starting epic execution.',
                     items: [
-                        { label: 'Scope', value: 'increment / epic' },
-                        { label: 'Requires', value: 'register exists + X checks run with a date' },
+                        { label: 'Scope', value: 'Entire increment / epic' },
+                        { label: 'Docs Ready', value: 'REQ ∩ US/AC ∩ SCN ∩ IF ∩ DATA + BIP/FIP' },
+                        { label: 'Cross-checks', value: 'X8, X8a, X9, X10, X21, X22, X34–X36 verified' },
                         { label: 'Marks', value: 'OK · P with open_id · OUT with reason · — blocks' },
-                        { label: 'Docs Ready', value: 'REQ ∩ US/AC ∩ SCN ∩ IF ∩ DATA' },
-                        { label: 'Packets', value: 'BIP for be · FIP for fe · mixed needs both' },
+                        { label: 'Gate', value: 'All slices must pass CHK3 + epic passes CHK2 before DEV build' },
                     ],
                 };
             case 'pipeline-contract':
                 return {
                     eyebrow: 'Governance · pipeline contract',
-                    title: 'Pipeline contract',
+                    title: 'Pipeline contract gates',
                     description: 'The contract makes each stage consume the previous stage by reference. Gates are document conditions, not task-tool statuses.',
                     items: [
-                        { label: 'Stages', value: 'S1 Requirements → S17 Done' },
-                        { label: 'Gates', value: 'G1…G16 · Cross-checks · Go/No-Go · Pre-flight DoR' },
+                        { label: 'Stages', value: 'S1 Pain/Vision → S17 Done (17 sequential stages)' },
+                        { label: 'Gates', value: 'G1…G16 · CHK1 (Req) · CHK3 (DoR) · CHK2 (Go/No-Go)' },
                         { label: 'Authority', value: 'REQ → US/AC → Contracts/Schema → WBS → BIP/FIP → SCN → code' },
-                        { label: 'Change', value: 'CR reopens the affected earlier stage; it never reverses authority' },
-                        { label: 'Done', value: 'human signs; agent never signs Done' },
+                        { label: 'Change', value: 'CR reopens S7 / S8 / S12 / S14; authority never reverses' },
+                        { label: 'Done', value: 'Human signs; agent is strictly forbidden' },
                     ],
                 };
             case 'quartet':
                 return {
-                    eyebrow: 'Task management · quartet',
-                    title: 'Task quartet',
-                    description: 'Decomposition of a task into test-first work. It is a work structure, not a provider feature.',
+                    eyebrow: 'Task management · delivery spectrum',
+                    title: 'Delivery test spectrum (S14–S15)',
+                    description: 'Decomposition of an atomic Work Package (S11) and READY Packet §9 (S12) into test-first delivery subtasks. Tiered test profiles prevent test fatigue.',
                     items: [
-                        { label: 'Standard', value: 'tdd-unit · tdd-impl · tdd-coverage · tdd-qc' },
-                        { label: 'Extended', value: 'add tdd-load · tdd-stress for runtime slices' },
-                        { label: 'BA', value: 'OUT when acceptance criteria are already clear' },
-                        { label: 'Provider', value: 'Jira · repo · another task tool — optional' },
-                        { label: 'Rule', value: 'Quartet does not depend on task provider.' },
+                        { label: 'Core Quartet', value: 'tdd-unit (RED) → tdd-impl (GREEN) → tdd-coverage (≥80%) → tdd-qc (SCN evidence)' },
+                        { label: 'High Assurance', value: 'tdd-property (fast-check / Hypothesis) + tdd-mutation (Stryker Mutator)' },
+                        { label: 'Frontend UI', value: 'tdd-visual (Playwright pixel diff) + tdd-a11y (axe-core WCAG 2.1)' },
+                        { label: 'Integration', value: 'tdd-contract (Pact / Prism OpenAPI) + tdd-security (RBAC / Fuzzing)' },
+                        { label: 'Runtime System', value: 'tdd-load + tdd-stress (k6) + tdd-chaos (Toxiproxy fault injection)' },
+                        { label: 'Profiles', value: 'Standard · High Assurance · Frontend UI · Integration · Runtime Engine · Full Spectrum' },
+                        { label: 'Input', value: '1 atomic WBS leaf (S11) + 1 READY BIP/FIP packet §9 (S12)' },
+                        { label: 'BA role', value: 'OUT in SDLC project mode (BA already finalized in S3–S7)' },
+                        { label: 'Rule', value: 'Packet declares test profile; DEV implements only declared test kinds' },
                     ],
                 };
             case 'agent-manifests':
@@ -438,34 +453,56 @@ knowledgeDetail(): { eyebrow: string; title: string; description: string; items:
                 return {
                     eyebrow: 'Project mode · pipeline',
                     title: 'SDLC pipeline',
-                    description: 'Fourteen stages and thirteen gates. Apply the full pipeline or a subset; CR reopens the affected stage.',
+                    description: 'Seventeen stages, sixteen gates, and three inspection checkpoints (CHK1 · CHK3 · CHK2). Strictly sequential role handoffs (PO → BA → TECH → PM → QC → DEV → QC/PM → HUMAN). CR reopens affected stages.',
                     items: [
-                        { label: 'Intent', value: 'P1–P8 → mission/vision → goals/objectives → BRD/PRD → FRD/SRS → US/AC' },
-                        { label: 'Stages', value: 'S1…S17 · 17 stages' },
-                        { label: 'Phase folders', value: '12.phases/phase-1…n · global vs phase' },
-                        { label: 'A · requirements', value: 'S1 pain/vision · S2 goals/obj · S3 BRD · S4 PRD · S5 FRD · S6 SRS · S7 US/AC' },
-                        { label: 'B · technical', value: 'S8 contracts · S9 data schema · S10 C4 arch/NFR' },
-                        { label: 'C · breakdown', value: 'S11 WBS · S12 BIP/FIP · S13 SCN matrix' },
-                        { label: 'D · delivery', value: 'S14 code · S15 run SCN · S16 DoD · S17 Done' },
+                        { label: 'Intent trace', value: 'P1–P8 → Vision (S1) → Goals/Obj (S2) → BRD (S3) → PRD (S4) → FRD/SRS (S5-6) → US/AC (S7)' },
+                        { label: 'Stages', value: 'S1…S17 · 17 sequential stages · strict handoff' },
+                        { label: 'Checkpoints', value: 'CHK1 (Req cross-checks) → CHK3 (Pre-flight DoR) → CHK2 (Go/No-Go increment)' },
+                        { label: 'Roles', value: 'PO (S1-2, S4) · BA (S3, S5-7) · TECH (S8-10, S12) · PM (S11) · QC (S13, S15, S16) · DEV (S14) · HUMAN (S17)' },
+                        { label: 'A · requirements', value: 'S1 Vision (PO) → S2 Goals (PO/PM) → S3 BRD (BA) → S4 PRD (PO) → S5 FRD (BA) → S6 SRS (BA) → S7 US/AC (BA) [CHK1]' },
+                        { label: 'B · technical', value: 'S8 API Contracts (TECH) → S9 Data Schema (TECH) → S10 C4 & NFR (TECH)' },
+                        { label: 'C · breakdown', value: 'S11 WBS (PM) → S12 BIP/FIP (TECH) → S13 SCN matrix (QC) [CHK3 + CHK2]' },
+                        { label: 'D · delivery', value: 'S14 Code TDD (DEV) → S15 Run SCN (QC) → S16 DoD (QC/PM) → S17 Done (HUMAN)' },
                         { label: 'Gates', value: 'G1…G16 · document conditions, not task status' },
-                        { label: 'Preconditions', value: 'P0.1 SDLC root · P0.3 document status · P0.6 gate instruments' },
-                        { label: 'CR', value: 'reopens S7 / S8 / S11 / S14; authority never reverses' },
-                        { label: 'Done', value: 'human signs; agent is forbidden' },
+                        { label: 'DoR (CHK3)', value: '8/8 pre-code stages (0–7) + X3 1:1 AC↔SCN + Work packet §9 READY' },
+                        { label: 'Go/No-Go (CHK2)', value: 'Docs Ready: REQ ∩ US/AC ∩ SCN ∩ IF ∩ DATA + BIP/FIP' },
+                        { label: 'DoD (S16)', value: 'D-116: E2E scenario + JSON evidence + 6 tests + smoke pass' },
+                        { label: 'CR process', value: 'Reopens S7 / S8 / S12 / S14; authority never reverses' },
+                        { label: 'Done (S17)', value: 'Human signs; agent is strictly forbidden' },
                     ],
                 };
         }
     }
 
-quartetTypes(): Array<{ id: string; label: string; note: string; included: boolean }> {
-        const extended = this.quartetProfile() === 'extended';
+quartetTypes(): Array<{ id: string; label: string; note: string; tool: string; included: boolean }> {
+        const profile = this.quartetProfile();
+        const isExtended = profile === 'extended';
         return [
-            { id: 'tdd-unit', label: 'unit', note: 'test first', included: true },
-            { id: 'tdd-impl', label: 'impl', note: 'DEV', included: true },
-            { id: 'tdd-coverage', label: 'coverage', note: 'gate', included: true },
-            { id: 'tdd-qc', label: 'qc', note: 'SCN + evidence', included: true },
-            { id: 'tdd-load', label: 'load', note: 'extended', included: extended },
-            { id: 'tdd-stress', label: 'stress', note: 'extended', included: extended },
-            { id: 'tdd-ba', label: 'ba', note: 'OUT when AC clear', included: false },
+            // Core Delivery Quartet (Always active for all code work)
+            { id: 'tdd-unit', label: 'unit', note: 'unit test first', tool: 'Vitest / Jest / Pytest', included: true },
+            { id: 'tdd-impl', label: 'impl', note: 'DEV implementation', tool: 'TypeScript / Go / Python', included: true },
+            { id: 'tdd-coverage', label: 'coverage', note: 'gate threshold ≥80%', tool: 'c8 / Istanbul', included: true },
+            { id: 'tdd-qc', label: 'qc', note: 'SCN matrix verification', tool: 'evidence.json', included: true },
+
+            // High Assurance & Math Invariants
+            { id: 'tdd-property', label: 'property', note: 'invariants & generative fuzzing', tool: 'fast-check / Hypothesis', included: profile === 'assurance' || isExtended },
+            { id: 'tdd-mutation', label: 'mutation', note: 'test suite quality / kill mutants', tool: 'Stryker Mutator / Mutmut', included: profile === 'assurance' || isExtended },
+
+            // Frontend & UI Experience
+            { id: 'tdd-visual', label: 'visual', note: 'visual regression / pixel diff', tool: 'Playwright / Percy', included: profile === 'frontend' || isExtended },
+            { id: 'tdd-a11y', label: 'a11y', note: 'accessibility WCAG 2.1 checks', tool: 'axe-core / Lighthouse', included: profile === 'frontend' || isExtended },
+
+            // Integration & API Security
+            { id: 'tdd-contract', label: 'contract', note: 'consumer-driven API contracts', tool: 'Pact / Prism OpenAPI', included: profile === 'integration' || isExtended },
+            { id: 'tdd-security', label: 'security', note: 'RBAC boundary & auth fuzzing', tool: 'OWASP ZAP / Semgrep', included: profile === 'integration' || isExtended },
+
+            // Runtime Engine & Resilience
+            { id: 'tdd-load', label: 'load', note: 'throughput & latency SLA', tool: 'k6 / Artillery', included: profile === 'runtime' || isExtended },
+            { id: 'tdd-stress', label: 'stress', note: 'breaking point & capacity', tool: 'k6 stress scenario', included: profile === 'runtime' || isExtended },
+            { id: 'tdd-chaos', label: 'chaos', note: 'fault injection & network cut', tool: 'Toxiproxy / Testcontainers', included: profile === 'runtime' || isExtended },
+
+            // Legacy / Fallback
+            { id: 'tdd-ba', label: 'ba', note: 'OUT in SDLC (finalized S3–S7)', tool: 'N/A', included: false },
         ];
     }
 

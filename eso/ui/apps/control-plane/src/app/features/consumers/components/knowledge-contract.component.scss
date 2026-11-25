@@ -1,0 +1,35 @@
+:host {
+    display: block;
+    min-width: 0;
+}
+
+.contract-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.22fr) minmax(21rem, 0.95fr);
+    gap: var(--space-4);
+    align-items: start;
+    min-width: 0;
+}
+
+.contract-main {
+    display: grid;
+    gap: var(--space-4);
+    min-width: 0;
+}
+
+.contract-aside {
+    display: block;
+    min-width: 0;
+    position: sticky;
+    top: var(--space-4);
+}
+
+@media (max-width: 1200px) {
+    .contract-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .contract-aside {
+        position: static;
+    }
+}

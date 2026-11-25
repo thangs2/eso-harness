@@ -36,6 +36,7 @@ import type { ConsumerProfile, HostDto, KnowledgeSummaryDto, KnowledgeDocDto, Kn
  * The API, host discovery, and worker bindings all use `hostId`.
  */
 import { SettingsKnowledgeBase } from './settings-knowledge.base.js';
+import type { QuartetProfileType } from './settings-core.base.js';
 @Directive()
 export abstract class SettingsTailBase extends SettingsKnowledgeBase {
 openHosts(): void {
@@ -348,7 +349,8 @@ protected hydrate(profile: ConsumerProfile): void {
         this.pipelineContractRequired.set(knowledge.governance?.pipelineContract ?? true);
         this.openRegisterRequired.set(knowledge.governance?.openRegister ?? true);
         this.buildEnforcementRequired.set(knowledge.governance?.buildEnforcement ?? true);
-        this.quartetProfile.set(knowledge.taskQuartet === 'extended' ? 'extended' : 'standard');
+        const validProfiles: QuartetProfileType[] = ['standard', 'assurance', 'frontend', 'integration', 'runtime', 'extended'];
+        this.quartetProfile.set(validProfiles.includes(knowledge.taskQuartet as QuartetProfileType) ? (knowledge.taskQuartet as QuartetProfileType) : 'standard');
         this.manifestEnabled.set(knowledge.manifest?.enabled ?? true);
         this.manifestPath.set(knowledge.manifest?.path || '.harness/manifest.json');
         this.manifestHumanHeaderKeys.set(Array.isArray(knowledge.manifest?.humanHeaderKeys) ? knowledge.manifest.humanHeaderKeys : this.manifestHumanHeaderOptions);
@@ -541,7 +543,8 @@ protected restoreDraft(): void {
             if (typeof draft.pipelineContractRequired === 'boolean') this.pipelineContractRequired.set(draft.pipelineContractRequired);
             if (typeof draft.openRegisterRequired === 'boolean') this.openRegisterRequired.set(draft.openRegisterRequired);
             if (typeof draft.buildEnforcementRequired === 'boolean') this.buildEnforcementRequired.set(draft.buildEnforcementRequired);
-            if (draft.quartetProfile === 'extended' || draft.quartetProfile === 'standard') this.quartetProfile.set(draft.quartetProfile);
+            const validProfiles: QuartetProfileType[] = ['standard', 'assurance', 'frontend', 'integration', 'runtime', 'extended'];
+            if (validProfiles.includes(draft.quartetProfile as QuartetProfileType)) this.quartetProfile.set(draft.quartetProfile as QuartetProfileType);
             if (typeof draft.manifestEnabled === 'boolean') this.manifestEnabled.set(draft.manifestEnabled);
             if (typeof draft.manifestPath === 'string') this.manifestPath.set(draft.manifestPath);
             if (Array.isArray(draft.manifestHumanHeaderKeys)) this.manifestHumanHeaderKeys.set(draft.manifestHumanHeaderKeys);

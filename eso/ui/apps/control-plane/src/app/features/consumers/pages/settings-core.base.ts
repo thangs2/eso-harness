@@ -36,6 +36,8 @@ import type { ConsumerProfile, HostDto, KnowledgeSummaryDto, KnowledgeDocDto, Kn
  * The API, host discovery, and worker bindings all use `hostId`.
  */
 
+export type QuartetProfileType = 'standard' | 'assurance' | 'frontend' | 'integration' | 'runtime' | 'extended';
+
 @Directive()
 export abstract class SettingsCoreBase {
     protected abstract readonly workersSettings: Signal<WorkersSettingsComponent | undefined>;
@@ -283,7 +285,7 @@ readonly openRegisterRequired = signal(true);
 
 readonly buildEnforcementRequired = signal(true);
 
-readonly quartetProfile = signal<'standard' | 'extended'>('standard');
+readonly quartetProfile = signal<QuartetProfileType>('standard');
 
 readonly knowledgeSummary = signal<KnowledgeSummaryDto | null>(null);
 
@@ -333,7 +335,7 @@ readonly events = signal<string[]>(['prompt.submitted', 'turn.completed', 'tool.
 
 readonly policySources = ['host-native', 'eso-native', 'market'];
 
-readonly artifactKindOptions = ['BRD', 'PRD', 'FRD', 'SRS', 'ADR', 'Spec', 'Runbook', 'Manifest', 'WBS', 'WBS dictionary', 'Atomic WBS', 'Decision', 'Open register'];
+readonly artifactKindOptions = ['BRD', 'PRD', 'FRD', 'SRS', 'ADR', 'Spec', 'Runbook', 'Manifest', 'WBS', 'WBS dictionary', 'Atomic WBS', 'Decision', 'Open register', 'Charter', 'Architecture doc', 'API contract', 'Data model', 'Scenario matrix', 'Traceability matrix', 'BIP', 'FIP'];
 
 readonly representationOptions = ['human', 'agent', 'machine'];
 
@@ -348,26 +350,26 @@ readonly manifestAiHeaderOptions = ['id', 'type', 'status', 'owner', 'sot_doc_ve
 readonly manifestCheckOptions = ['links resolve', 'header shape', 'derived ⊆ source', 'no orphan document', 'kind has owner'];
 
 readonly dorConditions = [
-        '4 relations declared: subtasks · relates · blocks · blockedBy',
-        'Packet §9 = READY',
-        'Work package has all 7 fields',
-        'AC cited from the source of truth',
-        'One verify line: how QC proves the AC',
-        'Named dependencies',
+        'Pre-flight DoR: All 8 pre-code stages (0–7) verified OK/P',
+        'Check X3: 1:1 mapping between Acceptance Criteria and SCN',
+        'Tech Design: API Contracts (S8) and Data Schema (S9) approved',
+        'Atomic WBS: Work package leaf with 4 relations & dependencies',
+        'Implementation packet §9 = READY (BIP for BE, FIP for FE)',
+        'Docs Ready (CHK2): REQ ∩ US/AC ∩ SCN ∩ IF ∩ DATA + BIP/FIP',
     ];
 
 readonly dodConditions = [
-        'SCN run and evidence recorded',
-        'DoD evidence complete',
-        'Human signs Done',
-        'Agent is forbidden to sign Done',
+        'S14 Code: TDD implementation + 100% build/typecheck/unit pass',
+        'S15 Test: SCN matrix run with verbatim pass/fail test evidence',
+        'S16 D-116: E2E scenario run + JSON evidence + 6 tests + smoke pass',
+        'S17 Done: Human operator signs off; agent is strictly forbidden',
     ];
 
 readonly pipelineOptions = [
-        { id: 'full', label: 'Full pipeline' },
-        { id: 'ba-dev', label: 'BA → DEV' },
-        { id: 'dev-qc', label: 'DEV → QC' },
-        { id: 'qc', label: 'QC only' },
+        { id: 'full', label: 'Full SDLC (S1–S17 · 16 gates)' },
+        { id: 'req-tech', label: 'Requirements → Tech (S1–S10)' },
+        { id: 'build-qc', label: 'Breakdown → Delivery (S11–S16)' },
+        { id: 'qc', label: 'Acceptance only (S13, S15–S17)' },
     ];
 
 ngOnInit(): void {
@@ -382,10 +384,20 @@ ngOnInit(): void {
         this.route.queryParamMap.subscribe((params) => {
             const next = params.get('tab');
             if (next && this.tabs.some((item) => item.id === next)) this.activeTab.set(next);
+            const nextSection = params.get('section') || params.get('subtab');
+            if (nextSection && ['overview', 'sources', 'contract', 'index', 'manifest'].includes(nextSection)) {
+                this.knowledgeSection.set(nextSection as 'overview' | 'sources' | 'contract' | 'index' | 'manifest');
+                if (nextSection === 'contract') this.selectedKnowledgeTopic.set('pipeline');
+                if (nextSection === 'manifest') this.selectedKnowledgeTopic.set('agent-manifests');
+                if (nextSection === 'sources') this.selectedKnowledgeTopic.set('knowledge-base');
+            }
         });
-        const requestedSection = this.route.snapshot.queryParamMap.get('section');
+        const requestedSection = this.route.snapshot.queryParamMap.get('section') || this.route.snapshot.queryParamMap.get('subtab');
         if (tab === 'knowledge' && ['overview', 'sources', 'contract', 'index', 'manifest'].includes(requestedSection || '')) {
             this.knowledgeSection.set(requestedSection as 'overview' | 'sources' | 'contract' | 'index' | 'manifest');
+            if (requestedSection === 'contract') this.selectedKnowledgeTopic.set('pipeline');
+            if (requestedSection === 'manifest') this.selectedKnowledgeTopic.set('agent-manifests');
+            if (requestedSection === 'sources') this.selectedKnowledgeTopic.set('knowledge-base');
         }
         this.service.list().then((result) => this.consumers.set((result.items ?? []).map((item) => ({ id: item.id, name: item.name })))).catch(() => this.consumers.set([]));
         Promise.all([

@@ -1,0 +1,43 @@
+<section class="contract-card" [class.active]="active()" (click)="selectTopic.emit()">
+    <header class="card-head">
+        <div class="head-copy">
+            <h3>Delivery test spectrum (S14–S15)</h3>
+            <p>Tiered test-first profiles for 1 atomic Work Package (S11) + 1 READY Packet §9 (S12).</p>
+        </div>
+    </header>
+
+    <div class="profile-selector" (click)="$event.stopPropagation()">
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Testing profile</mat-label>
+            <mat-select [ngModel]="profile()" (ngModelChange)="profileChange.emit($event)">
+                <mat-option value="standard">Standard · unit · impl · coverage · qc</mat-option>
+                <mat-option value="assurance">High Assurance · add property (fast-check) · mutation (Stryker)</mat-option>
+                <mat-option value="frontend">Frontend UI · add visual diff · a11y (axe-core)</mat-option>
+                <mat-option value="integration">Integration · add contract (Pact) · security (RBAC)</mat-option>
+                <mat-option value="runtime">Runtime Engine · add load · stress · chaos (Toxiproxy)</mat-option>
+                <mat-option value="extended">Full Spectrum · all testing dimensions enabled</mat-option>
+            </mat-select>
+        </mat-form-field>
+    </div>
+
+    <div class="spectrum-table">
+        @for (item of types(); track item.id) {
+            <div class="spectrum-row" [class.spectrum-out]="!item.included">
+                <code class="test-code">{{ item.id }}</code>
+                <div class="spectrum-info">
+                    <span class="test-note">{{ item.note }}</span>
+                    <small class="test-tool">{{ item.tool }}</small>
+                </div>
+                <span class="status-pill" [class.included]="item.included" [class.out]="!item.included">
+                    {{ item.included ? 'included' : 'out' }}
+                </span>
+            </div>
+        }
+    </div>
+
+    <footer class="card-footer">
+        <p class="contract-note">
+            Packet declares the slice profile; DEV implements only declared test kinds. BA is <code>OUT</code> in SDLC mode (finalized in S3–S7).
+        </p>
+    </footer>
+</section>

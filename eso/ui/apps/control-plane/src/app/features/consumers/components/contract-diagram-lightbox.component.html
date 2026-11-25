@@ -1,0 +1,11 @@
+<div class="lightbox-backdrop" role="dialog" aria-modal="true" (click)="close.emit()">
+    <div class="lightbox-panel" (click)="$event.stopPropagation()">
+        <header class="lightbox-header">
+            <strong class="lightbox-title">{{ title() }}</strong>
+            <button mat-stroked-button type="button" (click)="close.emit()">Close</button>
+        </header>
+        <div class="lightbox-body">
+            <img [src]="src()" [alt]="title()" class="lightbox-image">
+        </div>
+    </div>
+</div>
