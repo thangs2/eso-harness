@@ -29,6 +29,18 @@
         .migration-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; justify-content: flex-end; }
         .plan-hash { color: var(--muted); font-size: var(--text-xs); }
         .migration-conflict-note { margin: 0; color: var(--warning, #f5a524); font-size: var(--text-sm); }
+        .migration-guide { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+        .guide-option { display: grid; gap: var(--space-1); padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); }
+        .guide-option.recommended { border-color: color-mix(in srgb, var(--brand) 55%, var(--line)); }
+        .guide-tag { color: var(--muted); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .06em; }
+        .guide-option strong { font-size: var(--text-sm); }
+        .guide-option p { margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.5; }
+        .guide-option code { font-size: var(--text-xs); }
+        .conflict-paths { display: grid; gap: 2px; }
+        .conflict-paths > span { display: flex; gap: var(--space-2); align-items: baseline; flex-wrap: wrap; }
+        .path-label { flex: 0 0 auto; color: var(--muted); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .05em; }
+        .conflict-why { color: var(--muted); font-size: var(--text-xs); }
+        @media (max-width: 700px) { .migration-guide { grid-template-columns: minmax(0, 1fr); } }
         .conflict-list { display: grid; gap: var(--space-2); }
         .conflict-row { display: flex; gap: var(--space-3); align-items: center; justify-content: space-between; padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-sm); }
         .conflict-copy { display: grid; gap: 2px; min-width: 0; }

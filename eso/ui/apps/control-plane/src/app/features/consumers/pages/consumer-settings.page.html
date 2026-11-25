@@ -28,7 +28,7 @@
                     <div class="migration-copy">
                         <p class="eyebrow">Migration pipeline</p>
                         <h2>Legacy host assets detected</h2>
-                        <p class="section-hint">Preview maps legacy rules, skills, agents, and hooks into ESO canonical <code>agents/</code>. Existing ESO files are never overwritten; conflicts are reported.</p>
+                        <p class="section-hint">Preview maps legacy rules, skills, agents, and hooks into ESO canonical <code>agents/</code>. New files are copied automatically. If a canonical file already exists with different bytes, nothing is overwritten until you choose a side below.</p>
                         @if (migrationPreview(); as preview) {
                             <div class="migration-metrics">
                                 <div><span>Rules</span><strong>{{ preview.totals.rules.new }} new · {{ preview.totals.rules.same }} same · {{ preview.totals.rules.conflict }} conflict</strong></div>
@@ -43,17 +43,31 @@
                         }
                     </div>
                     @if (migrationConflicts().length > 0) {
+                        <div class="migration-guide" aria-label="How to resolve migration conflicts">
+                            <div class="guide-option recommended">
+                                <span class="guide-tag">Recommended when ESO is correct</span>
+                                <strong>Keep ESO</strong>
+                                <p>Keep <code>agents/…</code> as canonical. Nothing is copied and the host legacy file is left untouched. Choose this when the ESO file is the version you trust.</p>
+                            </div>
+                            <div class="guide-option">
+                                <span class="guide-tag">Overwrite · backup first</span>
+                                <strong>Adopt legacy</strong>
+                                <p>Back up the canonical file under <code>.harness/archive/migration-conflicts/…</code>, then copy the host legacy file over it. Choose only when the host file is the trusted version.</p>
+                            </div>
+                        </div>
                         <div class="conflict-list">
                             @for (entry of migrationConflicts(); track entry.id) {
                                 <article class="conflict-row">
                                     <div class="conflict-copy">
-                                        <code>{{ entry.target }}</code>
-                                        <span>source: {{ entry.source }}</span>
-                                        <small>{{ entry.reason }}</small>
+                                        <div class="conflict-paths">
+                                            <span><span class="path-label">Canonical (ESO)</span><code>{{ entry.target }}</code></span>
+                                            <span><span class="path-label">Legacy (host)</span><code>{{ entry.source }}</code></span>
+                                        </div>
+                                        <small class="conflict-why">Both files exist with different bytes — pick the side you want to keep before Apply.</small>
                                     </div>
                                     <div class="conflict-actions">
-                                        <button mat-stroked-button type="button" (click)="resolveMigrationConflict(entry.id, 'keep-eso')">Keep ESO</button>
-                                        <button mat-flat-button color="primary" type="button" (click)="resolveMigrationConflict(entry.id, 'adopt-legacy')">Adopt legacy</button>
+                                        <button mat-flat-button color="primary" type="button" title="Keep the canonical ESO file; do not copy the legacy file" aria-label="Keep ESO canonical file" (click)="resolveMigrationConflict(entry.id, 'keep-eso')">Keep ESO</button>
+                                        <button mat-stroked-button color="warn" type="button" title="Back up the canonical file, then overwrite it with the legacy file" aria-label="Adopt legacy file and overwrite canonical" (click)="resolveMigrationConflict(entry.id, 'adopt-legacy')">Adopt legacy</button>
                                     </div>
                                 </article>
                             }
