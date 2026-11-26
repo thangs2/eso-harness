@@ -1,5 +1,4 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
 import type {
     PostgresKnowledgeStatsDto,
     ReconciliationScanScope,
@@ -9,7 +8,6 @@ import type {
 @Component({
     selector: 'eso-reconciliation-pipeline',
     standalone: true,
-    imports: [CommonModule],
     template: `
         <section class="cockpit-overview" aria-label="3-Pillar Sync Architecture and SDLC Coverage">
             <!-- Scope of the counts below: in git-diff mode only the gap list is narrowed, these counters stay whole-repo -->
@@ -153,9 +151,9 @@ import type {
                                     <button
                                         type="button"
                                         class="stage-chip"
-                                        [ngClass]="'st-' + s.status"
+                                        [class]="'stage-chip ' + stageClass(s)"
                                         (click)="stageSelect.emit(s)"
-                                        [title]="s.stage + ' ' + s.name + ' (' + s.owner + ') — ' + s.docCount + ' docs in ' + s.directory"
+                                        [title]="stageTitle(s)"
                                     >
                                         <span class="dot" aria-hidden="true"></span>
                                         <span class="st-code">{{ s.stage }}</span>
@@ -173,9 +171,9 @@ import type {
                                     <button
                                         type="button"
                                         class="stage-chip"
-                                        [ngClass]="'st-' + s.status"
+                                        [class]="'stage-chip ' + stageClass(s)"
                                         (click)="stageSelect.emit(s)"
-                                        [title]="s.stage + ' ' + s.name + ' (' + s.owner + ') — ' + s.docCount + ' docs in ' + s.directory"
+                                        [title]="stageTitle(s)"
                                     >
                                         <span class="dot" aria-hidden="true"></span>
                                         <span class="st-code">{{ s.stage }}</span>
@@ -193,9 +191,9 @@ import type {
                                     <button
                                         type="button"
                                         class="stage-chip"
-                                        [ngClass]="'st-' + s.status"
+                                        [class]="'stage-chip ' + stageClass(s)"
                                         (click)="stageSelect.emit(s)"
-                                        [title]="s.stage + ' ' + s.name + ' (' + s.owner + ') — ' + s.docCount + ' docs in ' + s.directory"
+                                        [title]="stageTitle(s)"
                                     >
                                         <span class="dot" aria-hidden="true"></span>
                                         <span class="st-code">{{ s.stage }}</span>
@@ -213,9 +211,9 @@ import type {
                                     <button
                                         type="button"
                                         class="stage-chip"
-                                        [ngClass]="'st-' + s.status"
+                                        [class]="'stage-chip ' + stageClass(s)"
                                         (click)="stageSelect.emit(s)"
-                                        [title]="s.stage + ' ' + s.name + ' (' + s.owner + ') — ' + s.docCount + ' docs in ' + s.directory"
+                                        [title]="stageTitle(s)"
                                     >
                                         <span class="dot" aria-hidden="true"></span>
                                         <span class="st-code">{{ s.stage }}</span>
@@ -618,6 +616,15 @@ import type {
                 border-color: var(--brand);
             }
 
+            /* A click must not leave the chip looking permanently selected: outline only for keyboard focus. */
+            &:hover:not(:focus-visible) {
+                outline: none;
+            }
+
+            &:focus:not(:focus-visible) {
+                outline: none;
+            }
+
             &:focus-visible {
                 outline: 2px solid var(--brand);
                 outline-offset: 1px;
@@ -626,6 +633,8 @@ import type {
             &.st-covered .dot { background: #10b981; }
             &.st-drift .dot { background: #f59e0b; }
             &.st-missing .dot { background: #ef4444; }
+            /* Default dot when no status modifier is present */
+            .dot { background: var(--muted); }
         }
 
         .st-code {
@@ -672,6 +681,21 @@ export class ReconciliationPipelineComponent {
     readonly groupCStages = computed(() => this.stages().filter((s) => s.group === 'C'));
     readonly groupDStages = computed(() => this.stages().filter((s) => s.group === 'D'));
     readonly coveredCount = computed(() => this.stages().filter((s) => s.status === 'covered').length);
+
+    /**
+     * Dot colour and chip tone are derived from the same `status` field the backend reports.
+     * An unknown status maps to no modifier class, so the dot stays neutral instead of inheriting a stale colour.
+     */
+    stageClass(s: SdlcPipelineStageCoverageDto): string {
+        return s.status === 'covered' || s.status === 'drift' || s.status === 'missing' ? `st-${s.status}` : '';
+    }
+
+    /**
+     * One string, one source: stage code, name, owner, real doc count and the folder that count came from.
+     */
+    stageTitle(s: SdlcPipelineStageCoverageDto): string {
+        return `${s.stage} ${s.name} (${s.owner}) — ${s.docCount} docs in ${s.directory}`;
+    }
 
     selectPillar(pillar: 'all' | 'code' | 'sdlc' | 'postgres'): void {
         if (this.activePillar() === pillar && pillar !== 'all') {

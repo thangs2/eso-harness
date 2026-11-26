@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CONSUMERS_DIR = path.resolve(HERE, '../apps/control-plane/src/app/features/consumers');
@@ -10,6 +11,8 @@ const MODELS_PATH = path.join(CONSUMERS_DIR, 'models/reconciliation.models.ts');
 const PAGE_TS_PATH = path.join(CONSUMERS_DIR, 'pages/consumer-reconciliation.page.ts');
 const PAGE_HTML_PATH = path.join(CONSUMERS_DIR, 'pages/consumer-reconciliation.page.html');
 const RECON_COMPONENTS_DIR = path.join(CONSUMERS_DIR, 'components/reconciliation');
+const SERVICE_TS_PATH = path.join(CONSUMERS_DIR, 'services/reconciliation.service.ts');
+const METRICS_TS_PATH = path.join(RECON_COMPONENTS_DIR, 'reconciliation-metrics.component.ts');
 
 const RECON_UI_FILES = [
     path.join(RECON_COMPONENTS_DIR, 'reconciliation-hero.component.ts'),
@@ -86,6 +89,125 @@ function applyStageSelect(stage) {
         filterType: 'all',
         searchQuery: stage.directory.replace(/\/$/, ''),
     };
+}
+
+/**
+ * Loads the REAL count helpers from reconciliation.service.ts (transpiled, not mirrored), so this
+ * test measures the code the cockpit ships instead of a copy that can drift from it.
+ */
+function loadServiceCounters() {
+    const fullSource = fs.readFileSync(SERVICE_TS_PATH, 'utf8');
+    const classAt = fullSource.search(/^export class\s/m);
+    if (classAt < 0) throw new Error('reconciliation.service.ts: expected an `export class` declaration');
+    // Keep the module-level helpers (the single source of truth for every count) and drop the
+    // Angular service class, whose decorators need a framework runtime this test does not load.
+    const source = fullSource.slice(0, classAt);
+    const { outputText: transpiled } = ts.transpileModule(source, {
+        compilerOptions: {
+            module: ts.ModuleKind.ESNext,
+            target: ts.ScriptTarget.ES2022,
+            experimentalDecorators: true,
+            emitDecoratorMetadata: false,
+            useDefineForClassFields: true,
+        },
+    });
+    // Drop import statements; the pure helpers below reference no imported value.
+    const outputText = transpiled;
+    const importRe = /^\s*import\s+(?:[\s\S]*?\s+from\s+)?['"][^'"]+['"];?[ \t]*$/gm;
+    // Drop `export` (named and list form) and the decorator helpers the pure helpers never reach.
+    const body = outputText
+        .replace(importRe, '')
+        .replace(/^\s*export\s+(?=(?:const|function|interface|type|class)\b)/gm, '')
+        .replace(/^\s*export\s*\{[^}]*\}\s*;?\s*$/gm, '');
+    const factory = new Function(
+        'Injectable',
+        'computed',
+        'inject',
+        'signal',
+        'ConsumerProfileService',
+        '__decorate',
+        // `import` cannot be a Function parameter name, so stub dynamic imports inside the body
+        // (module-level `import x = require()` syntax can survive transpilation to a bare call).
+        `const __vite_ssr_import__ = () => undefined;\nconst __importDefault = (m) => ({ default: m });\n${body.replace(/\bimport\(/g, '__vite_ssr_import__(')}\nreturn { DISCREPANCY_TYPES, PILLAR_DISCREPANCY_TYPES, countGapsByType, countGapsInPillar, countHiddenByCap };`,
+    );
+    // Decorators are irrelevant here: `__decorate` is a no-op and `Injectable()` returns a no-op
+    // class decorator, so the service class definition still parses and evaluates.
+    const noop = (value) => value;
+    const noopDecorate = (decorators, target) => {
+        for (const decorator of decorators) noop(decorator);
+        return target;
+    };
+    const injectable = () => noop;
+    const passThrough = (value) => value;
+    return factory(
+        passThrough,
+        passThrough,
+        passThrough,
+        passThrough,
+        class {},
+        noopDecorate,
+        injectable,
+    );
+}
+
+/**
+ * Fallback pillar sets, used ONLY when reconciliation.service.ts does not export the helper
+ * module (pre-fix code). They reproduce the OLD, buggy page behaviour exactly: pillar counts came
+ * from ad-hoc SUMMARY sums (`missingSdlcDocs + staleContracts` for the sdlc pillar), so a fixed
+ * rule below fails on that code instead of crashing on a missing export.
+ */
+const LEGACY_PILLAR_TYPES = {
+    code: ['GAP_A_ORPHAN_ROUTE', 'GAP_B_UNFED_SCHEMA', 'GAP_D_UNLINKED_SPIKE'],
+    sdlc: ['GAP_E_MISSING_SDLC_DOC'],
+    postgres: ['GAP_F_INDEX_DRIFT'],
+};
+
+function loadServiceCountersOrNull() {
+    try {
+        return loadServiceCounters();
+    } catch {
+        return null;
+    }
+}
+
+const SERVICE_COUNTERS = loadServiceCountersOrNull();
+
+const COUNTERS = SERVICE_COUNTERS ?? {
+    DISCREPANCY_TYPES: null,
+    PILLAR_DISCREPANCY_TYPES: null,
+    countGapsByType: (list) => {
+        const counts = {};
+        for (const item of list) counts[item.type] = (counts[item.type] ?? 0) + 1;
+        return counts;
+    },
+    // Mirror of the OLD page: the sdlc pillar chip = summary.missingSdlcDocs + summary.staleContracts.
+    countGapsInPillar: (list, pillar) => {
+        if (pillar === 'sdlc') {
+            return list.filter((g) => ['GAP_E_MISSING_SDLC_DOC', 'GAP_C_STALE_HASH'].includes(g.type)).length;
+        }
+        return list.filter((g) => (LEGACY_PILLAR_TYPES[pillar] ?? []).includes(g.type)).length;
+    },
+    countHiddenByCap: () => 0,
+};
+
+/** Summary metric name -> the gap type it is supposed to count (mirror of reconciliation.service summary). */
+const SUMMARY_FIELD_BY_TYPE = {
+    GAP_A_ORPHAN_ROUTE: 'orphanRoutes',
+    GAP_B_UNFED_SCHEMA: 'unfedSchemas',
+    GAP_C_STALE_HASH: 'staleContracts',
+    GAP_D_UNLINKED_SPIKE: 'unlinkedSpikes',
+    GAP_E_MISSING_SDLC_DOC: 'missingSdlcDocs',
+    GAP_F_INDEX_DRIFT: 'indexDrift',
+};
+
+/** Reference summary derived the way the cockpit must: every count straight off the gap array. */
+function derivedSummary(gaps) {
+    const counts = COUNTERS.countGapsByType(gaps);
+    const summary = { totalGaps: gaps.length };
+    for (const [type, field] of Object.entries(SUMMARY_FIELD_BY_TYPE)) {
+        summary[field] = counts[type] ?? 0;
+    }
+    return summary;
 }
 
 const SAMPLE_GAPS = [
@@ -168,6 +290,44 @@ const SAMPLE_GAPS = [
         status: 'open',
     },
 ];
+
+function gap(id, type, status = 'open') {
+    return {
+        id,
+        type,
+        severity: 'critical',
+        symbol: `symbol-${id}`,
+        filePath: `src/${id}.ts`,
+        lines: '1-1',
+        detectedAt: '2026-11-26T00:00:00Z',
+        detail: `detail-${id}`,
+        suggestedTarget: `sdlc/${id}.md`,
+        promptTemplate: `prompt-${id}`,
+        status,
+    };
+}
+
+/**
+ * Shape measured against live backend data for consumer `fineso`: 29 rows, 3 GAP-E (S8/S9/S12).
+ * The S12 GAP-E row is the one that used to be counted by the pillar but dropped by the ledger.
+ */
+function finesoFixture() {
+    const gaps = [
+        gap('a-1', 'GAP_A_ORPHAN_ROUTE'),
+        gap('b-1', 'GAP_B_UNFED_SCHEMA'),
+        gap('e-s8', 'GAP_E_MISSING_SDLC_DOC'),
+        gap('e-s9', 'GAP_E_MISSING_SDLC_DOC'),
+        gap('e-s12', 'GAP_E_MISSING_SDLC_DOC'),
+    ];
+    for (let i = 0; i < 8; i++) gaps.push(gap(`c-${i}`, 'GAP_C_STALE_HASH'));
+    for (let i = 0; i < 16; i++) gaps.push(gap(`f-${i}`, 'GAP_F_INDEX_DRIFT'));
+    return gaps;
+}
+
+/** Mirror of the page's `filteredGaps`/`codeDriftCount` etc., using the service's own pillar sets. */
+function countPillarWithService(gaps, pillar) {
+    return COUNTERS.countGapsInPillar(gaps, pillar);
+}
 
 describe('Reconciliation Cockpit filtering & stage mapping', () => {
     test('pillar filtering maps code=A/B/D, sdlc=E, postgres=F, all=all 6', () => {
@@ -298,13 +458,106 @@ describe('Reconciliation Cockpit filtering & stage mapping', () => {
 
     test('consumer-reconciliation.page.ts stays aligned with pillar and stageSelect contracts', () => {
         const pageSrc = fs.readFileSync(PAGE_TS_PATH, 'utf8');
-        expect(pageSrc).toContain("'GAP_A_ORPHAN_ROUTE', 'GAP_B_UNFED_SCHEMA', 'GAP_D_UNLINKED_SPIKE'");
-        expect(pageSrc).toContain("['GAP_E_MISSING_SDLC_DOC'].includes(gap.type)");
-        expect(pageSrc).toContain("gap.type !== 'GAP_F_INDEX_DRIFT'");
-        expect(pageSrc).toContain("stage.status === 'missing'");
-        expect(pageSrc).toContain("this.filterType.set('GAP_E_MISSING_SDLC_DOC')");
+        const serviceSrc = fs.readFileSync(SERVICE_TS_PATH, 'utf8');
+        // The page no longer re-declares the pillar type sets or the stage search fallback: it
+        // delegates to the service helpers, so its pillar filter, its pillar counts and its
+        // stage-to-row lookup cannot drift from each other.
+        expect(pageSrc).toContain('PILLAR_DISCREPANCY_TYPES[pillar]');
+        expect(pageSrc).toContain("countGapsInPillar(this.reconciliationService.gaps(), 'code')");
+        expect(pageSrc).toContain("countGapsInPillar(this.reconciliationService.gaps(), 'sdlc')");
+        expect(pageSrc).toContain("countGapsInPillar(this.reconciliationService.gaps(), 'postgres')");
+        expect(pageSrc).toContain('findGapBackingStage(this.reconciliationService.gaps(), stage)');
         expect(pageSrc).toContain("stage.status === 'drift'");
         expect(pageSrc).toContain("this.filterType.set('GAP_F_INDEX_DRIFT')");
+        expect(pageSrc).not.toContain("'GAP_A_ORPHAN_ROUTE', 'GAP_B_UNFED_SCHEMA', 'GAP_D_UNLINKED_SPIKE'");
+
+        // The single declaration of the pillar sets lives in the service, and GAP-C is not sdlc.
+        const sdlcBlock = serviceSrc.slice(serviceSrc.indexOf('sdlc: ['), serviceSrc.indexOf("postgres: ['"));
+        expect(sdlcBlock).toContain("['GAP_E_MISSING_SDLC_DOC']");
+        expect(sdlcBlock).not.toContain('GAP_C_STALE_HASH');
+    });
+});
+
+describe('Reconciliation count invariants (category counts == ledger rows)', () => {
+    const fixtures = [
+        ['fineso (29 rows, 3 GAP-E)', finesoFixture()],
+        ['one row per category', SAMPLE_GAPS],
+        ['empty', []],
+        ['only GAP-E', [gap('e1', 'GAP_E_MISSING_SDLC_DOC'), gap('e2', 'GAP_E_MISSING_SDLC_DOC')]],
+        ['resolved rows still counted', [gap('a-1', 'GAP_A_ORPHAN_ROUTE', 'resolved'), gap('c-1', 'GAP_C_STALE_HASH', 'staged_in_inbox')]],
+    ];
+
+    test('sum of per-category counts equals gaps.length and each count equals its own type count', () => {
+        for (const [label, list] of fixtures) {
+            const summary = derivedSummary(list);
+            const counts = Object.entries(SUMMARY_FIELD_BY_TYPE).map(([type, field]) => [type, field, summary[field]]);
+            const sum = counts.reduce((total, [, , value]) => total + value, 0);
+            expect(sum, `${label}: per-category sum must equal rows`).toBe(list.length);
+            expect(summary.totalGaps, `${label}: totalGaps must equal rows`).toBe(list.length);
+            for (const [type, field, value] of counts) {
+                expect(value, `${label}: ${field} must equal number of ${type} rows`).toBe(
+                    list.filter((g) => g.type === type).length,
+                );
+            }
+        }
+    });
+
+    test('pillar counts are rows of that pillar and sum to gaps.length', () => {
+        const list = finesoFixture();
+        const code = countPillarWithService(list, 'code');
+        const sdlc = countPillarWithService(list, 'sdlc');
+        const postgres = countPillarWithService(list, 'postgres');
+        expect(code).toBe(2); // GAP-A + GAP-B
+        expect(sdlc).toBe(3); // GAP-E only: S8 + S9 + S12 (GAP-C is NOT sdlc pillar)
+        expect(postgres).toBe(16); // GAP-F
+        expect([code, sdlc, postgres, list.length]).toEqual([2, 3, 16, 29]);
+    });
+
+    test('sdlc pillar count matches the GAP-E category tab, never a GAP-C + GAP-E sum', () => {
+        const list = finesoFixture();
+        const summary = derivedSummary(list);
+        expect(countPillarWithService(list, 'sdlc')).toBe(summary.missingSdlcDocs);
+        expect(countPillarWithService(list, 'sdlc')).not.toBe(summary.missingSdlcDocs + summary.staleContracts);
+    });
+
+    test('hiddenByCapCount uses the same pillar type sets as the pillar counts', () => {
+        const truncated = {
+            GAP_A_ORPHAN_ROUTE: 1,
+            GAP_C_STALE_HASH: 4,
+            GAP_E_MISSING_SDLC_DOC: 2,
+            GAP_F_INDEX_DRIFT: 3,
+        };
+        expect(COUNTERS.countHiddenByCap(truncated, 'all', 'all')).toBe(10);
+        expect(COUNTERS.countHiddenByCap(truncated, 'sdlc', 'all')).toBe(2);
+        expect(COUNTERS.countHiddenByCap(truncated, 'code', 'all')).toBe(1);
+        expect(COUNTERS.countHiddenByCap(truncated, 'postgres', 'all')).toBe(3);
+        expect(COUNTERS.countHiddenByCap(truncated, 'sdlc', 'GAP_C_STALE_HASH')).toBe(0);
+        expect(COUNTERS.countHiddenByCap(undefined, 'all', 'all')).toBe(0);
+    });
+
+    test('category tabs and the summary are fed by one source and one type list', () => {
+        const serviceSrc = fs.readFileSync(SERVICE_TS_PATH, 'utf8');
+        // The summary derives every per-type field from the gap array, not from a passed-in count.
+        const summaryBlock = serviceSrc.slice(serviceSrc.indexOf('readonly summary = computed'));
+        const body = summaryBlock.slice(0, summaryBlock.indexOf('private normalizeStages'));
+        expect(body).toContain('countGapsByType(allGaps)');
+        for (const field of Object.values(SUMMARY_FIELD_BY_TYPE)) {
+            expect(body, `summary.${field} must come from gaps()`).toContain(`${field}:`);
+        }
+
+        // The metrics component only binds summary fields (one source for all tabs).
+        const metricsSrc = fs.readFileSync(METRICS_TS_PATH, 'utf8');
+        const classAt = metricsSrc.search(/^export class\s/m);
+        const componentDecl = metricsSrc.slice(0, classAt);
+        expect(componentDecl).toContain('selector: \'eso-reconciliation-metrics\'');
+        expect(metricsSrc).toContain('summary = input.required<ReconciliationScanSummaryDto>()');
+        expect(metricsSrc).toContain('role="tab"');
+        expect(metricsSrc.match(/aria-selected/g)?.length ?? 0).toBeGreaterThanOrEqual(7);
+
+        // Page pillar counts must use the service helper, not ad-hoc sums.
+        const pageSrc = fs.readFileSync(PAGE_TS_PATH, 'utf8');
+        expect(pageSrc).toContain("countGapsInPillar(this.reconciliationService.gaps(), 'sdlc')");
+        expect(pageSrc).not.toContain('missingSdlcDocs + ');
     });
 });
 

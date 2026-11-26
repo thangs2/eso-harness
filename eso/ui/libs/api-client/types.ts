@@ -1044,6 +1044,8 @@ export interface SdlcPipelineStageCoverageDto {
     directory: string;
     docCount: number;
     status: 'covered' | 'missing' | 'drift';
+    /** Set by the backend only when a real gap backs this stage; the chip click selects it. */
+    gapId?: string;
 }
 
 export interface PostgresKnowledgeStatsDto {

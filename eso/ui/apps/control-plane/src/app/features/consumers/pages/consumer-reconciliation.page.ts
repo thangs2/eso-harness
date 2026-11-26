@@ -10,7 +10,14 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
 import { CommonModule } from '@angular/common';
-import { ReconciliationService } from '../services/reconciliation.service.js';
+import {
+    PILLAR_DISCREPANCY_TYPES,
+    ReconciliationService,
+    isKnownDiscrepancyType,
+    countGapsInPillar,
+    countHiddenByCap,
+    findGapBackingStage,
+} from '../services/reconciliation.service.js';
 import { ReconciliationHeroComponent } from '../components/reconciliation/reconciliation-hero.component.js';
 import { ReconciliationPipelineComponent } from '../components/reconciliation/reconciliation-pipeline.component.js';
 import { ReconciliationMetricsComponent } from '../components/reconciliation/reconciliation-metrics.component.js';
@@ -62,17 +69,15 @@ export class ConsumerReconciliationPage implements OnInit {
     readonly postgresStats = this.reconciliationService.postgresStats;
     readonly error = this.reconciliationService.error;
 
-    readonly codeDriftCount = computed(() => {
-        const s = this.summary();
-        return s.orphanRoutes + s.unfedSchemas + s.unlinkedSpikes;
-    });
+    // Pillar counts come from the SAME `gaps()` array the ledger renders and the SAME type sets
+    // `filteredGaps()` uses (PILLAR_DISCREPANCY_TYPES), so a pillar can never claim rows the
+    // category tabs / ledger do not have. The old sums (E+C for the SDLC pillar) mixed a pillar
+    // with an unrelated category and over-reported.
+    readonly codeDriftCount = computed(() => countGapsInPillar(this.reconciliationService.gaps(), 'code'));
 
-    readonly missingSdlcCount = computed(() => {
-        const s = this.summary();
-        return s.missingSdlcDocs + s.staleContracts;
-    });
+    readonly missingSdlcCount = computed(() => countGapsInPillar(this.reconciliationService.gaps(), 'sdlc'));
 
-    readonly postgresDriftCount = computed(() => this.summary().indexDrift);
+    readonly postgresDriftCount = computed(() => countGapsInPillar(this.reconciliationService.gaps(), 'postgres'));
 
     readonly hasActiveFilters = computed(() => {
         return (
@@ -90,19 +95,16 @@ export class ConsumerReconciliationPage implements OnInit {
         const sev = this.filterSeverity();
         const query = this.searchQuery().trim().toLowerCase();
 
+        // Same type sets the pillar counts and the capped-out badge use (PILLAR_DISCREPANCY_TYPES).
+        const pillarTypes = pillar === 'all' ? null : PILLAR_DISCREPANCY_TYPES[pillar];
+
         return gaps.filter((gap) => {
-            if (pillar === 'code') {
-                if (!['GAP_A_ORPHAN_ROUTE', 'GAP_B_UNFED_SCHEMA', 'GAP_D_UNLINKED_SPIKE'].includes(gap.type)) {
-                    return false;
-                }
-            } else if (pillar === 'sdlc') {
-                if (!['GAP_E_MISSING_SDLC_DOC'].includes(gap.type)) {
-                    return false;
-                }
-            } else if (pillar === 'postgres') {
-                if (gap.type !== 'GAP_F_INDEX_DRIFT') {
-                    return false;
-                }
+            // A valid gap type always has a category tab, so every row is counted somewhere.
+            // An unrecognised type cannot be labelled, counted or filtered honestly: refuse to
+            // render it rather than invent a column for it.
+            if (!isKnownDiscrepancyType(gap.type)) return false;
+            if (pillarTypes && !(pillarTypes as readonly string[]).includes(gap.type)) {
+                return false;
             }
 
             if (type !== 'all' && gap.type !== type) return false;
@@ -126,25 +128,13 @@ export class ConsumerReconciliationPage implements OnInit {
      * surfaces a misleading global number. Severity/search are row-level filters
      * the backend cap does not apply to, so they are not folded in here.
      */
-    readonly hiddenByCapCount = computed(() => {
-        const truncated = this.summary().truncated ?? {};
-        const pillar = this.activePillar();
-        const type = this.filterType();
-        return (Object.entries(truncated) as [DiscrepancyType, number | undefined][]).reduce((total, [gapType, dropped]) => {
-            if (typeof dropped !== 'number' || dropped <= 0) return total;
-            const keptByPillar =
-                pillar === 'code'
-                    ? ['GAP_A_ORPHAN_ROUTE', 'GAP_B_UNFED_SCHEMA', 'GAP_D_UNLINKED_SPIKE'].includes(gapType)
-                    : pillar === 'sdlc'
-                      ? ['GAP_E_MISSING_SDLC_DOC'].includes(gapType)
-                      : pillar === 'postgres'
-                        ? gapType === 'GAP_F_INDEX_DRIFT'
-                        : true;
-            if (!keptByPillar) return total;
-            if (type !== 'all' && gapType !== type) return total;
-            return total + dropped;
-        }, 0);
-    });
+    readonly hiddenByCapCount = computed(() =>
+        countHiddenByCap(
+            this.summary().truncated,
+            this.activePillar(),
+            this.filterType(),
+        ),
+    );
 
     readonly selectedGap = computed<ReconciliationGapDto | null>(() => {
         const list = this.filteredGaps();
@@ -212,18 +202,46 @@ export class ConsumerReconciliationPage implements OnInit {
         this.filterType.set('all');
     }
 
+    /**
+     * Maps a pipeline chip click to a ledger filter that can actually render the clicked stage.
+     *
+     * The backend attaches `gapId` to a stage only when a real gap backs it. When it does, we select
+     * that exact gap (clearing pillar/type/severity/search so the row is visible). When it does not
+     * (e.g. sign-off stages S14–S17 are `missing` by BR-05 and can never emit `GAP_E`), deriving a
+     * type + stage-code filter would only ever match zero rows — so we do not invent one.
+     */
     onStageSelect(stage: SdlcPipelineStageCoverageDto): void {
-        this.activePillar.set('all');
-        if (stage.status === 'missing') {
-            this.filterType.set('GAP_E_MISSING_SDLC_DOC');
-            this.searchQuery.set(stage.stage);
-        } else if (stage.status === 'drift') {
+        const backingGap = this.findBackingGap(stage);
+        if (backingGap) {
+            this.activePillar.set('all');
+            this.filterType.set('all');
+            this.filterSeverity.set('all');
+            this.searchQuery.set('');
+            this.selectedGapId.set(backingGap.id);
+            return;
+        }
+
+        // Only a doc stage can legitimately own a GAP-E. A missing stage with no backing gap
+        // (sign-off/code stages) has nothing to show, so keep the ledger as-is instead of
+        // dropping the operator into a filter that is guaranteed to be empty.
+        if (stage.status === 'missing') return;
+
+        if (stage.status === 'drift') {
+            this.activePillar.set('all');
             this.filterType.set('GAP_F_INDEX_DRIFT');
+            this.filterSeverity.set('all');
             this.searchQuery.set(stage.directory.replace(/\/$/, ''));
         } else {
+            this.activePillar.set('all');
             this.filterType.set('all');
+            this.filterSeverity.set('all');
             this.searchQuery.set(stage.directory.replace(/\/$/, ''));
         }
+    }
+
+    /** The gap the backend bound to this stage (or its GAP-E fallback), if it is in the current list. */
+    private findBackingGap(stage: SdlcPipelineStageCoverageDto): ReconciliationGapDto | null {
+        return findGapBackingStage(this.reconciliationService.gaps(), stage);
     }
 
     async extractDraft(gap: ReconciliationGapDto): Promise<void> {
