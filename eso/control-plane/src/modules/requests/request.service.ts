@@ -164,6 +164,12 @@ export interface RequestSystemStage {
     title: string;
     sub: string;
     status: 'ok' | 'warn' | 'info' | 'muted';
+    /**
+     * Whether this stage found real evidence for its own question. Independent of `status`, which is a
+     * presentation decision: `warn` can fire with no data and `info` can carry a value. `null` means
+     * the stage did not declare it (payloads from before the field existed), never "no evidence".
+     */
+    evidenced?: boolean;
     tab: 'waterfall' | 'rules' | 'decisions' | 'telemetry';
     details: Array<{ label: string; value: string; detail: string }>;
 }
@@ -546,9 +552,14 @@ function durationMsOf(request: RequestDetailBase['request']): number {
 }
 
 /**
- * P8 — effectiveness from the detail that was just assembled. `stepsWithEvidence` counts stages
- * that found a real value (`ok`/`warn`); `muted`/`info` stages are the ones that reported
- * `not captured`, so they must not inflate the count.
+ * P8 — effectiveness from the detail that was just assembled.
+ *
+ * `stepsWithEvidence` counts stages that actually carry evidence, which is NOT the same as a stage's
+ * presentation status: `warn` means "look at this" (stage 1 warns for an unread law, stage 8 warns
+ * because one audit question is unproven) and it can fire with no data at all, while `info` can carry
+ * a real value (stage 2 reports the decision winner and JEV even when no JEV was reported). Deriving
+ * the count from status therefore both over-counted warnings and under-counted evidence, so it is
+ * taken from the stage's own evidence flags instead.
  */
 export function effectivenessOf(detail: RequestDetail, events: RequestEvent[]): RequestEffectiveness {
     const observed = detail.pipeline.filter((stage) => stage.status !== 'PENDING');
@@ -556,7 +567,7 @@ export function effectivenessOf(detail: RequestDetail, events: RequestEvent[]): 
     const rolesAssigned = new Set(detail.pipeline.map((stage) => stage.role).filter(Boolean));
     return {
         stepsTotal: detail.systemStages.length,
-        stepsWithEvidence: detail.systemStages.filter((stage) => stage.status === 'ok' || stage.status === 'warn').length,
+        stepsWithEvidence: detail.systemStages.filter((stage) => stage.evidenced === true).length,
         rolesAssigned: rolesAssigned.size,
         rolesObserved: rolesObserved.size,
         workersTotal: detail.pipeline.length,
@@ -781,6 +792,10 @@ export class RequestService {
                         return name && (name === key || name.includes(key) || key.includes(name)) ? count + (Number(item?.calls) || 1) : count;
                     }, 0);
                 }, 0);
+                // The adapter is listed because the consumer CONFIGURES it; the question this status
+                // answers is only whether the host reported calling it. `not-captured` therefore means
+                // "configured, no call reported" — the earlier mapping made `configured` unreachable,
+                // so a reader could not tell a configured-but-silent adapter from an unconfigured one.
                 adapters.push({ id, label, kind, source, required, status: calls > 0 ? 'observed' : 'not-captured', calls });
             };
             if (root) {
@@ -850,13 +865,16 @@ export class RequestService {
         const distill = detail.signals?.distill ?? null;
         const gaps = verdict.gaps;
         const models = [...new Set(detail.telemetry.llmCalls.map((call) => call.model).filter((value) => value && value !== '—'))];
-        // Q1–Q6 readiness: six data-driven booleans, never a judgement about the turn's quality.
+        // Q1–Q6: the six V3 audit questions a third party must be able to answer (spec §5b), each
+        // data-driven and never a judgement about the turn's quality. Q2 asks WHAT ESO COMMITTED
+        // (verdict), not whether the host happened to emit a decision.recorded — a route that never
+        // emits one still has adjudication to show, and readiness must not move with evidence recon.
         const questions = {
             Q1: detail.events.length > 0,
-            Q2: Boolean(decision),
-            Q3: Boolean(recon && reconCalls > 0),
-            Q4: gaps.length === 0,
-            Q5: Boolean(receipt?.hashPrefix),
+            Q2: Boolean(verdict?.level),
+            Q3: Boolean(receipt?.hashPrefix),
+            Q4: detail.events.some((event) => event.event === 'action.recorded'),
+            Q5: Boolean(verdict?.basis),
             Q6: Boolean(spec?.doc),
         };
         const answered = Object.values(questions).filter(Boolean).length;
@@ -866,6 +884,8 @@ export class RequestService {
                 id: 'intake-law', stepNumber: 1, title: 'Intake & Law Gate',
                 sub: `${detail.request.userQuery.length} chars · ${lawState === 'decision' ? `${lawRefs.length} law ref(s)` : lawState === 'loaded' ? `${lawLoaded.length} law loaded` : lawState === 'missing' ? 'law missing — tool used without read' : 'law not exercised (text-only)'}`,
                 status: lawState === 'decision' ? 'ok' : lawState === 'missing' ? 'warn' : 'info', tab: 'rules',
+                // Evidence = a law claim the host actually cited or loaded; unread law is not evidence.
+                evidenced: lawState === 'decision' || lawState === 'loaded',
                 details: [
                     { label: 'Prompt', value: `${detail.request.userQuery.length} chars`, detail: `hash ${detail.request.promptHash}` },
                     {
@@ -895,6 +915,8 @@ export class RequestService {
                     ? `${winner ?? 'not captured'} · ${jev.mode} · ${jev.band ?? 'band not reported'} · confidence ${jev.confidence ?? 'not captured'}`
                     : `${winner ?? 'not captured'} · JEV not reported`,
                 status: jev ? (jev.match ? 'ok' : 'warn') : 'info', tab: 'decisions',
+                // A recorded decision is evidence even without JEV; the winner alone answers "who decided".
+                evidenced: Boolean(decision) || Boolean(jev),
                 details: [
                     { label: 'Decision', value: winner ?? 'not captured', detail: basis ?? 'no basis recorded by host' },
                     {
@@ -915,6 +937,7 @@ export class RequestService {
                 id: 'evidence-recon', stepNumber: 3, title: 'Evidence Recon',
                 sub: recon ? `${recon.length} adapter(s) · ${reconCalls} call(s)` : 'not captured',
                 status: recon && reconCalls > 0 ? 'ok' : 'muted', tab: 'rules',
+                evidenced: Boolean(recon && reconCalls > 0),
                 details: recon && recon.length
                     ? recon.slice(0, 3).map((item) => ({ label: item.adapter, value: `${item.calls} call(s)`, detail: 'signals.recon' }))
                     : [{ label: 'Recon', value: 'not captured', detail: 'no evidence.recon on decision.recorded' }],
@@ -923,6 +946,8 @@ export class RequestService {
                 id: 'sufficiency', stepNumber: 4, title: 'Sufficiency Gate',
                 sub: `score ${verdict.score} · ${gaps.length} gap(s)`,
                 status: gaps.length ? 'warn' : 'ok', tab: 'decisions',
+                // The gate always adjudicates, so a level/score is always evidence — gaps or not.
+                evidenced: true,
                 details: [
                     { label: 'Level', value: verdict.level, detail: 'ESO adjudication of the host claim' },
                     { label: 'Score', value: String(verdict.score), detail: '100 − 25 × proof gap' },
@@ -939,6 +964,7 @@ export class RequestService {
                 id: 'slp', stepNumber: 5, title: 'SLP Orchestration',
                 sub: `${roleNames.length} role(s) · ${observedWorkers.length}/${detail.pipeline.length} worker(s) · ${executionShape}`,
                 status: roleNames.length >= 3 ? 'ok' : 'info', tab: 'telemetry',
+                evidenced: roleNames.length > 0 || observedWorkers.length > 0,
                 details: [
                     { label: 'Roles', value: roleNames.length ? roleNames.slice(0, 3).join(', ') : 'not captured', detail: 'config worker.role assignment' },
                     {
@@ -956,6 +982,7 @@ export class RequestService {
                 id: 'execution', stepNumber: 6, title: 'Execution & Write Gate',
                 sub: `${actions.length} action(s) · write gate ${gate}`,
                 status: writeGate && !writeGate.allowed ? 'warn' : actions.length ? 'ok' : 'info', tab: 'waterfall',
+                evidenced: Boolean(writeGate) || actions.length > 0,
                 details: [
                     {
                         label: 'Actions',
@@ -978,6 +1005,7 @@ export class RequestService {
                 id: 'seal', stepNumber: 7, title: 'Seal & Distill',
                 sub: `${receipt.hashPrefix} · ${receipt.chained ? 'chained' : 'genesis'}`,
                 status: receipt.hashPrefix ? 'ok' : 'warn', tab: 'telemetry',
+                evidenced: Boolean(receipt.hashPrefix),
                 details: [
                     { label: 'Receipt', value: receipt.hashPrefix || 'not captured', detail: receipt.chained ? 'prev hash linked' : 'genesis (no predecessor)' },
                     { label: 'Spec', value: `${spec.doc} v${spec.version}`, detail: spec.section },
@@ -994,13 +1022,16 @@ export class RequestService {
             },
             {
                 id: 'report', stepNumber: 8, title: 'Report & Audit',
-                sub: `${answered}/6 questions ready`,
+                sub: `${answered}/6 audit questions answerable`,
                 status: answered === 6 ? 'ok' : 'warn', tab: 'decisions',
+                // Reaching the report stage at all means the trace exists, so it always carries evidence;
+                // the count is how many of the six V3 audit questions a reader can actually answer.
+                evidenced: true,
                 details: [
                     {
-                        label: 'Answered',
+                        label: 'Audit questions',
                         value: `${answered}/6`,
-                        detail: missing.length ? `missing ${missing.join(', ')}` : 'all six questions answered',
+                        detail: missing.length ? `missing ${missing.join(', ')}` : 'all six questions answerable',
                     },
                     {
                         label: 'Verdict · receipt · spec',

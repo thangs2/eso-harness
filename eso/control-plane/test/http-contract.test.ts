@@ -570,10 +570,15 @@ describe('HTTP contract — CR-010/011 routes', () => {
         assert.deepEqual(Object.keys(body.effectiveness).sort(), [...keys].sort());
         assert.equal(body.effectiveness.stepsTotal, 8);
         assert.equal(body.effectiveness.stepsTotal, stages.length);
+        // Evidence is the stage's own flag, not its presentation status: `warn` can fire with no data
+        // and `info` can carry a value, so the count must never be derived from status.
         assert.equal(
             body.effectiveness.stepsWithEvidence,
-            stages.filter((stage: any) => stage.status === 'ok' || stage.status === 'warn').length,
+            stages.filter((stage: any) => stage.evidenced === true).length,
         );
+        for (const stage of stages) {
+            assert.equal(typeof stage.evidenced, 'boolean', `${stage.id} declares evidenced`);
+        }
         assert.equal(body.effectiveness.workersTotal, body.pipeline.length);
         assert.equal(typeof body.effectiveness.workersObserved, 'number');
         assert.equal(body.effectiveness.failures, 0);
