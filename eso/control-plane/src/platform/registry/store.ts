@@ -219,6 +219,14 @@ export interface PlatformStore {
     replaceKnowledgeIndex(consumerId: string, payload: any): Promise<void>;
     knowledgeSummary(consumerId: string): Promise<any>;
     knowledgeDocs(consumerId: string, query?: string, limit?: number): Promise<any[]>;
+    /**
+     * Every indexed document path for a consumer, with no pagination cap.
+     * Reconciliation needs the complete DB side to compare against disk; using
+     * `knowledgeDocs` for that capped the comparison at 2000 rows and reported every
+     * real row beyond the cap as "unindexed" (baplatform: 4241 rows, 2242 false gaps).
+     * Returns `path` + `content_hash` only — callers doing set comparison need nothing else.
+     */
+    knowledgeDocPaths(consumerId: string): Promise<Array<{ path: string; contentHash: string }>>;
     knowledgeFindings(consumerId: string, limit?: number): Promise<any[]>;
     knowledgeDoc(consumerId: string, docId: string): Promise<any>;
     knowledgeCoverage(consumerId: string): Promise<any[]>;
@@ -911,6 +919,10 @@ export class MemoryPlatformStore implements PlatformStore {
     }
 
     async knowledgeDocs(_consumerId: string, _query?: string, _limit?: number): Promise<any[]> {
+        return [];
+    }
+
+    async knowledgeDocPaths(_consumerId: string): Promise<Array<{ path: string; contentHash: string }>> {
         return [];
     }
 
@@ -2506,6 +2518,17 @@ export class BunSqlPlatformStore implements PlatformStore {
         sql += ` ORDER BY d.path LIMIT $${params.length + 1}`;
         params.push(cap);
         return await this.sql.unsafe(sql, params);
+    }
+
+    async knowledgeDocPaths(consumerId: string): Promise<Array<{ path: string; contentHash: string }>> {
+        const schema = quoteSchema(schemaNameFor(consumerId));
+        // No LIMIT on purpose: this is the reconciliation oracle. A cap here silently turns
+        // every real row beyond it into a phantom "unindexed" GAP-F finding.
+        const rows = (await this.sql.unsafe(
+            `SELECT d.path, d.content_hash FROM ${schema}.knowledge_doc d ORDER BY d.path`,
+            []
+        )) as any[];
+        return rows.map((row) => ({ path: String(row.path ?? ''), contentHash: String(row.content_hash ?? '') }));
     }
 
     async knowledgeFindings(consumerId: string, limit = 50): Promise<any[]> {

@@ -26,6 +26,13 @@ class InMemoryKnowledgeStore extends MemoryPlatformStore {
     override async knowledgeDocs(consumerId: string, _query?: string, limit = 500): Promise<any[]> {
         return (this.docsByConsumer.get(consumerId) ?? []).slice(0, limit);
     }
+
+    override async knowledgeDocPaths(consumerId: string): Promise<Array<{ path: string; contentHash: string }>> {
+        return (this.docsByConsumer.get(consumerId) ?? []).map((d) => ({
+            path: d.path,
+            contentHash: d.content_hash,
+        }));
+    }
 }
 import { AuthService } from '../src/common/auth/auth.js';
 import { createPlatformServer } from '../src/common/http/server.js';
@@ -908,6 +915,38 @@ describe('ReconciliationScannerService — Unified 3-Pillar Engine & Artifact Pr
         rmSync(join(root, 'sdlc', '01.inception'), { recursive: true, force: true });
         const empty = await scanner.scan(cid);
         assert.deepEqual(empty.truncated, {});
+    });
+
+    test('does not report phantom unindexed rows when the DB holds more docs than the 2000-row page cap', async () => {
+        // Regression (measured on baplatform: 4241 DB rows, 2242 falsely "unindexed").
+        // The drift oracle must read the COMPLETE db side, not a paginated slice.
+        const store = new InMemoryKnowledgeStore();
+        const root = tempRoot();
+        const cid = 'recon-big-index';
+        await store.insertConsumer(consumerRecord(cid, root));
+
+        mkdirSync(join(root, 'sdlc', '01.inception'), { recursive: true });
+        const TOTAL = 2105; // deliberately > 2000
+        const rows: any[] = [];
+        for (let i = 0; i < TOTAL; i++) {
+            const rel = `sdlc/01.inception/doc-${String(i).padStart(4, '0')}.md`;
+            const text = `# Doc ${i}\n`;
+            writeFileSync(join(root, rel), text);
+            rows.push({ doc_id: `d${i}`, path: rel, contentHash: createHash('sha256').update(text).digest('hex'), title: null });
+        }
+        // Simulate the DB already holding every disk doc (indices match disk exactly).
+        await store.replaceKnowledgeIndex(cid, {
+            docs: rows.map((r) => ({ docId: r.doc_id, path: r.path, contentHash: r.contentHash, title: null })),
+        });
+
+        const scanner = new ReconciliationScannerService(store, new KnowledgeIndexService(store));
+        const res = await scanner.scan(cid);
+
+        // Everything is indexed on both sides => zero drift. Capping the read made 105 rows phantom-unindexed.
+        assert.equal(res.postgresStats.unindexedCount, 0);
+        assert.equal(res.gaps.filter((g) => g.type === 'GAP_F_INDEX_DRIFT').length, 0);
+        assert.equal(res.truncated.GAP_F_INDEX_DRIFT, undefined);
+        assert.ok(res.postgresStats.indexedDocsCount >= TOTAL);
     });
 
     test('reports truncated drop counts for GAP-A routes beyond MAX_GAPS_PER_CATEGORY', async () => {

@@ -1239,21 +1239,24 @@ export class ReconciliationScannerService {
             });
         }
 
-        let dbDocs: any[] = [];
+        // Compare against the COMPLETE DB side. `knowledgeDocs` is paginated (hard cap 2000),
+        // so using it here made every real row past the cap look unindexed — on baplatform
+        // (4241 rows) that produced 2242 phantom GAP-F findings and a bogus truncated count.
+        let dbRows: Array<{ path: string; contentHash: string }> = [];
         try {
-            dbDocs = await this.store.knowledgeDocs(consumerId, '', 2000);
-            if (!Array.isArray(dbDocs)) dbDocs = [];
+            dbRows = await this.store.knowledgeDocPaths(consumerId);
+            if (!Array.isArray(dbRows)) dbRows = [];
         } catch {
-            dbDocs = [];
+            dbRows = [];
         }
 
         const dbByPath = new Map<string, { path: string; contentHash: string }>();
-        for (const doc of dbDocs) {
+        for (const doc of dbRows) {
             if (!doc || typeof doc.path !== 'string') continue;
             const normPath = doc.path.replace(/\\/g, '/').replace(/^\.\//, '');
             dbByPath.set(normPath, {
                 path: normPath,
-                contentHash: typeof doc.content_hash === 'string' ? doc.content_hash.trim() : '',
+                contentHash: typeof doc.contentHash === 'string' ? doc.contentHash.trim() : '',
             });
         }
 
