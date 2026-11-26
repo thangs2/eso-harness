@@ -56,7 +56,10 @@ test('Q5 calls the verify route once per loaded receipt', () => {
         CLIENT,
         /\/api\/v1\/consumers\/\$\{encodeURIComponent\(id\)\}\/receipts\/\$\{encodeURIComponent\(receiptId\)\}\/verify/
     );
-    assert.match(PAGE, /const receiptId = loaded\?\.receipt\?\.receiptId \?\? loaded\?\.verdict\?\.receiptId \?\? '';/);
+    assert.match(
+        PAGE,
+        /const receiptId = loaded\?\.receipt\?\.receiptId \?\? loaded\?\.verdict\?\.receiptId \?\? this\.fullReceipt\(\)\?\.receiptId \?\? '';/
+    );
     assert.match(PAGE, /if \(receiptId\) await this\.verifyReceipt\(seq, receiptId\);/);
     // exactly one call site, inside the guarded load; nothing calls verify from the template
     assert.equal((PAGE.match(/this\.verifyReceipt\(/g) ?? []).length, 1);

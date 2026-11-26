@@ -124,3 +124,28 @@ export function defaultPlugins(): PluginEntry[] {
         { id: 'orca', label: 'Orca', type: 'host', version: '0.1.0', capabilities: ['orchestration', 'mcp'], status: 'available' },
     ];
 }
+
+export interface ConsumerArtifactDto {
+    id: string;
+    consumerId: string;
+    title: string;
+    origin: 'host' | 'user' | 'agent' | 'machine';
+    custodian: 'host-local' | 'staging' | 'repo' | 'provider';
+    ktState: 'raw' | 'proposed' | 'approved' | 'retired';
+    liveness: 'ephemeral' | 'living' | 'frozen';
+    derivedFrom?: string[];
+    contentType: string;
+    body: string;
+    metadata?: Record<string, any>;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface HostProjectionArtifactDto {
+    target: string;
+    path: string;
+    description: string;
+    status: 'generated' | 'synced' | 'pending' | 'missing' | 'drifted';
+    fileCount: number;
+    lastGeneratedAt: string;
+}

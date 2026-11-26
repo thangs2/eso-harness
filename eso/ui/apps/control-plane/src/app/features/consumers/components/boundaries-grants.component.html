@@ -1,0 +1,152 @@
+<section class="grants-panel" aria-labelledby="grants-title">
+    <header class="section-head">
+        <div class="head-copy">
+            <h3 id="grants-title">Grants</h3>
+            <p>Write grants are single-use and expire. Read grants can be once or always.</p>
+        </div>
+        <span class="active-grants-tag">{{ grantCount() }} active {{ grantCount() === 1 ? 'grant' : 'grants' }}</span>
+    </header>
+
+    <form [formGroup]="grantForm()" class="grant-create-form">
+        <div class="form-row">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic" density="-2" class="target-field">
+                <mat-label>Target prefix</mat-label>
+                <input
+                    matInput
+                    formControlName="target"
+                    placeholder="e.g. data-lake/**, /var/log/audit.log"
+                    aria-label="Grant target prefix"
+                >
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" subscriptSizing="dynamic" density="-2" class="kind-field">
+                <mat-label>Kind</mat-label>
+                <mat-select formControlName="kind" aria-label="Grant kind">
+                    <mat-option value="write">write</mat-option>
+                    <mat-option value="read">read</mat-option>
+                </mat-select>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" subscriptSizing="dynamic" density="-2" class="mode-field">
+                <mat-label>Mode</mat-label>
+                <mat-select formControlName="mode" aria-label="Grant mode">
+                    <mat-option value="once">once</mat-option>
+                    <mat-option value="always" [disabled]="grantForm().controls.kind.value === 'write'">
+                        always (read only)
+                    </mat-option>
+                </mat-select>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" subscriptSizing="dynamic" density="-2" class="ttl-field">
+                <mat-label>Expires in (minutes)</mat-label>
+                <input
+                    matInput
+                    type="number"
+                    formControlName="ttlMinutes"
+                    min="1"
+                    [max]="grantTtlMaxMinutes()"
+                    aria-label="Grant TTL minutes"
+                >
+            </mat-form-field>
+
+            <div class="action-cell">
+                <button
+                    mat-flat-button
+                    color="primary"
+                    type="button"
+                    class="create-grant-btn"
+                    [disabled]="grantSaving() || !grantForm().controls.target.value.trim()"
+                    (click)="create.emit()"
+                >
+                    {{ grantSaving() ? 'Creating…' : 'Create grant' }}
+                </button>
+            </div>
+        </div>
+
+        <div class="form-footer">
+            <div class="ttl-presets" role="group" aria-label="Quick TTL presets">
+                <span class="preset-label">Quick TTL:</span>
+                <button
+                    type="button"
+                    class="preset-btn"
+                    [class.active]="grantForm().controls.ttlMinutes.value === 15"
+                    (click)="setTtlPreset(15)"
+                >
+                    15m
+                </button>
+                <button
+                    type="button"
+                    class="preset-btn"
+                    [class.active]="grantForm().controls.ttlMinutes.value === 60"
+                    (click)="setTtlPreset(60)"
+                >
+                    1h
+                </button>
+                <button
+                    type="button"
+                    class="preset-btn"
+                    [class.active]="grantForm().controls.ttlMinutes.value === 240"
+                    (click)="setTtlPreset(240)"
+                >
+                    4h
+                </button>
+                <button
+                    type="button"
+                    class="preset-btn"
+                    [class.active]="grantForm().controls.ttlMinutes.value === 480"
+                    (click)="setTtlPreset(480)"
+                >
+                    8h
+                </button>
+            </div>
+
+            @if (grantForm().controls.kind.value === 'write') {
+                <span class="grant-note">
+                    🔒 Write grants are single-use; choose the read kind for an always grant.
+                </span>
+            } @else {
+                <span class="grant-note">
+                    📖 Read grants can be configured as once or permanent (always).
+                </span>
+            }
+        </div>
+    </form>
+
+    @if (grants().length === 0) {
+        <div class="empty-grants-state">
+            <span class="empty-icon">🎟️</span>
+            <span>No active grants currently issued for this consumer.</span>
+        </div>
+    } @else {
+        <div class="grant-list">
+            @for (grant of grants(); track grant.grantId) {
+                <article class="grant-row" [attr.data-grant-id]="grant.grantId">
+                    <span class="grant-kind" [class.read]="grant.kind === 'read'" [class.write]="grant.kind === 'write'">
+                        {{ grant.kind }}
+                    </span>
+                    <div class="grant-target">
+                        <code>{{ grant.targetPrefix }}</code>
+                        <div class="grant-meta">
+                            <span class="mode-badge">{{ grant.mode }}</span>
+                            @if (grant.expiresAt) {
+                                <span class="expiry-text">expires {{ grant.expiresAt }}</span>
+                            } @else {
+                                <span class="expiry-text">never expires</span>
+                            }
+                        </div>
+                    </div>
+                    <button
+                        mat-button
+                        color="warn"
+                        type="button"
+                        class="revoke-btn"
+                        [attr.aria-label]="'Revoke grant for ' + grant.targetPrefix"
+                        (click)="revoke.emit(grant.grantId)"
+                    >
+                        Revoke
+                    </button>
+                </article>
+            }
+        </div>
+    }
+</section>

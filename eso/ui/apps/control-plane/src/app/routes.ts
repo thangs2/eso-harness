@@ -28,6 +28,15 @@ export const APP_ROUTES: Routes = [
         loadChildren: () => import('./features/observatory/observatory.routes.js').then((m) => m.OBSERVATORY_ROUTES),
     },
     {
+        path: 'observatory-v2',
+        redirectTo: 'observatory',
+        pathMatch: 'full',
+    },
+    {
+        path: 'observatory-v2/requests/:requestId',
+        redirectTo: 'observatory/requests/:requestId',
+    },
+    {
         path: 'office',
         loadChildren: () => import('./features/observatory/office.routes.js').then((m) => m.OFFICE_ROUTES),
     },

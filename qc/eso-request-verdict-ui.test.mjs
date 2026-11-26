@@ -126,7 +126,7 @@ test('no TODO/MOCK placeholders and no spec ↔ trace toggle (deferred)', () => 
 });
 
 test('verdict blocks use layout tokens (no new global css, no hardcoded spacing/radius px)', () => {
-    const verdictStyles = STYLES.slice(STYLES.indexOf('.verdict-hero'));
+    const verdictStyles = STYLES.slice(STYLES.indexOf('.verdict-hero')).replace(/\/\*[\s\S]*?\*\//g, '');
     assert.match(verdictStyles, /padding: var\(--space-4\)/);
     assert.match(verdictStyles, /border-radius: var\(--radius-md\)/);
     assert.match(verdictStyles, /font-size: var\(--text-sm\)/);

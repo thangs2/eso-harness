@@ -40,7 +40,8 @@ test('detail page frame follows golden standard (symmetrical page-pad, no sectio
 });
 
 test('no hardcoded px for spacing/font/radius (border/shadow excepted)', () => {
-    const decls = STYLES.match(/[a-z-]+\s*:\s*[^;{}]+/g) ?? [];
+    const cleanStyles = STYLES.replace(/\/\*[\s\S]*?\*\//g, '');
+    const decls = cleanStyles.match(/[a-z-]+\s*:\s*[^;{}]+/g) ?? [];
     const bad = decls.filter((decl) => {
         const prop = decl.split(':')[0].trim();
         if (/^border/.test(prop) || prop === 'box-shadow') return false;

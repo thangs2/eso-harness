@@ -28,7 +28,7 @@ import {
     splitList,
 } from './consumer-settings.models.js';
 import type { HostProfile, LayerId, LegacyHostProfile, PluginEntry, StackLayer, StackVersion, StackVersionStatus, WorkerEdge, WorkerEntry } from './consumer-settings.models.js';
-import type { ConsumerProfile, HostDto, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, McpProviderDto, WorkerConfigDto, EvidenceRequirementDto, FlowSummaryDto, FlowDefinitionDto, HostRuntimeDto, LegacyHarnessReportDto, HarnessMigrationPreviewDto, JevDecisionDto } from '../../../../../../../libs/api-client/types.js';
+import type { ConsumerProfile, HostDto, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeSufficiencyDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, McpProviderDto, WorkerConfigDto, EvidenceRequirementDto, FlowSummaryDto, FlowDefinitionDto, HostRuntimeDto, LegacyHarnessReportDto, HarnessMigrationPreviewDto, JevDecisionDto } from '../../../../../../../libs/api-client/types.js';
 
 /**
  * Only remaining occurrence of the pre-P0.3 host-binding key: settings saved by an older UI.
@@ -368,6 +368,8 @@ readonly knowledgeDocs = signal<KnowledgeDocDto[]>([]);
 
 readonly knowledgeFindings = signal<KnowledgeFindingDto[]>([]);
 
+readonly knowledgeSufficiency = signal<KnowledgeSufficiencyDto | null>(null);
+
 readonly knowledgeDocDetail = signal<KnowledgeDocDetailDto | null>(null);
 
 readonly knowledgeCheck = signal<KnowledgeCheckDto | null>(null);
@@ -400,7 +402,7 @@ readonly manifestChecks = signal<string[]>(['links resolve', 'header shape', 'de
 
 readonly selectedKnowledgeTopic = signal('pipeline');
 
-readonly knowledgeSection = signal<'overview' | 'sources' | 'contract' | 'index' | 'manifest'>('overview');
+readonly knowledgeSection = signal<'overview' | 'sources' | 'contract' | 'index' | 'manifest' | 'artifacts'>('overview');
 
 readonly openDiagram = signal<'main' | 'cr' | 'intent' | 'workers' | null>(null);
 
@@ -462,16 +464,16 @@ ngOnInit(): void {
             const next = requested === 'observatory' ? 'observation' : requested;
             if (next && this.tabs.some((item) => item.id === next)) this.activeTab.set(next);
             const nextSection = params.get('section') || params.get('subtab');
-            if (nextSection && ['overview', 'sources', 'contract', 'index', 'manifest'].includes(nextSection)) {
-                this.knowledgeSection.set(nextSection as 'overview' | 'sources' | 'contract' | 'index' | 'manifest');
+            if (nextSection && ['overview', 'sources', 'contract', 'index', 'manifest', 'artifacts'].includes(nextSection)) {
+                this.knowledgeSection.set(nextSection as 'overview' | 'sources' | 'contract' | 'index' | 'manifest' | 'artifacts');
                 if (nextSection === 'contract') this.selectedKnowledgeTopic.set('pipeline');
                 if (nextSection === 'manifest') this.selectedKnowledgeTopic.set('agent-manifests');
                 if (nextSection === 'sources') this.selectedKnowledgeTopic.set('knowledge-base');
             }
         });
         const requestedSection = this.route.snapshot.queryParamMap.get('section') || this.route.snapshot.queryParamMap.get('subtab');
-        if (tab === 'knowledge' && ['overview', 'sources', 'contract', 'index', 'manifest'].includes(requestedSection || '')) {
-            this.knowledgeSection.set(requestedSection as 'overview' | 'sources' | 'contract' | 'index' | 'manifest');
+        if (tab === 'knowledge' && ['overview', 'sources', 'contract', 'index', 'manifest', 'artifacts'].includes(requestedSection || '')) {
+            this.knowledgeSection.set(requestedSection as 'overview' | 'sources' | 'contract' | 'index' | 'manifest' | 'artifacts');
             if (requestedSection === 'contract') this.selectedKnowledgeTopic.set('pipeline');
             if (requestedSection === 'manifest') this.selectedKnowledgeTopic.set('agent-manifests');
             if (requestedSection === 'sources') this.selectedKnowledgeTopic.set('knowledge-base');

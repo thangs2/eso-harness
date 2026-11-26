@@ -1,3 +1,4 @@
+import { Database } from 'bun:sqlite';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -236,12 +237,42 @@ export interface PlatformStore {
     listWorkerHandoffs(consumerId: string, workerId?: string, limit?: number): Promise<any[]>;
     recordWorkerImport(consumerId: string, record: any): Promise<void>;
     listWorkerImports(consumerId: string, limit?: number): Promise<any[]>;
+    saveArtifact(artifact: ConsumerArtifact): Promise<ConsumerArtifact>;
+    getArtifact(consumerId: string, artifactId: string): Promise<ConsumerArtifact | null>;
+    listArtifacts(consumerId: string, query?: ListArtifactsQuery): Promise<ConsumerArtifact[]>;
+    updateArtifactState(consumerId: string, artifactId: string, ktState: ArtifactKtState): Promise<ConsumerArtifact | null>;
     withSearchPath<T>(consumerId: string, fn: (tx: PlatformStore) => Promise<T>): Promise<T>;
     getSearchPath(): string | null;
     /** Test-only fault hook (memory store). */
     fault?: ((phase: string) => void) | null;
     /** DDL statements observed (memory store). */
     readonly ddlLog?: string[];
+}
+
+export type ArtifactOrigin = 'host' | 'user' | 'agent' | 'machine';
+export type ArtifactCustodian = 'host-local' | 'staging' | 'canonical';
+export type ArtifactKtState = 'raw' | 'proposed' | 'approved' | 'retired';
+export type ArtifactLiveness = 'ephemeral' | 'living' | 'frozen';
+
+export interface ConsumerArtifact {
+    id: string;
+    consumerId: string;
+    title: string;
+    origin: ArtifactOrigin;
+    custodian: ArtifactCustodian;
+    ktState: ArtifactKtState;
+    liveness: ArtifactLiveness;
+    derivedFrom: string[];
+    contentType: string;
+    body: string;
+    metadata: Record<string, any>;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface ListArtifactsQuery {
+    origin?: ArtifactOrigin;
+    ktState?: ArtifactKtState;
 }
 
 function clone<T>(value: T): T {
@@ -298,6 +329,7 @@ export class MemoryPlatformStore implements PlatformStore {
     private hostTokens = new Map<string, any>();
     private observations = new Map<string, any[]>();
     private evidence = new Map<string, any[]>();
+    private artifacts = new Map<string, Map<string, ConsumerArtifact>>();
     private evidenceSeq = 0;
     private schemas = new Set<string>();
     private nextEventId = 1;
@@ -833,8 +865,49 @@ export class MemoryPlatformStore implements PlatformStore {
         // Files are canonical; the memory store has no knowledge index surface.
     }
 
-    async knowledgeSummary(_consumerId: string): Promise<any> {
-        return { docs: 0, sections: 0, edges: 0, findings: 0, links: 0, manifest: null, run: null };
+    async knowledgeSummary(consumerId: string): Promise<any> {
+        const approved = (await this.listArtifacts(consumerId, { ktState: 'approved' })).length;
+        return { docs: 0, sections: 0, edges: 0, findings: 0, links: 0, manifest: null, run: null, artifacts: approved };
+    }
+
+    async saveArtifact(artifact: ConsumerArtifact): Promise<ConsumerArtifact> {
+        let map = this.artifacts.get(artifact.consumerId);
+        if (!map) {
+            map = new Map();
+            this.artifacts.set(artifact.consumerId, map);
+        }
+        const copy = clone(artifact);
+        map.set(copy.id, copy);
+        return clone(copy);
+    }
+
+    async getArtifact(consumerId: string, artifactId: string): Promise<ConsumerArtifact | null> {
+        const found = this.artifacts.get(consumerId)?.get(artifactId);
+        return found ? clone(found) : null;
+    }
+
+    async listArtifacts(consumerId: string, query?: ListArtifactsQuery): Promise<ConsumerArtifact[]> {
+        const map = this.artifacts.get(consumerId);
+        if (!map) return [];
+        const items = [...map.values()].filter((art) => {
+            if (query?.origin && art.origin !== query.origin) return false;
+            if (query?.ktState && art.ktState !== query.ktState) return false;
+            return true;
+        });
+        items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        return items.map((a) => clone(a));
+    }
+
+    async updateArtifactState(
+        consumerId: string,
+        artifactId: string,
+        ktState: ArtifactKtState,
+    ): Promise<ConsumerArtifact | null> {
+        const found = this.artifacts.get(consumerId)?.get(artifactId);
+        if (!found) return null;
+        found.ktState = ktState;
+        found.updatedAt = new Date().toISOString();
+        return clone(found);
     }
 
     async knowledgeDocs(_consumerId: string, _query?: string, _limit?: number): Promise<any[]> {
@@ -2420,7 +2493,7 @@ export class BunSqlPlatformStore implements PlatformStore {
     async knowledgeDocs(consumerId: string, query?: string, limit = 50): Promise<any[]> {
         const schema = quoteSchema(schemaNameFor(consumerId));
         const q = (query || '').trim();
-        const cap = Math.max(1, Math.min(Number(limit) || 50, 200));
+        const cap = Math.max(1, Math.min(Number(limit) || 50, 2000));
         const params: any[] = [];
         let sql = `SELECT d.doc_id, d.path, d.type, d.status, d.owner, d.title, d.content_hash, d.indexed_at,
                           (SELECT count(*) FROM ${schema}.knowledge_doc_section s WHERE s.doc_id=d.doc_id)::int AS sections
@@ -2462,7 +2535,95 @@ export class BunSqlPlatformStore implements PlatformStore {
             `SELECT manifest_id, build_id, manifest_version, generator_version, source_hash, created_at
              FROM ${schema}.knowledge_manifest ORDER BY created_at DESC LIMIT 1`
         );
-        return { ...rows[0], manifest: manifest[0] || null };
+        let artifacts = 0;
+        try {
+            const artRows = await this.sql.unsafe(
+                `SELECT count(*)::int AS count FROM platform.consumer_artifacts WHERE consumer_id=$1 AND kt_state='approved'`,
+                [consumerId]
+            );
+            artifacts = Number(artRows[0]?.count || 0);
+        } catch {
+            // table may not exist yet
+        }
+        return { ...rows[0], manifest: manifest[0] || null, artifacts };
+    }
+
+    async saveArtifact(artifact: ConsumerArtifact): Promise<ConsumerArtifact> {
+        const rows = await this.sql.unsafe(
+            `INSERT INTO platform.consumer_artifacts
+                (id, consumer_id, title, origin, custodian, kt_state, liveness, derived_from, content_type, body, metadata, created_at, updated_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11::jsonb,$12,$13)
+             ON CONFLICT (id) DO UPDATE SET
+                title = EXCLUDED.title,
+                origin = EXCLUDED.origin,
+                custodian = EXCLUDED.custodian,
+                kt_state = EXCLUDED.kt_state,
+                liveness = EXCLUDED.liveness,
+                derived_from = EXCLUDED.derived_from,
+                content_type = EXCLUDED.content_type,
+                body = EXCLUDED.body,
+                metadata = EXCLUDED.metadata,
+                updated_at = EXCLUDED.updated_at
+             RETURNING *`,
+            [
+                artifact.id,
+                artifact.consumerId,
+                artifact.title,
+                artifact.origin,
+                artifact.custodian,
+                artifact.ktState,
+                artifact.liveness,
+                JSON.stringify(artifact.derivedFrom ?? []),
+                artifact.contentType,
+                artifact.body,
+                JSON.stringify(artifact.metadata ?? {}),
+                artifact.createdAt,
+                artifact.updatedAt,
+            ]
+        );
+        return mapArtifact(rows[0]);
+    }
+
+    async getArtifact(consumerId: string, artifactId: string): Promise<ConsumerArtifact | null> {
+        const rows = await this.sql.unsafe(
+            `SELECT * FROM platform.consumer_artifacts WHERE consumer_id=$1 AND id=$2`,
+            [consumerId, artifactId]
+        );
+        return rows[0] ? mapArtifact(rows[0]) : null;
+    }
+
+    async listArtifacts(consumerId: string, query?: ListArtifactsQuery): Promise<ConsumerArtifact[]> {
+        const conditions = ['consumer_id=$1'];
+        const params: any[] = [consumerId];
+        if (query?.origin) {
+            params.push(query.origin);
+            conditions.push(`origin=$${params.length}`);
+        }
+        if (query?.ktState) {
+            params.push(query.ktState);
+            conditions.push(`kt_state=$${params.length}`);
+        }
+        const rows = await this.sql.unsafe(
+            `SELECT * FROM platform.consumer_artifacts WHERE ${conditions.join(' AND ')} ORDER BY created_at DESC`,
+            params
+        );
+        return rows.map(mapArtifact);
+    }
+
+    async updateArtifactState(
+        consumerId: string,
+        artifactId: string,
+        ktState: ArtifactKtState,
+    ): Promise<ConsumerArtifact | null> {
+        const updatedAt = new Date().toISOString();
+        const rows = await this.sql.unsafe(
+            `UPDATE platform.consumer_artifacts
+             SET kt_state=$3, updated_at=$4
+             WHERE consumer_id=$1 AND id=$2
+             RETURNING *`,
+            [consumerId, artifactId, ktState, updatedAt]
+        );
+        return rows[0] ? mapArtifact(rows[0]) : null;
     }
 
     async withSearchPath<T>(consumerId: string, fn: (tx: PlatformStore) => Promise<T>): Promise<T> {
@@ -2597,4 +2758,114 @@ function toIso(value: unknown): string {
 export function assertConsumerId(id: string): string {
     if (typeof id !== 'string' || !CONSUMER_ID_PATTERN.test(id)) fail('INVALID_CONSUMER_ID');
     return id;
+}
+
+function mapArtifact(row: any): ConsumerArtifact {
+    return {
+        id: String(row.id),
+        consumerId: String(row.consumer_id ?? row.consumerId),
+        title: String(row.title),
+        origin: String(row.origin) as ArtifactOrigin,
+        custodian: String(row.custodian) as ArtifactCustodian,
+        ktState: String(row.kt_state ?? row.ktState) as ArtifactKtState,
+        liveness: String(row.liveness) as ArtifactLiveness,
+        derivedFrom: typeof row.derived_from === 'string'
+            ? JSON.parse(row.derived_from)
+            : Array.isArray(row.derived_from)
+                ? row.derived_from
+                : [],
+        contentType: String(row.content_type ?? row.contentType ?? 'text/markdown'),
+        body: String(row.body ?? ''),
+        metadata: typeof row.metadata === 'string'
+            ? JSON.parse(row.metadata)
+            : (row.metadata && typeof row.metadata === 'object' ? row.metadata : {}),
+        createdAt: toIso(row.created_at ?? row.createdAt),
+        updatedAt: toIso(row.updated_at ?? row.updatedAt),
+    };
+}
+
+export class SqlitePlatformStore extends MemoryPlatformStore {
+    private readonly db: Database;
+
+    constructor(filename = ':memory:') {
+        super();
+        this.db = new Database(filename);
+        this.db.run(`
+            CREATE TABLE IF NOT EXISTS consumer_artifacts (
+                id TEXT PRIMARY KEY,
+                consumer_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                origin TEXT NOT NULL,
+                custodian TEXT NOT NULL,
+                kt_state TEXT NOT NULL,
+                liveness TEXT NOT NULL,
+                derived_from TEXT NOT NULL DEFAULT '[]',
+                content_type TEXT NOT NULL,
+                body TEXT NOT NULL,
+                metadata TEXT NOT NULL DEFAULT '{}',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        `);
+    }
+
+    override async saveArtifact(artifact: ConsumerArtifact): Promise<ConsumerArtifact> {
+        this.db.query(
+            `INSERT OR REPLACE INTO consumer_artifacts
+                (id, consumer_id, title, origin, custodian, kt_state, liveness, derived_from, content_type, body, metadata, created_at, updated_at)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)`
+        ).run(
+            artifact.id,
+            artifact.consumerId,
+            artifact.title,
+            artifact.origin,
+            artifact.custodian,
+            artifact.ktState,
+            artifact.liveness,
+            JSON.stringify(artifact.derivedFrom ?? []),
+            artifact.contentType,
+            artifact.body,
+            JSON.stringify(artifact.metadata ?? {}),
+            artifact.createdAt,
+            artifact.updatedAt,
+        );
+        return clone(artifact);
+    }
+
+    override async getArtifact(consumerId: string, artifactId: string): Promise<ConsumerArtifact | null> {
+        const row = this.db.query(
+            `SELECT * FROM consumer_artifacts WHERE consumer_id = ?1 AND id = ?2`
+        ).get(consumerId, artifactId);
+        return row ? mapArtifact(row) : null;
+    }
+
+    override async listArtifacts(consumerId: string, query?: ListArtifactsQuery): Promise<ConsumerArtifact[]> {
+        const conditions = ['consumer_id = ?1'];
+        const params: any[] = [consumerId];
+        if (query?.origin) {
+            params.push(query.origin);
+            conditions.push(`origin = ?${params.length}`);
+        }
+        if (query?.ktState) {
+            params.push(query.ktState);
+            conditions.push(`kt_state = ?${params.length}`);
+        }
+        const rows = this.db.query(
+            `SELECT * FROM consumer_artifacts WHERE ${conditions.join(' AND ')} ORDER BY created_at DESC`
+        ).all(...params);
+        return rows.map(mapArtifact);
+    }
+
+    override async updateArtifactState(
+        consumerId: string,
+        artifactId: string,
+        ktState: ArtifactKtState,
+    ): Promise<ConsumerArtifact | null> {
+        const updatedAt = new Date().toISOString();
+        const res = this.db.query(
+            `UPDATE consumer_artifacts SET kt_state = ?3, updated_at = ?4 WHERE consumer_id = ?1 AND id = ?2`
+        ).run(consumerId, artifactId, ktState, updatedAt);
+        if (!res.changes) return null;
+        return this.getArtifact(consumerId, artifactId);
+    }
 }

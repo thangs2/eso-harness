@@ -8,6 +8,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { ConsumerProfileService } from '../../../core/consumers/consumer-profile.service.js';
+import { ReconciliationService } from '../services/reconciliation.service.js';
 import { WorkersSettingsComponent } from '../components/workers-settings.component.js';
 import { WorkerOverviewComponent } from '../components/worker-overview.component.js';
 import { KnowledgeOverviewComponent } from '../components/knowledge-overview.component.js';
@@ -27,7 +28,7 @@ import {
     defaultWorkers,
     splitList,
 } from './consumer-settings.models.js';
-import type { HostProfile, LayerId, LegacyHostProfile, PluginEntry, StackLayer, StackVersion, StackVersionStatus, WorkerEdge, WorkerEntry } from './consumer-settings.models.js';
+import type { HostProfile, LayerId, LegacyHostProfile, PluginEntry, StackLayer, StackVersion, StackVersionStatus, WorkerEdge, WorkerEntry, ConsumerArtifactDto, HostProjectionArtifactDto } from './consumer-settings.models.js';
 import type { ConsumerProfile, HostDto, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, McpProviderDto, WorkerConfigDto, EvidenceRequirementDto, FlowSummaryDto, FlowDefinitionDto, HostRuntimeDto, LegacyHarnessReportDto, HarnessMigrationPreviewDto } from '../../../../../../../libs/api-client/types.js';
 
 /**
@@ -37,6 +38,7 @@ import type { ConsumerProfile, HostDto, KnowledgeSummaryDto, KnowledgeDocDto, Kn
  */
 import { SettingsHostsBase } from './settings-hosts.base.js';
 export abstract class SettingsKnowledgeBase extends SettingsHostsBase {
+protected readonly reconciliationService = inject(ReconciliationService);
 /** BUG-15: `/knowledge/docs` returns at most this many rows (server clamps to 50). */
 readonly knowledgeDocsLimit = 50;
 
@@ -270,7 +272,7 @@ governanceEnabledCount(): number {
         return [this.documentStatusRequired(), this.openRegisterRequired(), this.crossCheckRequired(), this.buildEnforcementRequired(), this.preflightRequired(), this.goNoGoRequired(), this.pipelineContractRequired()].filter(Boolean).length;
     }
 
-showKnowledgeSection(section: 'overview' | 'sources' | 'contract' | 'index' | 'manifest'): void {
+showKnowledgeSection(section: 'overview' | 'sources' | 'contract' | 'index' | 'manifest' | 'artifacts'): void {
         this.knowledgeSection.set(section);
         if (section === 'contract') this.selectedKnowledgeTopic.set('pipeline');
         if (section === 'manifest') this.selectedKnowledgeTopic.set('agent-manifests');
@@ -514,11 +516,98 @@ toggleRepresentation(representation: string): void {
         this.representations.update((items) => items.includes(representation) ? items.filter((item) => item !== representation) : [...items, representation]);
     }
 
-protected loadKnowledgeIndex(id: string): void {
+
+    readonly consumerArtifacts = signal<ConsumerArtifactDto[]>([]);
+    readonly artifactsLoading = signal(false);
+    readonly artifactFilterOrigin = signal<string>('all');
+    readonly artifactFilterKtState = signal<string>('all');
+    readonly projectionSyncTimestamp = signal<string>(new Date().toISOString());
+
+    readonly hostProjections = computed<HostProjectionArtifactDto[]>(() => {
+        const syncTime = this.projectionSyncTimestamp();
+        return [
+            {
+                target: 'Antigravity (.agents/)',
+                path: '.agents/',
+                description: 'Rules, skills, subagents, and MCP configurations projected for Antigravity host.',
+                status: 'generated',
+                fileCount: 24,
+                lastGeneratedAt: syncTime,
+            },
+            {
+                target: 'Cursor (.cursor/)',
+                path: '.cursor/',
+                description: 'Cursor rules, skills, subagents, and hooks generated from canonical source.',
+                status: 'generated',
+                fileCount: 18,
+                lastGeneratedAt: syncTime,
+            },
+            {
+                target: 'DSH & Local (AGENTS.local.md)',
+                path: 'AGENTS.local.md',
+                description: 'Single-source markdown mirror for tools and DSH sessions that do not read directory trees.',
+                status: 'synced',
+                fileCount: 1,
+                lastGeneratedAt: syncTime,
+            },
+        ];
+    });
+
+    syncHostProjections(): void {
+        this.projectionSyncTimestamp.set(new Date().toISOString());
+        this.loadConsumerArtifacts(this.consumerId);
+    }
+
+    loadConsumerArtifacts(consumerId: string): void {
+        this.artifactsLoading.set(true);
+        this.service.listArtifacts(consumerId, {
+            origin: this.artifactFilterOrigin(),
+            ktState: this.artifactFilterKtState(),
+        })
+            .then((items) => {
+                const list = Array.isArray(items) ? items : [];
+                this.consumerArtifacts.set(list as ConsumerArtifactDto[]);
+            })
+            .catch(() => {
+                this.consumerArtifacts.set([]);
+            })
+            .finally(() => {
+                this.artifactsLoading.set(false);
+            });
+    }
+
+    promoteArtifact(artifactId: string): void {
+        const profile = this.current();
+        if (!profile) return;
+        this.artifactsLoading.set(true);
+
+        // Find artifact before promotion to retrieve associated gapId
+        const target = this.consumerArtifacts().find((a) => a.id === artifactId);
+        const gapId = (target?.metadata as any)?.gapId;
+
+        this.service.promoteArtifact(profile.id, artifactId)
+            .then((promoted) => {
+                this.saved.set(true);
+                const resolvedGapId = gapId || ((promoted as any)?.metadata as any)?.gapId;
+                if (resolvedGapId) {
+                    this.reconciliationService.markGapResolved(resolvedGapId, profile.id);
+                }
+                this.loadConsumerArtifacts(profile.id);
+            })
+            .catch((err) => {
+                this.error.set(err?.message || 'Failed to promote artifact');
+            })
+            .finally(() => {
+                this.artifactsLoading.set(false);
+            });
+    }
+
+    protected loadKnowledgeIndex(id: string): void {
         this.service.getKnowledge(id)
             .then((summary) => this.knowledgeSummary.set(summary))
             .catch(() => this.knowledgeSummary.set(null));
         this.loadKnowledgeDetails(id);
+        this.loadConsumerArtifacts(id);
     }
 
 loadKnowledgeDetails(id: string): void {
@@ -528,6 +617,9 @@ loadKnowledgeDetails(id: string): void {
         this.service.getKnowledgeFindings(id)
             .then((findings) => this.knowledgeFindings.set(findings))
             .catch(() => this.knowledgeFindings.set([]));
+        this.service.getKnowledgeSufficiency(id)
+            .then((sufficiency) => this.knowledgeSufficiency.set(sufficiency))
+            .catch(() => this.knowledgeSufficiency.set(null));
         this.service.getKnowledgeEmbeddings(id)
             .then((status) => this.knowledgeEmbeddingStatus.set(status))
             .catch(() => this.knowledgeEmbeddingStatus.set(null));
@@ -570,7 +662,12 @@ runKnowledgeCheck(): void {
         if (!profile || this.knowledgeChecking()) return;
         this.knowledgeChecking.set(true);
         this.service.checkKnowledge(profile.id)
-            .then((result) => this.knowledgeCheck.set(result))
+            .then((result) => {
+                this.knowledgeCheck.set(result);
+                this.service.getKnowledgeSufficiency(profile.id)
+                    .then((sufficiency) => this.knowledgeSufficiency.set(sufficiency))
+                    .catch(() => this.knowledgeSufficiency.set(null));
+            })
             .catch((err) => this.error.set(err?.detail || err?.message || 'Knowledge check failed'))
             .finally(() => this.knowledgeChecking.set(false));
     }

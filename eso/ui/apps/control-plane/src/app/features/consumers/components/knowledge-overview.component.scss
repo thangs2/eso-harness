@@ -88,8 +88,16 @@
   .settings-tab.active .settings-tab-copy small { color: var(--brand-ink); }
 }
 
-.knowledge-overview { display: grid; gap: var(--space-3); }
-.knowledge-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
+.knowledge-overview { display: grid; gap: var(--space-4); }
+.knowledge-cards {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-2);
+
+  @media (max-width: 75rem) {
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  }
+}
 .knowledge-card {
   display: grid;
   gap: var(--space-1);
@@ -143,7 +151,37 @@
   text-transform: uppercase;
   letter-spacing: .04em;
   &.warn { border-color: var(--warn-ink); color: var(--warn-ink); }
+  &.muted { border-color: var(--line); color: var(--muted); }
 }
+
+.sufficiency-panel { gap: var(--space-3); }
+.sufficiency-counts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
+.sufficiency-count {
+  display: grid;
+  gap: .125rem;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+
+  strong { color: var(--ink); font-size: var(--text-md); font-weight: 650; font-variant-numeric: tabular-nums; }
+  span { color: var(--muted); font-size: var(--text-xs); }
+  &.warn strong { color: var(--warn-ink); }
+}
+.sufficiency-findings { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.sufficiency-finding {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--warn-ink);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.finding-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); font-size: var(--text-xs); overflow-wrap: anywhere; }
+.finding-reason { color: var(--ink); line-height: 1.45; }
+.finding-consequence { margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.45; overflow-wrap: anywhere; }
+.sufficiency-empty { margin: 0; color: var(--muted); font-size: var(--text-xs); }
 
 .preflight-row {
   display: grid;
@@ -176,6 +214,7 @@
 
 @media (max-width: 1000px) {
   .summary-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sufficiency-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .knowledge-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .overview-grid { grid-template-columns: 1fr; }
 }

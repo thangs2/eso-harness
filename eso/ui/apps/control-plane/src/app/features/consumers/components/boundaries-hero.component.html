@@ -1,0 +1,60 @@
+<header class="boundaries-hero">
+    <div class="hero-content">
+        <div class="hero-badge">
+            <span class="hero-dot"></span>
+            <span>Zero-Trust Workspace Boundary</span>
+        </div>
+        <div class="title-row">
+            <h1>Read, write &amp; index policy</h1>
+            <span class="count-tag">{{ policyCount() }} rules</span>
+        </div>
+        <p class="lede">
+            Default deny outside the repo root. Gated writes and external reads need an operator grant.
+            Host hooks enforce at milliseconds before execution; ESO publishes policy and records observations.
+        </p>
+
+        <div class="hero-kpis">
+            <div class="kpi-card">
+                <span class="kpi-label">Policies</span>
+                <strong class="kpi-val">{{ policyCount() }}</strong>
+                <small class="kpi-hint">rules active</small>
+            </div>
+            <div class="kpi-card" [class.highlight]="grantCount() > 0">
+                <span class="kpi-label">Active Grants</span>
+                <strong class="kpi-val">{{ grantCount() }}</strong>
+                <small class="kpi-hint">{{ grantCount() === 1 ? 'break-glass grant' : 'break-glass grants' }}</small>
+            </div>
+            <div class="kpi-card" [class.enforced]="enforcement() === 'enforce'">
+                <span class="kpi-label">Enforcement</span>
+                <strong class="kpi-val uppercase">{{ enforcement() }}</strong>
+                <small class="kpi-hint">{{ enforcement() === 'enforce' ? 'Fail-closed blocking' : 'Observation audit' }}</small>
+            </div>
+            <div class="kpi-card">
+                <span class="kpi-label">Invariants</span>
+                <strong class="kpi-val">{{ invariantsCount() }}</strong>
+                <small class="kpi-hint">system protected</small>
+            </div>
+            <div class="kpi-card">
+                <span class="kpi-label">Secrets Shield</span>
+                <strong class="kpi-val">{{ secretsCount() }}</strong>
+                <small class="kpi-hint">zero-knowledge</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="hero-actions">
+        @if (dirty()) {
+            <span class="dirty-badge" role="status">Unsaved policy changes</span>
+        }
+        <button
+            mat-flat-button
+            color="primary"
+            type="button"
+            class="save-btn"
+            [disabled]="saving() || loading() || !dirty()"
+            (click)="save.emit()"
+        >
+            {{ saving() ? 'Saving…' : 'Save boundaries' }}
+        </button>
+    </div>
+</header>

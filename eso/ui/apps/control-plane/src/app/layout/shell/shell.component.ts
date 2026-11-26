@@ -4,6 +4,7 @@ import { filter } from 'rxjs/operators';
 import { MatMenuModule } from '@angular/material/menu';
 import { AuthService } from '../../core/auth/auth.service.js';
 import { ConsumerProfileService } from '../../core/consumers/consumer-profile.service.js';
+import { ReconciliationService } from '../../features/consumers/services/reconciliation.service.js';
 import type { ConsumerListResponse } from '../../../../../../libs/api-client/types.js';
 
 const PAGE_LABELS: Record<string, string> = {
@@ -11,6 +12,7 @@ const PAGE_LABELS: Record<string, string> = {
     settings: 'Settings',
     flows: 'Flows',
     plugins: 'Providers',
+    reconciliation: 'Reconciliation Guard',
     architecture: 'Architecture',
     learning: 'Learning',
     work: 'Work',
@@ -80,6 +82,12 @@ const PAGE_LABELS: Record<string, string> = {
                                 <p class="side-group side-group-consumer">Consumer <span>{{ id }}</span></p>
                                 <a [routerLink]="['/consumers', id]" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" class="side-link">Overview</a>
                                 <a [routerLink]="['/consumers', id, 'flows']" routerLinkActive="active" class="side-link">Flows</a>
+                                <a [routerLink]="['/consumers', id, 'reconciliation']" routerLinkActive="active" class="side-link side-link-reconciliation">
+                                    <span>Reconciliation</span>
+                                    @if (reconGapsCount() > 0) {
+                                        <span class="gap-count-badge" aria-label="Open discrepancies">{{ reconGapsCount() }}</span>
+                                    }
+                                </a>
                                 <a [routerLink]="['/consumers', id, 'settings']" routerLinkActive="active" class="side-link">Settings</a>
                                 <a [routerLink]="['/consumers', id, 'plugins']" routerLinkActive="active" class="side-link">Providers</a>
                                 <a [routerLink]="['/consumers', id, 'architecture']" routerLinkActive="active" class="side-link">Architecture</a>
@@ -162,6 +170,8 @@ const PAGE_LABELS: Record<string, string> = {
         .side-link { display: flex; align-items: center; min-height: 32px; padding: 0 var(--space-2); border-left: 2px solid transparent; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; color: #c8d6e5; text-decoration: none; font-size: 13px; }
         .side-link:hover { background: #142235; color: #fff; }
         .side-link.active { background: #10283a; border-left-color: #22d3ee; color: #22d3ee; font-weight: 600; }
+        .side-link-reconciliation { justify-content: space-between; }
+        .gap-count-badge { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 9999px; background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.35); }
         .side-foot { margin-top: auto; padding: var(--space-3) var(--space-2) 0; border-top: 1px solid #1a2a40; display: grid; gap: 2px; }
         .side-foot-title { color: #c8d6e5; font-size: 11px; font-weight: 700; }
         .side-foot-text { color: #7f93a8; font-size: 10px; }
@@ -208,10 +218,12 @@ export class ShellComponent {
     readonly auth = inject(AuthService);
     private readonly router = inject(Router);
     private readonly profiles = inject(ConsumerProfileService);
+    private readonly reconciliation = inject(ReconciliationService);
     private readonly url = signal(this.router.url);
     readonly menuOpen = signal(false);
     readonly consumers = signal<ConsumerListResponse['items']>([]);
     readonly consumersLoaded = signal(false);
+    readonly reconGapsCount = computed(() => this.reconciliation.gaps().filter((g) => g.status === 'open').length);
     readonly consumerStatus = computed(() => {
         const status = this.activeConsumer()?.status;
         return status || (this.consumersLoaded() ? 'ready' : 'loading');
@@ -222,9 +234,14 @@ export class ShellComponent {
         const match = /^\/consumers\/([^/?]+)/.exec(this.url());
         if (match?.[1] && match[1] !== '') return match[1];
         const query = this.url().split('?')[1] || '';
-        return this.onObservatory() ? (new URLSearchParams(query).get('consumer') || new URLSearchParams(query).get('project')) : null;
+        return this.onObservatory()
+            ? (new URLSearchParams(query).get('consumer') || new URLSearchParams(query).get('project'))
+            : null;
     });
-    readonly onObservatory = computed(() => this.url().startsWith('/observatory') || this.url().startsWith('/work-overview'));
+    readonly onObservatory = computed(() => {
+        const path = this.url().split('?')[0];
+        return path === '/observatory' || path.startsWith('/observatory/') || path.startsWith('/work-overview');
+    });
     readonly onGraph = computed(() => this.url().startsWith('/event-graph'));
     readonly onOffice = computed(() => this.url().startsWith('/office'));
     readonly onRequests = computed(() => this.url().startsWith('/observatory/requests'));
@@ -244,6 +261,7 @@ export class ShellComponent {
         const consumerPages = id
             ? [
                 { label: 'Consumer overview', path: `/consumers/${id}`, group: 'Consumer' },
+                { label: 'Reconciliation Guard', path: `/consumers/${id}/reconciliation`, group: 'Consumer' },
                 { label: 'Settings', path: `/consumers/${id}/settings`, group: 'Consumer' },
                 { label: 'Flows', path: `/consumers/${id}/flows`, group: 'Consumer' },
                 { label: 'Providers', path: `/consumers/${id}/plugins`, group: 'Consumer' },

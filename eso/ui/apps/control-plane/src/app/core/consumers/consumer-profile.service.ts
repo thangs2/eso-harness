@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { CONTROL_PLANE_API_CLIENT } from '../tokens.js';
-import type { ConsumerListResponse, ConsumerPlan, ConsumerProfile, FsBrowseResponse, FsResolveDirectoryResponse, HostDiscoveryDto, McpDiscoveryDto, SetupConsumerPayload, StackVersionsDto, WorkerConfigDto, WorkerPolicyResultDto, WorkerImportPreviewDto, WorkerImportRecordDto, RuleFileDto, RuleImportPreviewDto, MaterialSummaryDto, FlowDefinitionDto, FlowSummaryDto, FlowValidationDto, FlowProposalDto, WorkerSourceStatusDto, PluginManifestDto, ConsumerPluginDto, ProviderRecordDto, JiraProjectDto, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, KnowledgeEmbeddingResultDto, HostRuntimeDto, HostDto, WorkerPlacementDto, ObservationDto, LegacyHarnessReportDto, LegacyHarnessArchiveDto, HarnessMigrationPreviewDto, HarnessMigrationResultDto, ConflictResolutionResultDto, JudgmentResponseDto, JevDecisionDto, GraphImpactResponseDto, LearningProposalDto, ProvisionConsumerResponse, BoundaryViewDto, FolderPolicyDto, BoundaryGrantDto } from '../../../../../../libs/api-client/types.js';
+import type { ConsumerListResponse, ConsumerPlan, ConsumerProfile, FsBrowseResponse, FsResolveDirectoryResponse, HostDiscoveryDto, McpDiscoveryDto, SetupConsumerPayload, StackVersionsDto, WorkerConfigDto, WorkerPolicyResultDto, WorkerImportPreviewDto, WorkerImportRecordDto, RuleFileDto, RuleImportPreviewDto, MaterialSummaryDto, FlowDefinitionDto, FlowSummaryDto, FlowValidationDto, FlowProposalDto, WorkerSourceStatusDto, PluginManifestDto, ConsumerPluginDto, ProviderRecordDto, JiraProjectDto, KnowledgeSummaryDto, KnowledgeDocDto, KnowledgeFindingDto, KnowledgeSufficiencyDto, KnowledgeDocDetailDto, KnowledgeCheckDto, KnowledgeRetrievalDto, KnowledgeEmbeddingStatusDto, KnowledgeEmbeddingResultDto, HostRuntimeDto, HostDto, WorkerPlacementDto, ObservationDto, LegacyHarnessReportDto, LegacyHarnessArchiveDto, HarnessMigrationPreviewDto, HarnessMigrationResultDto, ConflictResolutionResultDto, JudgmentResponseDto, JevDecisionDto, GraphImpactResponseDto, LearningProposalDto, ProvisionConsumerResponse, BoundaryViewDto, FolderPolicyDto, BoundaryGrantDto, ConsumerArtifactDto, ReconciliationScanScope, SdlcPipelineStageCoverageDto, PostgresKnowledgeStatsDto, ReconciliationGapDto, ReconciliationScanResultDto, ReconciliationGapsResponseDto } from '../../../../../../libs/api-client/types.js';
 
 @Injectable({ providedIn: 'root' })
 export class ConsumerProfileService {
@@ -152,6 +152,11 @@ export class ConsumerProfileService {
     getKnowledgeFindings(id: string): Promise<KnowledgeFindingDto[]> {
         if (!this.client) throw new Error('API client is not configured');
         return this.client.getConsumerKnowledgeFindings(id);
+    }
+
+    getKnowledgeSufficiency(id: string, kinds?: string[]): Promise<KnowledgeSufficiencyDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.getConsumerKnowledgeSufficiency(id, kinds);
     }
 
     indexKnowledge(id: string): Promise<KnowledgeSummaryDto> {
@@ -412,5 +417,98 @@ export class ConsumerProfileService {
     update(project: string, profile: ConsumerProfile): Promise<ConsumerProfile> {
         if (!this.client) throw new Error('API client is not configured');
         return this.client.updateConsumer(project, profile);
+    }
+
+    private readonly localArtifacts = new Map<string, ConsumerArtifactDto[]>();
+
+    saveLocalArtifact(id: string, artifact: ConsumerArtifactDto): void {
+        const current = this.localArtifacts.get(id) || [];
+        // Replace existing by ID or prepend
+        const filtered = current.filter((item) => item.id !== artifact.id);
+        this.localArtifacts.set(id, [artifact, ...filtered]);
+    }
+
+    async listArtifacts(id: string, query?: { origin?: string; ktState?: string }): Promise<ConsumerArtifactDto[]> {
+        const local = (this.localArtifacts.get(id) || []).filter((item) => {
+            if (query?.origin && query.origin !== 'all' && item.origin !== query.origin) return false;
+            if (query?.ktState && query.ktState !== 'all' && item.ktState !== query.ktState) return false;
+            return true;
+        });
+
+        if (!this.client) return local;
+
+        try {
+            const serverItems = await this.client.listArtifacts(id, query);
+            // Deduplicate items by id, with server items overriding local stubs
+            const map = new Map<string, ConsumerArtifactDto>();
+            for (const item of local) map.set(item.id, item);
+            for (const item of serverItems || []) map.set(item.id, item);
+            return Array.from(map.values());
+        } catch {
+            return local;
+        }
+    }
+
+    async createArtifact(id: string, body: Partial<ConsumerArtifactDto>): Promise<ConsumerArtifactDto> {
+        if (!this.client) {
+            const fallback: ConsumerArtifactDto = {
+                id: body.id || `art-${Date.now()}`,
+                consumerId: id,
+                title: body.title || 'Untitled',
+                origin: body.origin || 'agent',
+                custodian: body.custodian || 'staging',
+                ktState: body.ktState || 'proposed',
+                liveness: body.liveness || 'living',
+                derivedFrom: body.derivedFrom || [],
+                contentType: body.contentType || 'text/markdown',
+                body: body.body || '',
+                metadata: body.metadata || {},
+                createdAt: body.createdAt || new Date().toISOString(),
+                updatedAt: body.updatedAt || new Date().toISOString(),
+            };
+            this.saveLocalArtifact(id, fallback);
+            return fallback;
+        }
+        const created = await this.client.createArtifact(id, body);
+        this.saveLocalArtifact(id, created);
+        return created;
+    }
+
+    async promoteArtifact(id: string, artifactId: string): Promise<ConsumerArtifactDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        const promoted = await this.client.promoteArtifact(id, artifactId);
+        this.saveLocalArtifact(id, promoted);
+        return promoted;
+    }
+
+    async scanReconciliation(id: string, scope: ReconciliationScanScope = 'full'): Promise<ReconciliationScanResultDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.scanReconciliation(id, scope);
+    }
+
+    async getReconciliationGaps(id: string): Promise<ReconciliationGapsResponseDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.getReconciliationGaps(id);
+    }
+
+    async ignoreReconciliationGap(
+        id: string,
+        payload: { gapId: string; filePath?: string; symbol?: string; reason?: string }
+    ): Promise<{ ignored: boolean; gapId: string; ignoredCount: number }> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.ignoreReconciliationGap(id, payload);
+    }
+
+    async relockReconciliationHash(
+        id: string,
+        payload: { gapId: string; filePath: string }
+    ): Promise<{ relocked: boolean; gapId: string; sha256: string }> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.relockReconciliationHash(id, payload);
+    }
+
+    async syncReconciliationIndex(id: string): Promise<ReconciliationScanResultDto> {
+        if (!this.client) throw new Error('API client is not configured');
+        return this.client.syncReconciliationIndex(id);
     }
 }

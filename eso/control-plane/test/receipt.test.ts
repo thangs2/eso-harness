@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { describe, test } from 'node:test';
 
 import { MemoryPlatformStore, RegistryService, type Actor } from '../src/platform/registry/index.js';
-import { REQUEST_SPEC_REF } from '../src/platform/registry/types.js';
+import { RECEIPT_SPEC_VERSION, REQUEST_SPEC_REF } from '../src/platform/registry/types.js';
 import {
     GENESIS_HASH,
     ReceiptService,
@@ -135,12 +135,14 @@ describe('P4 — receipt issue', () => {
         const service = new ReceiptService(store);
         const receipt = await service.issue(consumerId, 'trace-shape');
 
-        assert.equal(receipt.specVersion, 1);
+        assert.equal(receipt.specVersion, RECEIPT_SPEC_VERSION);
+        assert.equal(receipt.specVersion, 2);
         assert.equal(receipt.verdictLevel, 'allow');
         assert.deepEqual(
             Object.keys(receipt.payload).sort(),
-            ['consumerId', 'eventDigests', 'specRef', 'specVersion', 'traceId', 'verdict']
+            ['consumerId', 'eventDigests', 'sources', 'specRef', 'specVersion', 'traceId', 'verdict']
         );
+        assert.deepEqual(receipt.payload.sources, []);
         // B0-9 — the sealed spec reference is a pointer only: doc · version · section, no anchor, no prose.
         // Read the single constant so a doc bump cannot leave the test pinned to a stale version.
         assert.deepEqual(receipt.payload.specRef, {
@@ -289,6 +291,82 @@ describe('P4 — receipt verify', () => {
             if (previous === undefined) delete process.env.ESO_RECEIPT_KEY;
             else process.env.ESO_RECEIPT_KEY = previous;
         }
+    });
+
+    test('S5: new v2 receipt seals sorted sources[] from evidence.verified observations', async () => {
+        const consumerId = 'receipt-unit';
+        const store = await setup(consumerId);
+        await observe(store, consumerId, 'trace-sources', [
+            ...turn(),
+            {
+                event: 'evidence.verified',
+                evidence: {
+                    actor: { kind: 'eso', id: 'predicate-verifier' },
+                    allVerified: true,
+                    verifiedAt: '2026-11-26T10:00:00.000Z',
+                    sources: [
+                        {
+                            requirementId: 'req-b',
+                            id: 'docs/b.md',
+                            kind: 'knowledge',
+                            where: 'docs/b.md',
+                            hash: 'hash-b',
+                            verifiedAt: '2026-11-26T10:00:00.000Z',
+                            verified: true,
+                        },
+                        {
+                            requirementId: 'req-a',
+                            id: 'docs/a.md',
+                            kind: 'knowledge',
+                            where: 'docs/a.md',
+                            hash: 'hash-a',
+                            verifiedAt: '2026-11-26T10:00:00.000Z',
+                            verified: true,
+                        },
+                    ],
+                },
+            },
+        ]);
+        const service = new ReceiptService(store);
+        const receipt = await service.issue(consumerId, 'trace-sources');
+
+        assert.equal(receipt.specVersion, 2);
+        assert.deepEqual(receipt.payload.sources, [
+            {
+                requirementId: 'req-a',
+                where: 'docs/a.md',
+                hash: 'hash-a',
+                verifiedAt: '2026-11-26T10:00:00.000Z',
+                verified: true,
+            },
+            {
+                requirementId: 'req-b',
+                where: 'docs/b.md',
+                hash: 'hash-b',
+                verifiedAt: '2026-11-26T10:00:00.000Z',
+                verified: true,
+            },
+        ]);
+        const verified = await service.verify(consumerId, receipt.receiptId);
+        assert.deepEqual(verified, { ok: true, hashMatches: true, hmacMatches: true, chained: true });
+    });
+
+    test('S5: legacy v1 receipt (specVersion 1, without sources) still verifies cleanly', async () => {
+        const consumerId = 'receipt-unit';
+        const store = await setup(consumerId);
+        await observe(store, consumerId, 'trace-v1-legacy', turn());
+        const service = new ReceiptService(store);
+        const receipt = await service.issue(consumerId, 'trace-v1-legacy');
+
+        // Simulate a v1 receipt sealed before S5 added sources[] and bumped specVersion to 2.
+        const row = (store as any).receipts.get(receipt.receiptId);
+        row.specVersion = 1;
+        row.payload.specVersion = 1;
+        delete row.payload.sources;
+        row.hash = hashPayload(row.payload);
+
+        const result = await service.verify(consumerId, receipt.receiptId);
+        assert.deepEqual(result, { ok: true, hashMatches: true, hmacMatches: true, chained: true });
     });
 
     test('a receipt id that does not exist is a 404, not a fabricated verdict', async () => {

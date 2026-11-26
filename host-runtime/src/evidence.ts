@@ -72,6 +72,7 @@ export interface WorkerEvidence {
     reportSource?: 'agent-reported';
     reason?: string;
     detail?: string;
+    judgment?: Record<string, unknown>;
 }
 
 export interface EvidenceRedaction {
@@ -180,6 +181,7 @@ export interface BuildEvidenceInput extends AdapterRunFacts {
     recon?: unknown[];
     reprompt?: Record<string, unknown>;
     reportSource?: 'agent-reported';
+    judgment?: Record<string, unknown>;
 }
 
 /** Evidence payload posted to ESO — bounded, redacted, no prompt body. */
@@ -229,6 +231,7 @@ export function buildEvidence(input: BuildEvidenceInput): WorkerEvidence {
         const detail = redactText(input.detail, input.redaction);
         evidence.detail = boundedTail(detail.text, 500);
     }
+    if (input.judgment) evidence.judgment = input.judgment;
     return evidence;
 }
 
@@ -243,6 +246,7 @@ export function buildBlockedEvidence(input: {
     hostStep: number;
     reason: string;
     detail?: string;
+    judgment?: Record<string, unknown>;
     redaction?: EvidenceRedaction;
 }): WorkerEvidence {
     return buildEvidence({
@@ -260,6 +264,7 @@ export function buildBlockedEvidence(input: {
         blocked: true,
         reason: input.reason,
         detail: input.detail,
+        judgment: input.judgment,
         redaction: input.redaction,
     });
 }

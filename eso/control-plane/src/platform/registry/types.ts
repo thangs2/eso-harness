@@ -185,7 +185,7 @@ export interface ScopeDecision {
 }
 
 /** P4 — the sealed spec version of a receipt payload. Bumping it changes the hashed bytes. */
-export const RECEIPT_SPEC_VERSION = 1;
+export const RECEIPT_SPEC_VERSION = 2;
 
 /** Chain sentinel: the first receipt of a consumer has no predecessor hash. */
 export const RECEIPT_GENESIS_HASH = 'GENESIS';
@@ -200,7 +200,7 @@ export const RECEIPT_GENESIS_HASH = 'GENESIS';
  */
 export const REQUEST_SPEC_REF = {
     doc: 'sdlc/08.ui-design/20.pages/20.request-detail.md',
-    version: '2.7.0',
+    version: '3.0.0',
     section: '§6 Behavior spec',
     anchor: '#6-behavior-spec-std-page-behavior-1',
 } as const;
@@ -235,6 +235,15 @@ export interface ReceiptEventDigest {
     at: string;
 }
 
+/** S5 — one server-verified evidence source sealed into a v2+ receipt. */
+export interface ReceiptEvidenceSource {
+    requirementId: string | null;
+    where: string;
+    hash: string | null;
+    verifiedAt: string;
+    verified: boolean;
+}
+
 /** P4 — the canonical bytes a receipt hash commits to (see `receipt.service.ts`). */
 export interface ReceiptPayload {
     specVersion: number;
@@ -247,6 +256,11 @@ export interface ReceiptPayload {
      * sealed earlier have no such key, and verification recomputes the hash from the stored bytes.
      */
     specRef?: ReceiptSpecRef;
+    /**
+     * S5 — server-verified evidence sources extracted from `evidence.verified` observations
+     * (specVersion >= 2). Optional on ReceiptPayload so v1 receipts verify unchanged.
+     */
+    sources?: ReceiptEvidenceSource[];
 }
 
 /** One sealed receipt (`platform.evidence_receipt`, append-only, 1 row / trace). */

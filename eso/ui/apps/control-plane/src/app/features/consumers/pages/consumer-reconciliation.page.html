@@ -1,0 +1,148 @@
+<main class="reconciliation-page" id="reconciliation-main" role="region" aria-label="Reconciliation Cockpit">
+    <!-- Header & Primary Controls -->
+    <eso-reconciliation-hero
+        [consumerId]="consumerId()"
+        [scanning]="scanning()"
+        [scanScope]="scanScope()"
+        [ignoredCount]="ignoredCount()"
+        [syncingIndex]="syncingIndex()"
+        [postgresDriftCount]="postgresDriftCount()"
+        (scan)="scanWorkspace()"
+        (scanScopeChange)="onScanScopeChange($event)"
+        (syncIndex)="onSyncPostgresIndex()"
+    ></eso-reconciliation-hero>
+
+    <!-- Error Alert -->
+    @if (error(); as errMsg) {
+        <div class="error-banner" role="alert" aria-live="assertive">
+            <div class="error-copy">
+                <strong>Reconciliation Error:</strong>
+                <span>{{ errMsg }}</span>
+            </div>
+            <button type="button" class="retry-btn" (click)="scanWorkspace()" [disabled]="scanning()">
+                Retry Scan
+            </button>
+        </div>
+    }
+
+    <!-- 3-Pillar Health Ribbon + Balanced 4-Column S1-S17 Pipeline Strip -->
+    <eso-reconciliation-pipeline
+        [stages]="pipelineStages()"
+        [postgresStats]="postgresStats()"
+        [activePillar]="activePillar()"
+        [codeDriftCount]="codeDriftCount()"
+        [missingSdlcCount]="missingSdlcCount()"
+        [postgresDriftCount]="postgresDriftCount()"
+        (pillarChange)="onPillarChange($event)"
+        (stageSelect)="onStageSelect($event)"
+    ></eso-reconciliation-pipeline>
+
+    <!-- Workbench Panel: Category Tabs + Search + Master-Detail Split -->
+    <section class="workbench-shell" aria-label="Discrepancy Workbench">
+        <div class="workbench-controls">
+            <eso-reconciliation-metrics
+                [summary]="summary()"
+                [activeFilter]="filterType()"
+                (filterSelect)="onFilterSelect($event)"
+            ></eso-reconciliation-metrics>
+
+            <eso-reconciliation-toolbar
+                [searchQuery]="searchQuery()"
+                [filterType]="filterType()"
+                [filterSeverity]="filterSeverity()"
+                [activePillar]="activePillar()"
+                [hasActiveFilters]="hasActiveFilters()"
+                (searchQueryChange)="searchQuery.set($event)"
+                (filterTypeChange)="filterType.set($event)"
+                (filterSeverityChange)="filterSeverity.set($event)"
+                (activePillarChange)="onPillarChange($event)"
+                (resetFilters)="resetFilters()"
+            ></eso-reconciliation-toolbar>
+        </div>
+
+        @if (filteredGaps().length > 0) {
+            <div class="master-detail-grid">
+                <!-- Left Pane: Dense Interactive Discrepancy Ledger -->
+                <div class="ledger-pane" role="listbox" aria-label="Discrepancy list">
+                    <div class="ledger-list-head">
+                        <span>Showing <strong>{{ filteredGaps().length }}</strong> of {{ reconciliationService.gaps().length }} discrepancies</span>
+                        <span class="ledger-hint">Select a row to inspect &amp; reconcile</span>
+                    </div>
+
+                    <div class="ledger-rows">
+                        @for (gap of filteredGaps(); track gap.id) {
+                            <button
+                                type="button"
+                                role="option"
+                                class="ledger-row"
+                                [class.selected]="selectedGap()?.id === gap.id"
+                                [class.is-resolved]="gap.status === 'resolved'"
+                                [attr.aria-selected]="selectedGap()?.id === gap.id"
+                                (click)="selectGap(gap)"
+                            >
+                                <span class="row-sev-dot" [ngClass]="'sev-' + gap.severity" [title]="gap.severity"></span>
+                                <span class="row-code">{{ getShortCode(gap.type) }}</span>
+                                <div class="row-main">
+                                    <span class="row-symbol">{{ gap.symbol }}</span>
+                                    <span class="row-path">{{ gap.filePath }}:{{ gap.lines }}</span>
+                                </div>
+                                <div class="row-end">
+                                    @if (gap.status === 'resolved') {
+                                        <span class="row-status st-ok">Resolved</span>
+                                    } @else if (gap.status === 'staged_in_inbox') {
+                                        <span class="row-status st-staged">Staged</span>
+                                    } @else {
+                                        <span class="row-status st-open">Open</span>
+                                    }
+                                    <svg class="row-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                                        <path d="M6 3.5L10.5 8 6 12.5" stroke-linecap="round" stroke-linejoin="round" />
+                                    </svg>
+                                </div>
+                            </button>
+                        }
+                    </div>
+                </div>
+
+                <!-- Right Pane: Sticky Inspector Panel -->
+                <aside class="inspector-pane" aria-label="Discrepancy Inspector">
+                    @if (selectedGap(); as activeGap) {
+                        <eso-reconciliation-gap-card
+                            [gap]="activeGap"
+                            [consumerId]="consumerId()"
+                            [isCopied]="copiedGapId() === activeGap.id"
+                            [isExtracted]="extractedGapId() === activeGap.id"
+                            [isBusy]="busyGapId() === activeGap.id"
+                            (extract)="extractDraft($event)"
+                            (relock)="relockGap($event)"
+                            (ignore)="ignoreGap($event)"
+                            (syncIndex)="syncGapIndex($event)"
+                            (copyPrompt)="copyAgentPrompt($event)"
+                        ></eso-reconciliation-gap-card>
+                    }
+                </aside>
+            </div>
+        } @else if (scanning()) {
+            <div class="empty-state" role="status">
+                <span class="spinner" aria-hidden="true"></span>
+                <h3>Scanning workspace and index&hellip;</h3>
+                <p>Inspecting source files, SDLC pipeline stages, and PostgreSQL knowledge_doc records.</p>
+            </div>
+        } @else {
+            <div class="empty-state" role="status">
+                <svg class="empty-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M8.5 12.5l2.5 2.5 4.5-5.5" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                <h3>No discrepancies found</h3>
+                @if (hasActiveFilters()) {
+                    <p>No items match your active pillar, category, or search filters.</p>
+                    <button type="button" class="clear-btn" (click)="resetFilters()">
+                        Clear all filters
+                    </button>
+                } @else {
+                    <p>Source code, SDLC artifacts, and PostgreSQL knowledge index are synchronized.</p>
+                }
+            </div>
+        }
+    </section>
+</main>

@@ -348,7 +348,7 @@ describe('HTTP contract — CR-010/011 routes', () => {
         assert.equal(silent.status, 200);
         const silentBody = await silent.json() as any;
         assert.equal(silentBody.verdict.level, 'unknown');
-        assert.equal(silentBody.verdict.score, 75);
+        assert.equal(silentBody.verdict.score, 0);
         assert.ok(silentBody.verdict.gaps.some((gap: any) => gap.code === 'HOST_SILENT' && /cannot prove why/.test(gap.consequence)));
     });
 
@@ -395,7 +395,7 @@ describe('HTTP contract — CR-010/011 routes', () => {
         assert.match(detailBody.receipt.hashPrefix, /^[0-9a-f]{12}$/);
         assert.equal(detailBody.receipt.chained, false, 'first receipt is genesis, not chained');
         assert.equal(typeof detailBody.receipt.hmacPresent, 'boolean');
-        assert.equal(detailBody.receipt.specVersion, 1);
+        assert.equal(detailBody.receipt.specVersion, 2);
         assert.equal(detailBody.receipt.verdictLevel, 'allow');
         assert.equal(typeof detailBody.receipt.createdAt, 'string');
 

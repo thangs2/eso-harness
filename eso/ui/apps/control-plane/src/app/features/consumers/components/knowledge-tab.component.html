@@ -1,345 +1,323 @@
 <section class="tab-panel knowledge-page" role="tabpanel">
-                    <eso-knowledge-overview
-                        [summary]="vm().knowledgeSummary()"
-                        [embeddingStatus]="vm().knowledgeEmbeddingStatus()"
-                        [check]="vm().knowledgeCheck()"
-                        [section]="vm().knowledgeSection()"
-                        [checking]="vm().knowledgeChecking()"
-                        [indexing]="vm().knowledgeIndexing()"
-                        [providerRouteSummary]="vm().providerRouteSummary()"
-                        [sdlcEnabled]="vm().sdlcEnabled()"
-                        [governanceCount]="vm().governanceEnabledCount()"
-                        [manifestEnabled]="vm().manifestEnabled()"
-                        [providerRouting]="vm().providerRouting()"
-                        (runCheck)="vm().runKnowledgeCheck()"
-                        (indexNow)="vm().indexKnowledge()"
-                        (sectionChange)="vm().showKnowledgeSection($event)"
-                        (openPlugins)="vm().openConsumerPlugins()"
-                    />
+    <eso-knowledge-overview
+        [summary]="vm().knowledgeSummary()"
+        [embeddingStatus]="vm().knowledgeEmbeddingStatus()"
+        [check]="vm().knowledgeCheck()"
+        [sufficiency]="vm().knowledgeSufficiency()"
+        [section]="vm().knowledgeSection()"
+        [checking]="vm().knowledgeChecking()"
+        [indexing]="vm().knowledgeIndexing()"
+        [providerRouteSummary]="vm().providerRouteSummary()"
+        [sdlcEnabled]="vm().sdlcEnabled()"
+        [governanceCount]="vm().governanceEnabledCount()"
+        [manifestEnabled]="vm().manifestEnabled()"
+        [providerRouting]="vm().providerRouting()"
+        (runCheck)="vm().runKnowledgeCheck()"
+        (indexNow)="vm().indexKnowledge()"
+        (sectionChange)="vm().showKnowledgeSection($event)"
+        (openPlugins)="vm().openConsumerPlugins()"
+    />
 
-                    <section class="knowledge-index-panel" [class.zone-hidden]="vm().knowledgeSection() !== 'index'">
-                        <div>
-                            <span class="eyebrow">Knowledge index</span>
-                            <strong>{{ vm().knowledgeSummary()?.docs || 0 }} docs · {{ vm().knowledgeSummary()?.edges || 0 }} edges@if (vm().knowledgeFindingsCount() > 0) { · {{ vm().knowledgeFindingsCount() }} findings }</strong>
-                            <small>{{ vm().knowledgeSummary()?.manifest ? 'Manifest v' + vm().knowledgeSummary()?.manifest?.manifest_version + ' · source ' + (vm().knowledgeSummary()?.manifest?.build_id || 'not indexed') : 'No index run yet. Index files to build manifest + graph.' }}</small>
-                            <small>{{ vm().knowledgeEmbeddingStatus()?.model || 'BAAI/bge-m3' }} · {{ vm().knowledgeEmbeddingStatus()?.embedded || 0 }}/{{ vm().knowledgeEmbeddingStatus()?.chunks || 0 }} chunks embedded</small>
-                        </div>
-                        <div class="knowledge-index-actions">
-                            <button mat-stroked-button type="button" [disabled]="vm().knowledgeEmbedding() || !vm().knowledgeEmbeddingStatus()?.chunks || (vm().knowledgeEmbeddingStatus()?.embedded || 0) >= (vm().knowledgeEmbeddingStatus()?.chunks || 0)" (click)="vm().embedKnowledge()">{{ vm().knowledgeEmbedding() ? 'Embedding…' : ((vm().knowledgeEmbeddingStatus()?.embedded || 0) >= (vm().knowledgeEmbeddingStatus()?.chunks || 0) ? 'Embedded' : 'Embed pending') }}</button>
-                        </div>
-                    </section>
-                    @if (vm().knowledgeCheck(); as check) {
-                        <section class="knowledge-check-result" [class.check-fail]="check.status === 'FAIL'" [class.zone-hidden]="vm().knowledgeSection() !== 'index'">
-                            <header><strong>Preflight · {{ check.status }}</strong><span>{{ check.checks.length }} checks</span></header>
-                            @for (item of check.checks; track item.id) {
-                                <div><span class="badge" [class.badge-warn]="item.status === 'FAIL'">{{ item.status }}</span><strong>{{ item.label }}</strong><small>{{ item.detail }}</small></div>
+    <!-- Section 1 & 4: Index & Health -->
+    @if (vm().knowledgeSection() === 'index') {
+        <section class="knowledge-index-panel">
+            <div>
+                <span class="eyebrow">Knowledge index</span>
+                <strong>{{ vm().knowledgeSummary()?.docs || 0 }} docs · {{ vm().knowledgeSummary()?.edges || 0 }} edges@if (vm().knowledgeFindingsCount() > 0) { · {{ vm().knowledgeFindingsCount() }} findings }</strong>
+                <small>{{ vm().knowledgeSummary()?.manifest ? 'Manifest v' + vm().knowledgeSummary()?.manifest?.manifest_version + ' · source ' + (vm().knowledgeSummary()?.manifest?.build_id || 'not indexed') : 'No index run yet. Index files to build manifest + graph.' }}</small>
+                <small>{{ vm().knowledgeEmbeddingStatus()?.model || 'BAAI/bge-m3' }} · {{ vm().knowledgeEmbeddingStatus()?.embedded || 0 }}/{{ vm().knowledgeEmbeddingStatus()?.chunks || 0 }} chunks embedded</small>
+            </div>
+            <div class="knowledge-index-actions">
+                <button mat-stroked-button type="button" [disabled]="vm().knowledgeEmbedding() || !vm().knowledgeEmbeddingStatus()?.chunks || (vm().knowledgeEmbeddingStatus()?.embedded || 0) >= (vm().knowledgeEmbeddingStatus()?.chunks || 0)" (click)="vm().embedKnowledge()">{{ vm().knowledgeEmbedding() ? 'Embedding…' : ((vm().knowledgeEmbeddingStatus()?.embedded || 0) >= (vm().knowledgeEmbeddingStatus()?.chunks || 0) ? 'Embedded' : 'Embed pending') }}</button>
+            </div>
+        </section>
+
+        @if (vm().knowledgeCheck(); as check) {
+            <section class="knowledge-check-result" [class.check-fail]="check.status === 'FAIL'">
+                <header><strong>Preflight · {{ check.status }}</strong><span>{{ check.checks.length }} checks</span></header>
+                @for (item of check.checks; track item.id) {
+                    <div><span class="badge" [class.badge-warn]="item.status === 'FAIL'">{{ item.status }}</span><strong>{{ item.label }}</strong><small>{{ item.detail }}</small></div>
+                }
+            </section>
+        }
+
+        <section class="knowledge-index-detail">
+            <header class="knowledge-detail-head">
+                <div><h3>Indexed documents · {{ vm().knowledgeDocs().length }}</h3><p>Read from Postgres. Content remains in files. Showing up to {{ vm().knowledgeDocsLimit }} rows; refine with search.</p></div>
+                <div class="knowledge-search">
+                    <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Search indexed docs</mat-label><input matInput [ngModel]="vm().knowledgeQuery()" (ngModelChange)="vm().knowledgeQuery.set($event)" (keyup.enter)="vm().searchKnowledge()" placeholder="requirement, manifest…"></mat-form-field>
+                    <button mat-stroked-button type="button" (click)="vm().searchKnowledge()">Search</button>
+                </div>
+            </header>
+            @if (vm().knowledgeDocs().length === 0) {
+                <p class="muted">No indexed documents yet. Click Index now.</p>
+            } @else {
+                <div class="worker-table-wrap knowledge-doc-table">
+                    <table class="worker-table">
+                        <thead><tr><th>Document</th><th>Type</th><th>Status</th><th>Sections</th></tr></thead>
+                        <tbody>
+                            @for (doc of vm().knowledgeDocs(); track doc.doc_id) {
+                                <tr class="knowledge-doc-row" (click)="vm().selectKnowledgeDoc(doc)"><td><strong>{{ doc.title || doc.path }}</strong><br><code>{{ doc.path }}</code></td><td>{{ doc.type }}</td><td>{{ doc.status }}</td><td>{{ doc.sections }}</td></tr>
                             }
-                        </section>
+                        </tbody>
+                    </table>
+                </div>
+            }
+            @if (vm().knowledgeFindings().length > 0) {
+                <div class="knowledge-findings">
+                    <h4>Open findings · {{ vm().knowledgeFindings().length }}</h4>
+                    @for (finding of vm().knowledgeFindings(); track finding.finding_id) {
+                        <div><span class="badge badge-warn">{{ finding.code }}</span><code>{{ finding.path || finding.doc_id || 'index' }}</code></div>
                     }
-
-                    <section class="knowledge-index-detail" [class.zone-hidden]="vm().knowledgeSection() !== 'index'">
-                        <header class="knowledge-detail-head">
-                            <div><h3>Indexed documents · {{ vm().knowledgeDocs().length }}</h3><p>Read from Postgres. Content remains in files. Showing up to {{ vm().knowledgeDocsLimit }} rows; refine with search.</p></div>
-                            <div class="knowledge-search">
-                                <mat-form-field appearance="outline" subscriptSizing="dynamic"><mat-label>Search indexed docs</mat-label><input matInput [ngModel]="vm().knowledgeQuery()" (ngModelChange)="vm().knowledgeQuery.set($event)" (keyup.enter)="vm().searchKnowledge()" placeholder="requirement, manifest…"></mat-form-field>
-                                <button mat-stroked-button type="button" (click)="vm().searchKnowledge()">Search</button>
-                            </div>
-                        </header>
-                        @if (vm().knowledgeDocs().length === 0) {
-                            <p class="muted">No indexed documents yet. Click Index now.</p>
-                        } @else {
-                            <div class="worker-table-wrap knowledge-doc-table">
-                                <table class="worker-table">
-                                    <thead><tr><th>Document</th><th>Type</th><th>Status</th><th>Sections</th></tr></thead>
-                                    <tbody>
-                                        @for (doc of vm().knowledgeDocs(); track doc.doc_id) {
-                                            <tr class="knowledge-doc-row" (click)="vm().selectKnowledgeDoc(doc)"><td><strong>{{ doc.title || doc.path }}</strong><br><code>{{ doc.path }}</code></td><td>{{ doc.type }}</td><td>{{ doc.status }}</td><td>{{ doc.sections }}</td></tr>
-                                        }
-                                    </tbody>
-                                </table>
-                            </div>
-                        }
-                        @if (vm().knowledgeFindings().length > 0) {
-                            <div class="knowledge-findings">
-                                <h4>Open findings · {{ vm().knowledgeFindings().length }}</h4>
-                                @for (finding of vm().knowledgeFindings(); track finding.finding_id) {
-                                    <div><span class="badge badge-warn">{{ finding.code }}</span><code>{{ finding.path || finding.doc_id || 'index' }}</code></div>
-                                }
-                            </div>
-                        }
-                        @if (vm().knowledgeRetrieval(); as retrieval) {
-                            <div class="knowledge-retrieval">
-                                <header><strong>Hybrid retrieval</strong><span>{{ retrieval.results.length }} results · FTS {{ retrieval.counts.fts }} · graph {{ retrieval.counts.graph }} · vector {{ retrieval.vector.enabled ? 'on' : 'off' }}</span></header>
-                                @if (!retrieval.vector.enabled) { <small>{{ retrieval.vector.reason }}</small> }
-                                @if (retrieval.results.length === 0) {
-                                    <p class="muted">No match for “{{ retrieval.query }}”.</p>
-                                } @else {
-                                    <div class="worker-table-wrap">
-                                        <table class="worker-table">
-                                            <thead><tr><th>#</th><th>Document</th><th>Why</th><th>RRF</th></tr></thead>
-                                            <tbody>
-                                                @for (hit of retrieval.results; track hit.doc.doc_id) {
-                                                    <tr class="knowledge-doc-row" (click)="vm().selectKnowledgeDoc(hit.doc)"><td>{{ hit.rank }}</td><td><strong>{{ hit.doc.title || hit.doc.path }}</strong><br><code>{{ hit.doc.path }}</code></td><td>{{ hit.why.join(' · ') }}</td><td>{{ hit.score }}</td></tr>
-                                                }
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                }
-                            </div>
-                        }
-                        @if (vm().knowledgeCheck()?.coverage?.length) {
-                            <div class="knowledge-coverage">
-                                <h4>Coverage by type</h4>
-                                <div class="worker-table-wrap">
-                                    <table class="worker-table">
-                                        <thead><tr><th>Type</th><th>Docs</th><th>Sections</th><th>Findings</th></tr></thead>
-                                        <tbody>
-                                            @for (row of vm().knowledgeCheck()?.coverage; track row.type) {
-                                                <tr><td>{{ row.type }}</td><td>{{ row.docs }}</td><td>{{ row.sections }}</td><td>{{ row.findings }}</td></tr>
-                                            }
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        }
-                        @if (vm().knowledgeDocDetail(); as detail) {
-                            <div class="knowledge-graph-panel">
-                                <header><div><h4>{{ detail.doc?.title || 'Document' }}</h4><code>{{ detail.doc?.path }}</code></div><button mat-button type="button" (click)="vm().knowledgeDocDetail.set(null)">Close</button></header>
-                                <div class="knowledge-graph-columns">
-                                    <div><span>Outgoing</span>
-                                        @if (detail.outgoing.length === 0) { <small>No outgoing edges</small> }
-                                        @for (edge of detail.outgoing; track edge.edge_id) { <div><em>{{ edge.kind }}</em><code>{{ edge.path }}</code></div> }
-                                    </div>
-                                    <div><span>Incoming</span>
-                                        @if (detail.incoming.length === 0) { <small>No incoming edges</small> }
-                                        @for (edge of detail.incoming; track edge.edge_id) { <div><em>{{ edge.kind }}</em><code>{{ edge.path }}</code></div> }
-                                    </div>
-                                    <div><span>Transitive · {{ detail.descendants.length }}</span>
-                                        @if (detail.descendants.length === 0) { <small>No transitive edges</small> }
-                                        @for (relative of detail.descendants; track relative.doc_id + relative.depth) { <div><em>depth {{ relative.depth }}</em><code>{{ relative.path }}</code></div> }
-                                    </div>
-                                    <div><span>Sections · {{ detail.sections.length }}</span>
-                                        @for (section of detail.sections.slice(0, 8); track section.section_id) { <div><code>{{ section.anchor }}</code><small>{{ section.heading }}</small></div> }
-                                    </div>
-                                </div>
-                            </div>
-                        }
-                    </section>
-
-                    @if (vm().knowledgeSection() === 'contract') {
-                        <eso-knowledge-contract [vm]="vm()" />
+                </div>
+            }
+            @if (vm().knowledgeSufficiency(); as suf) {
+                <div class="knowledge-findings">
+                    <h4>Knowledge sufficiency · {{ suf.status }} (contradicts {{ suf.summary.contradicts }} · near-duplicate {{ suf.summary.nearDuplicate }} · missing kind {{ suf.summary.missingKind }} · dropped {{ suf.summary.dropped }})</h4>
+                    @for (item of suf.findings; track item.code + ':' + $index) {
+                        <div><span class="badge badge-warn">{{ item.code }}</span><span>{{ item.reason }}</span> — <small>{{ item.consequence }}</small></div>
+                    } @empty {
+                        <p class="muted">No content sufficiency findings.</p>
                     }
-
-                    <div class="knowledge-layout" [class.zone-hidden]="vm().knowledgeSection() !== 'sources' && vm().knowledgeSection() !== 'manifest'" [class.knowledge-layout-single]="vm().knowledgeSection() === 'sources'">
-                        <div class="knowledge-main">
-                            <section class="knowledge-section knowledge-selectable knowledge-source-section" [class.zone-hidden]="vm().knowledgeSection() !== 'sources'" [class.active]="vm().selectedKnowledgeTopic() === 'knowledge-base'" (click)="vm().selectKnowledgeTopic('knowledge-base')">
-                                <header class="knowledge-section-head"><div><h3>Knowledge base</h3><p>Artifacts held for this consumer, by kind and reader.</p></div></header>
-                                <div class="knowledge-block">
-                                    <span class="control-label">Artifact kinds</span>
-                                    <div class="knowledge-chips">
-                                        @for (kind of vm().artifactKindOptions; track kind) {
-                                            <button type="button" class="source-pill" [class.active]="vm().artifactKinds().includes(kind)" (click)="vm().toggleArtifactKind(kind); $event.stopPropagation()">{{ kind }}</button>
-                                        }
-                                    </div>
-                                </div>
-                                <div class="knowledge-block">
-                                    <span class="control-label">Representations</span>
-                                    <div class="knowledge-chips">
-                                        @for (representation of vm().representationOptions; track representation) {
-                                            <button type="button" class="source-pill" [class.active]="vm().representations().includes(representation)" (click)="vm().toggleRepresentation(representation); $event.stopPropagation()">{{ representation }}</button>
-                                        }
-                                    </div>
-                                    <p class="knowledge-note">human-readable · agent-readable · machine manifest. Derived representations must reference a source.</p>
-                                </div>
-                            </section>
-
-                            <section class="knowledge-section knowledge-selectable manifest-section knowledge-manifest-section" [class.zone-hidden]="vm().knowledgeSection() !== 'manifest'" [class.active]="vm().selectedKnowledgeTopic() === 'agent-manifests'" (click)="vm().selectKnowledgeTopic('agent-manifests')">
-                                <header class="knowledge-section-head"><div><h3>Agent manifest</h3><p>Machine-readable contract for this consumer's document structure.</p></div><span class="badge" [class.badge-warn]="!vm().manifestEnabled()">{{ vm().manifestEnabled() ? 'Emit enabled' : 'Emit off' }}</span></header>
-                                <div class="agent-stats">
-                                    <div><strong>{{ vm().manifestFacetCount() }}</strong><span>facets</span></div>
-                                    <div><strong>{{ vm().manifestRelationCount() }}</strong><span>relations</span></div>
-                                    <div><strong>{{ vm().manifestSharedKeys() }}</strong><span>shared keys</span></div>
-                                    <div><strong>{{ vm().manifestCheckCount() }}</strong><span>checks</span></div>
-                                </div>
-                                <div class="manifest-emit">
-                                    <mat-slide-toggle [ngModel]="vm().manifestEnabled()" (ngModelChange)="vm().manifestEnabled.set($event)">Emit manifest</mat-slide-toggle>
-                                    <mat-form-field appearance="outline" subscriptSizing="dynamic" class="manifest-path"><mat-label>Manifest path</mat-label><input matInput [ngModel]="vm().manifestPath()" (ngModelChange)="vm().manifestPath.set($event)" placeholder=".harness/manifest.json"><mat-hint>Relative to the consumer root; generated, never hand-edited.</mat-hint></mat-form-field>
-                                </div>
-                                <div class="manifest-groups">
-                                    <section class="manifest-group">
-                                        <div class="manifest-group-head"><span>HUMAN header</span><small>{{ vm().manifestHumanHeaderKeys().length }} selected · required shape for people</small></div>
-                                        <div class="knowledge-chips">
-                                            @for (key of vm().manifestHumanHeaderOptions; track key) {
-                                                <button type="button" class="source-pill" [class.active]="vm().manifestHumanHeaderKeys().includes(key)" (click)="vm().toggleManifestHumanHeader(key); $event.stopPropagation()">{{ key }}</button>
-                                            }
-                                        </div>
-                                    </section>
-                                    <section class="manifest-group">
-                                        <div class="manifest-group-head"><span>AI header</span><small>{{ vm().manifestAiHeaderKeys().length }} selected · extra keys for agents</small></div>
-                                        <div class="knowledge-chips">
-                                            @for (key of vm().manifestAiHeaderOptions; track key) {
-                                                <button type="button" class="source-pill" [class.active]="vm().manifestAiHeaderKeys().includes(key)" (click)="vm().toggleManifestAiHeader(key); $event.stopPropagation()">{{ key }}</button>
-                                            }
-                                        </div>
-                                    </section>
-                                    <section class="manifest-group">
-                                        <div class="manifest-group-head"><span>Facets</span><small>{{ vm().manifestFacets().length }} selected · classification dimensions</small></div>
-                                        <div class="knowledge-chips">
-                                            @for (facet of vm().manifestFacetOptions; track facet) {
-                                                <button type="button" class="source-pill" [class.active]="vm().manifestFacets().includes(facet)" (click)="vm().toggleManifestFacet(facet); $event.stopPropagation()">{{ facet }}</button>
-                                            }
-                                        </div>
-                                    </section>
-                                    <section class="manifest-group">
-                                        <div class="manifest-group-head"><span>Relations</span><small>{{ vm().manifestRelations().length }} selected · allowed edge kinds</small></div>
-                                        <div class="knowledge-chips">
-                                            @for (relation of vm().manifestRelationOptions; track relation) {
-                                                <button type="button" class="source-pill" [class.active]="vm().manifestRelations().includes(relation)" (click)="vm().toggleManifestRelation(relation); $event.stopPropagation()">{{ relation }}</button>
-                                            }
-                                        </div>
-                                    </section>
-                                    <section class="manifest-group">
-                                        <div class="manifest-group-head"><span>Checks</span><small>{{ vm().manifestChecks().length }} selected · validation before publish</small></div>
-                                        <div class="knowledge-chips">
-                                            @for (check of vm().manifestCheckOptions; track check) {
-                                                <button type="button" class="source-pill" [class.active]="vm().manifestChecks().includes(check)" (click)="vm().toggleManifestCheck(check); $event.stopPropagation()">{{ check }}</button>
-                                            }
-                                        </div>
-                                    </section>
-                                </div>
-                                <p class="knowledge-note">Configured for this consumer. <code>sdlc/01.agent-manifests</code> is a study sample, not testeso data.</p>
-                            </section>
-
-                            <section class="knowledge-section knowledge-selectable knowledge-source-section" [class.zone-hidden]="vm().knowledgeSection() !== 'sources'" [class.active]="vm().selectedKnowledgeTopic() === 'docgraph'" (click)="vm().selectKnowledgeTopic('docgraph')">
-                                <header class="knowledge-section-head"><div><h3>Document graph</h3><p>Derived index of document relationships. Never the source of content.</p></div><mat-slide-toggle [ngModel]="vm().docgraphIndex()" (ngModelChange)="vm().docgraphIndex.set($event)">Index</mat-slide-toggle></header>
-                                <p class="field-help">Index authority is <strong>Boundaries</strong>: a folder is indexed only when read=allow and index=yes. <button type="button" class="link-button" (click)="vm().selectTab('boundaries')">Open Boundaries</button></p>
-                                <p class="knowledge-note">Generated files and provider copies are excluded by default.</p>
-                            </section>
-
-                            <section class="knowledge-section knowledge-selectable knowledge-source-section" [class.zone-hidden]="vm().knowledgeSection() !== 'sources'" [class.active]="vm().selectedKnowledgeTopic() === 'providers'" (click)="vm().selectKnowledgeTopic('providers')">
-                                <header class="knowledge-section-head"><div><h3>Provider routing</h3><p>One provider per work area. No provider means manage directly in <code>.md</code> files.</p></div><span class="scope-badge muted-badge">optional</span></header>
-                                <div class="provider-routing">
-                                    <article class="provider-domain">
-                                        <div class="provider-domain-copy"><strong>Work management</strong><small>Tasks · stories · bugs</small></div>
-                                        <div class="provider-options">
-                                            <button type="button" class="source-pill" [class.active]="vm().providerRouting().work === 'jira'" (click)="vm().setProviderRoute('work', 'jira'); $event.stopPropagation()">Jira</button>
-                                            <button type="button" class="source-pill" [class.active]="vm().providerRouting().work === 'md'" (click)="vm().setProviderRoute('work', 'md'); $event.stopPropagation()">None · .md</button>
-                                        </div>
-                                        <div class="provider-vm().route-state">
-                                            @if (vm().providerRouting().work === 'jira') { <span class="badge" [class.badge-warn]="vm().providerStatus('jira') !== 'configured'">{{ vm().providerStatus('jira') }}</span><button mat-button type="button" (click)="vm().openConsumerPlugins(); $event.stopPropagation()">Configure Jira</button> } @else { <span class="muted">repo files</span> }
-                                        </div>
-                                    </article>
-                                    <article class="provider-domain">
-                                        <div class="provider-domain-copy"><strong>Design management</strong><small>Design artifacts · specs</small></div>
-                                        <div class="provider-options">
-                                            <button type="button" class="source-pill" [class.active]="vm().providerRouting().design === 'figma'" (click)="vm().setProviderRoute('design', 'figma'); $event.stopPropagation()">Figma</button>
-                                            <button type="button" class="source-pill" [class.active]="vm().providerRouting().design === 'penpot'" (click)="vm().setProviderRoute('design', 'penpot'); $event.stopPropagation()">Penpot</button>
-                                            <button type="button" class="source-pill" [class.active]="vm().providerRouting().design === 'md'" (click)="vm().setProviderRoute('design', 'md'); $event.stopPropagation()">None · .md</button>
-                                        </div>
-                                        <div class="provider-vm().route-state">
-                                            @if (vm().providerRouting().design === 'md') { <span class="muted">repo files</span> } @else { <span class="badge" [class.badge-warn]="vm().providerStatus(vm().providerRouting().design) !== 'configured'">{{ vm().providerStatus(vm().providerRouting().design) }}</span><button mat-button type="button" (click)="vm().openConsumerPlugins(); $event.stopPropagation()">Configure</button> }
-                                        </div>
-                                    </article>
-                                    <article class="provider-domain">
-                                        <div class="provider-domain-copy"><strong>Content management</strong><small>Knowledge · documents</small></div>
-                                        <div class="provider-options">
-                                            <button type="button" class="source-pill" [class.active]="vm().providerRouting().content === 'notion'" (click)="vm().setProviderRoute('content', 'notion'); $event.stopPropagation()">Notion</button>
-                                            <button type="button" class="source-pill" [class.active]="vm().providerRouting().content === 'confluence'" (click)="vm().setProviderRoute('content', 'confluence'); $event.stopPropagation()">Confluence</button>
-                                            <button type="button" class="source-pill" [class.active]="vm().providerRouting().content === 'md'" (click)="vm().setProviderRoute('content', 'md'); $event.stopPropagation()">None · .md</button>
-                                        </div>
-                                        <div class="provider-vm().route-state">
-                                            @if (vm().providerRouting().content === 'md') { <span class="muted">repo files</span> } @else { <span class="badge" [class.badge-warn]="vm().providerStatus(vm().providerRouting().content) !== 'configured'">{{ vm().providerStatus(vm().providerRouting().content) }}</span><button mat-button type="button" (click)="vm().openConsumerPlugins(); $event.stopPropagation()">Configure</button> }
-                                        </div>
-                                    </article>
-                                </div>
-                                <p class="knowledge-note">Provider availability and credentials live in <button mat-button type="button" (click)="vm().openConsumerPlugins(); $event.stopPropagation()">Plugins</button>.</p>
-                            </section>
-
-                            <section class="knowledge-section knowledge-selectable knowledge-source-section" [class.zone-hidden]="vm().knowledgeSection() !== 'sources'">
-                                <header class="knowledge-section-head"><div><h3>External references</h3><p>Read-only projection from providers. Files remain the source of content.</p></div><button mat-button type="button" (click)="vm().openConsumerPlugins()">Manage providers</button></header>
-                                @if (vm().referenceSummary().length === 0) {
-                                    <p class="muted">No provider references yet. Enable a provider and run Sync.</p>
-                                } @else {
-                                    <div class="reference-list">
-                                        @for (reference of vm().referenceSummary(); track reference.id) {
-                                            <div class="reference-row"><div><strong>{{ reference.label }}</strong><small>{{ reference.id }}</small></div><span>{{ reference.count }} records</span><span class="muted">{{ reference.lastSyncedAt ? 'last sync ' + reference.lastSyncedAt : 'not synced' }}</span></div>
-                                        }
-                                    </div>
-                                }
-                            </section>
+                </div>
+            }
+            @if (vm().knowledgeRetrieval(); as retrieval) {
+                <div class="knowledge-retrieval">
+                    <header><strong>Hybrid retrieval</strong><span>{{ retrieval.results.length }} results · FTS {{ retrieval.counts.fts }} · graph {{ retrieval.counts.graph }} · vector {{ retrieval.vector.enabled ? 'on' : 'off' }}</span></header>
+                    @if (!retrieval.vector.enabled) { <small>{{ retrieval.vector.reason }}</small> }
+                    @if (retrieval.results.length === 0) {
+                        <p class="muted">No match for “{{ retrieval.query }}”.</p>
+                    } @else {
+                        <div class="worker-table-wrap">
+                            <table class="worker-table">
+                                <thead><tr><th>#</th><th>Document</th><th>Why</th><th>RRF</th></tr></thead>
+                                <tbody>
+                                    @for (hit of retrieval.results; track hit.doc.doc_id) {
+                                        <tr class="knowledge-doc-row" (click)="vm().selectKnowledgeDoc(hit.doc)"><td>{{ hit.rank }}</td><td><strong>{{ hit.doc.title || hit.doc.path }}</strong><br><code>{{ hit.doc.path }}</code></td><td>{{ hit.why.join(' · ') }}</td><td>{{ hit.score }}</td></tr>
+                                    }
+                                </tbody>
+                            </table>
                         </div>
-
-                        <aside class="knowledge-detail" aria-live="polite" [class.zone-hidden]="vm().knowledgeSection() !== 'manifest' && (vm().knowledgeSection() !== 'sources' || vm().selectedKnowledgeTopic() !== 'knowledge-base')">
-                            @if (vm().knowledgeDetail(); as detail) {
-                                <p class="eyebrow">{{ detail.eyebrow }}</p>
-                                <h3>{{ detail.title }}</h3>
-                                <p class="knowledge-detail-desc">{{ detail.description }}</p>
-
-                                <section class="detail-section">
-                                    <h4>Trace</h4>
-                                    <dl class="trace-list">
-                                        @for (trace of vm().knowledgeTrace(); track trace.label) {
-                                            <div><dt>{{ trace.label }}</dt><dd>{{ trace.value }}</dd></div>
-                                        }
-                                    </dl>
-                                </section>
-
-                                @if (vm().selectedKnowledgeTopic() === 'knowledge-base') {
-                                    <section class="detail-section">
-                                        <h4>WBS artifacts</h4>
-                                        <div class="hierarchy-list">
-                                            <div><strong>WBS</strong><span>deliverable tree · 100% rule</span></div>
-                                            <div><strong>WBS dictionary</strong><span>scope · owner · acceptance per node</span></div>
-                                            <div><strong>Atomic WBS</strong><span>leaf work package; leaf owns AC</span></div>
-                                        </div>
-                                    </section>
+                    }
+                </div>
+            }
+            @if (vm().knowledgeCheck()?.coverage?.length) {
+                <div class="knowledge-coverage">
+                    <h4>Coverage by type</h4>
+                    <div class="worker-table-wrap">
+                        <table class="worker-table">
+                            <thead><tr><th>Type</th><th>Docs</th><th>Sections</th><th>Findings</th></tr></thead>
+                            <tbody>
+                                @for (row of vm().knowledgeCheck()?.coverage; track row.type) {
+                                    <tr><td>{{ row.type }}</td><td>{{ row.docs }}</td><td>{{ row.sections }}</td><td>{{ row.findings }}</td></tr>
                                 }
-
-                                @if (vm().selectedKnowledgeTopic() === 'knowledge-base') {
-                                    <section class="detail-section">
-                                        <h4>Artifact model</h4>
-                                        <div class="hierarchy-list">
-                                            @for (row of vm().artifactModelRows(); track row.label) {
-                                                <div><strong>{{ row.label }}</strong><span>{{ row.value }}</span></div>
-                                            }
-                                        </div>
-                                    </section>
-                                }
-
-                                @if (vm().selectedKnowledgeTopic() === 'agent-manifests') {
-                                    <section class="detail-section">
-                                        <h4>Manifest contract</h4>
-                                        <div class="hierarchy-list">
-                                            <div><strong>Identity</strong><span>consumer_id · root · manifest_version</span></div>
-                                            <div><strong>Documents</strong><span>path · id · kind · status · owner · representation</span></div>
-                                            <div><strong>Kinds</strong><span>required header keys · required sections · owner</span></div>
-                                            <div><strong>Relations</strong><span>derived_from · source_of_truth · human_sot · blocks · owns_kinds · references</span></div>
-                                            <div><strong>Paths</strong><span>relative locators; path is not identity</span></div>
-                                            <div><strong>Checks</strong><span>links resolve · header shape · derived ⊆ source · no orphan · kind has owner</span></div>
-                                        </div>
-                                    </section>
-                                    <section class="detail-section">
-                                        <h4>Emitted shape</h4>
-                                        <pre class="manifest-preview">{{ vm().manifestPreview() }}</pre>
-                                    </section>
-                                    <section class="detail-section">
-                                        <h4>Study reference</h4>
-                                        <div class="manifest-note">
-                                            <strong>Do not copy sample data</strong>
-                                            <span><code>sdlc/01.agent-manifests</code> shows the shape of domain/capability specs in eso-harness. For testeso this section defines the manifest contract; it does not import that inventory.</span>
-                                        </div>
-                                        <p class="detail-note">A manifest lets an AI find the right document and understand its structure without crawling the whole repo.</p>
-                                    </section>
-                                }
-
-                                @if (vm().selectedKnowledgeTopic() !== 'pipeline') {
-                                    <dl class="knowledge-detail-list">
-                                        @for (item of detail.items; track item.label) {
-                                            <div><dt>{{ item.label }}</dt><dd>{{ item.value }}</dd></div>
-                                        }
-                                    </dl>
-                                }
-                            }
-                        </aside>
+                            </tbody>
+                        </table>
                     </div>
-                </section>
+                </div>
+            }
+            @if (vm().knowledgeDocDetail(); as detail) {
+                <div class="knowledge-graph-panel">
+                    <header><div><h4>{{ detail.doc?.title || 'Document' }}</h4><code>{{ detail.doc?.path }}</code></div><button mat-button type="button" (click)="vm().knowledgeDocDetail.set(null)">Close</button></header>
+                    <div class="knowledge-graph-columns">
+                        <div><span>Outgoing</span>
+                            @if (detail.outgoing.length === 0) { <small>No outgoing edges</small> }
+                            @for (edge of detail.outgoing; track edge.edge_id) { <div><em>{{ edge.kind }}</em><code>{{ edge.path }}</code></div> }
+                        </div>
+                        <div><span>Incoming</span>
+                            @if (detail.incoming.length === 0) { <small>No incoming edges</small> }
+                            @for (edge of detail.incoming; track edge.edge_id) { <div><em>{{ edge.kind }}</em><code>{{ edge.path }}</code></div> }
+                        </div>
+                        <div><span>Transitive · {{ detail.descendants.length }}</span>
+                            @if (detail.descendants.length === 0) { <small>No transitive edges</small> }
+                            @for (relative of detail.descendants; track relative.doc_id + relative.depth) { <div><em>depth {{ relative.depth }}</em><code>{{ relative.path }}</code></div> }
+                        </div>
+                        <div><span>Sections · {{ detail.sections.length }}</span>
+                            @for (section of detail.sections.slice(0, 8); track section.section_id) { <div><code>{{ section.anchor }}</code><small>{{ section.heading }}</small></div> }
+                        </div>
+                    </div>
+                </div>
+            }
+        </section>
+    }
+
+    <!-- Section: Contract (S1-S17 x G1-G16 x X1-X42) -->
+    @if (vm().knowledgeSection() === 'contract') {
+        <eso-knowledge-contract [vm]="vm()" />
+    }
+
+    <!-- Section: Artifacts (Inbox & Projections) -->
+    @if (vm().knowledgeSection() === 'artifacts') {
+        <eso-artifacts-inbox
+            [artifacts]="vm().consumerArtifacts()"
+            [hostProjections]="vm().hostProjections()"
+            [loading]="vm().artifactsLoading()"
+            [filterOrigin]="vm().artifactFilterOrigin()"
+            [filterKtState]="vm().artifactFilterKtState()"
+            (promote)="vm().promoteArtifact($event)"
+            (filterOriginChange)="vm().artifactFilterOrigin.set($event); vm().loadConsumerArtifacts(vm().consumerId)"
+            (filterKtStateChange)="vm().artifactFilterKtState.set($event); vm().loadConsumerArtifacts(vm().consumerId)"
+            (syncProjections)="vm().syncHostProjections()"
+        />
+    }
+
+    <!-- Section: Sources & Manifest -->
+    @if (vm().knowledgeSection() === 'sources' || vm().knowledgeSection() === 'manifest') {
+        <div class="knowledge-layout" [class.knowledge-layout-single]="vm().knowledgeSection() === 'sources'">
+            <div class="knowledge-main">
+                @if (vm().knowledgeSection() === 'sources') {
+                    <section class="knowledge-section knowledge-selectable knowledge-source-section" [class.active]="vm().selectedKnowledgeTopic() === 'knowledge-base'" (click)="vm().selectKnowledgeTopic('knowledge-base')">
+                        <header class="knowledge-section-head"><div><h3>Knowledge base</h3><p>Artifacts held for this consumer, by kind and reader.</p></div></header>
+                        <div class="knowledge-block">
+                            <span class="control-label">Artifact kinds</span>
+                            <div class="knowledge-chips">
+                                @for (kind of vm().artifactKindOptions; track kind) {
+                                    <button type="button" class="source-pill" [class.active]="vm().artifactKinds().includes(kind)" (click)="vm().toggleArtifactKind(kind); $event.stopPropagation()">{{ kind }}</button>
+                                }
+                            </div>
+                        </div>
+                        <div class="knowledge-block">
+                            <span class="control-label">Representations</span>
+                            <div class="knowledge-chips">
+                                @for (representation of vm().representationOptions; track representation) {
+                                    <button type="button" class="source-pill" [class.active]="vm().representations().includes(representation)" (click)="vm().toggleRepresentation(representation); $event.stopPropagation()">{{ representation }}</button>
+                                }
+                            </div>
+                            <p class="knowledge-note">human-readable · agent-readable · machine manifest. Derived representations must reference a source.</p>
+                        </div>
+                    </section>
+
+                    <section class="knowledge-section knowledge-selectable knowledge-source-section" [class.active]="vm().selectedKnowledgeTopic() === 'docgraph'" (click)="vm().selectKnowledgeTopic('docgraph')">
+                        <header class="knowledge-section-head"><div><h3>Document graph</h3><p>Derived index of document relationships. Never the source of content.</p></div><mat-slide-toggle [ngModel]="vm().docgraphIndex()" (ngModelChange)="vm().docgraphIndex.set($event)">Index</mat-slide-toggle></header>
+                        <p class="field-help">Index authority is <strong>Boundaries</strong>: a folder is indexed only when read=allow and index=yes. <button type="button" class="link-button" (click)="vm().selectTab('boundaries')">Open Boundaries</button></p>
+                        <p class="knowledge-note">Generated files and provider copies are excluded by default.</p>
+                    </section>
+
+                    <section class="knowledge-section knowledge-selectable knowledge-source-section" [class.active]="vm().selectedKnowledgeTopic() === 'providers'" (click)="vm().selectKnowledgeTopic('providers')">
+                        <header class="knowledge-section-head"><div><h3>Provider routing</h3><p>One provider per work area. No provider means manage directly in <code>.md</code> files.</p></div><span class="scope-badge muted-badge">optional</span></header>
+                        <div class="provider-routing">
+                            <article class="provider-domain">
+                                <div class="provider-domain-copy"><strong>Work management</strong><small>Tasks · stories · bugs</small></div>
+                                <div class="provider-options">
+                                    <button type="button" class="source-pill" [class.active]="vm().providerRouting().work === 'jira'" (click)="vm().setProviderRoute('work', 'jira'); $event.stopPropagation()">Jira</button>
+                                    <button type="button" class="source-pill" [class.active]="vm().providerRouting().work === 'md'" (click)="vm().setProviderRoute('work', 'md'); $event.stopPropagation()">None · .md</button>
+                                </div>
+                            </article>
+                            <article class="provider-domain">
+                                <div class="provider-domain-copy"><strong>Design management</strong><small>UI · mockups · components</small></div>
+                                <div class="provider-options">
+                                    <button type="button" class="source-pill" [class.active]="vm().providerRouting().design === 'figma'" (click)="vm().setProviderRoute('design', 'figma'); $event.stopPropagation()">Figma</button>
+                                    <button type="button" class="source-pill" [class.active]="vm().providerRouting().design === 'md'" (click)="vm().setProviderRoute('design', 'md'); $event.stopPropagation()">None · .md</button>
+                                </div>
+                            </article>
+                            <article class="provider-domain">
+                                <div class="provider-domain-copy"><strong>Content management</strong><small>Copy · marketing · release notes</small></div>
+                                <div class="provider-options">
+                                    <button type="button" class="source-pill" [class.active]="vm().providerRouting().content === 'notion'" (click)="vm().setProviderRoute('content', 'notion'); $event.stopPropagation()">Notion</button>
+                                    <button type="button" class="source-pill" [class.active]="vm().providerRouting().content === 'md'" (click)="vm().setProviderRoute('content', 'md'); $event.stopPropagation()">None · .md</button>
+                                </div>
+                            </article>
+                        </div>
+                        <p class="knowledge-note">Only one provider active per domain. Content synced into consumer must declare its origin.</p>
+                    </section>
+                }
+
+                @if (vm().knowledgeSection() === 'manifest') {
+                    <section class="knowledge-section knowledge-selectable manifest-section knowledge-manifest-section" [class.active]="vm().selectedKnowledgeTopic() === 'agent-manifests'" (click)="vm().selectKnowledgeTopic('agent-manifests')">
+                        <header class="knowledge-section-head"><div><h3>Agent manifest</h3><p>Machine-readable contract for this consumer's document structure.</p></div><span class="badge" [class.badge-warn]="!vm().manifestEnabled()">{{ vm().manifestEnabled() ? 'Emit enabled' : 'Emit off' }}</span></header>
+                        <div class="agent-stats">
+                            <div><strong>{{ vm().manifestFacetCount() }}</strong><span>facets</span></div>
+                            <div><strong>{{ vm().manifestRelationCount() }}</strong><span>relations</span></div>
+                            <div><strong>{{ vm().manifestSharedKeys() }}</strong><span>shared keys</span></div>
+                            <div><strong>{{ vm().manifestCheckCount() }}</strong><span>checks</span></div>
+                        </div>
+                        <div class="manifest-emit">
+                            <mat-slide-toggle [ngModel]="vm().manifestEnabled()" (ngModelChange)="vm().manifestEnabled.set($event)">Emit manifest</mat-slide-toggle>
+                            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="manifest-path"><mat-label>Manifest path</mat-label><input matInput [ngModel]="vm().manifestPath()" (ngModelChange)="vm().manifestPath.set($event)" placeholder=".harness/manifest.json"><mat-hint>Relative to the consumer root; generated, never hand-edited.</mat-hint></mat-form-field>
+                        </div>
+                        <div class="manifest-groups">
+                            <section class="manifest-group">
+                                <div class="manifest-group-head"><span>HUMAN header</span><small>{{ vm().manifestHumanHeaderKeys().length }} selected · required shape for people</small></div>
+                                <div class="knowledge-chips">
+                                    @for (key of vm().manifestHumanHeaderOptions; track key) {
+                                        <button type="button" class="source-pill" [class.active]="vm().manifestHumanHeaderKeys().includes(key)" (click)="vm().toggleManifestHumanHeader(key); $event.stopPropagation()">{{ key }}</button>
+                                    }
+                                </div>
+                            </section>
+                            <section class="manifest-group">
+                                <div class="manifest-group-head"><span>AI header</span><small>{{ vm().manifestAiHeaderKeys().length }} selected · extra keys for agents</small></div>
+                                <div class="knowledge-chips">
+                                    @for (key of vm().manifestAiHeaderOptions; track key) {
+                                        <button type="button" class="source-pill" [class.active]="vm().manifestAiHeaderKeys().includes(key)" (click)="vm().toggleManifestAiHeader(key); $event.stopPropagation()">{{ key }}</button>
+                                    }
+                                </div>
+                            </section>
+                            <section class="manifest-group">
+                                <div class="manifest-group-head"><span>Facets</span><small>{{ vm().manifestFacets().length }} selected · classification dimensions</small></div>
+                                <div class="knowledge-chips">
+                                    @for (facet of vm().manifestFacetOptions; track facet) {
+                                        <button type="button" class="source-pill" [class.active]="vm().manifestFacets().includes(facet)" (click)="vm().toggleManifestFacet(facet); $event.stopPropagation()">{{ facet }}</button>
+                                    }
+                                </div>
+                            </section>
+                            <section class="manifest-group">
+                                <div class="manifest-group-head"><span>Relations</span><small>{{ vm().manifestRelations().length }} selected · allowed edge kinds</small></div>
+                                <div class="knowledge-chips">
+                                    @for (relation of vm().manifestRelationOptions; track relation) {
+                                        <button type="button" class="source-pill" [class.active]="vm().manifestRelations().includes(relation)" (click)="vm().toggleManifestRelation(relation); $event.stopPropagation()">{{ relation }}</button>
+                                    }
+                                </div>
+                            </section>
+                            <section class="manifest-group">
+                                <div class="manifest-group-head"><span>Checks</span><small>{{ vm().manifestChecks().length }} selected · validation before publish</small></div>
+                                <div class="knowledge-chips">
+                                    @for (check of vm().manifestCheckOptions; track check) {
+                                        <button type="button" class="source-pill" [class.active]="vm().manifestChecks().includes(check)" (click)="vm().toggleManifestCheck(check); $event.stopPropagation()">{{ check }}</button>
+                                    }
+                                </div>
+                            </section>
+                        </div>
+                        <p class="knowledge-note">Configured for this consumer. <code>sdlc/01.agent-manifests</code> is a study sample, not testeso data.</p>
+                    </section>
+                }
+            </div>
+
+            <!-- Sidebar detail pane -->
+            @if (vm().knowledgeSection() === 'manifest' && vm().knowledgeDetail(); as detail) {
+                <aside class="knowledge-sidebar" aria-label="Knowledge detail">
+                    <header class="detail-head">
+                        <div><span class="eyebrow">{{ detail.eyebrow }}</span><h4>{{ detail.title }}</h4><p>{{ detail.description }}</p></div>
+                    </header>
+                    <section class="detail-section">
+                        <h4>Manifest contract</h4>
+                        <div class="hierarchy-list">
+                            <div><strong>Identity</strong><span>consumer_id · root · manifest_version</span></div>
+                            <div><strong>Documents</strong><span>path · id · kind · status · owner · representation</span></div>
+                            <div><strong>Kinds</strong><span>required header keys · required sections · owner</span></div>
+                            <div><strong>Relations</strong><span>derived_from · source_of_truth · human_sot · blocks · owns_kinds · references</span></div>
+                            <div><strong>Paths</strong><span>relative locators; path is not identity</span></div>
+                            <div><strong>Checks</strong><span>links resolve · header shape · derived ⊆ source · no orphan · kind has owner</span></div>
+                        </div>
+                    </section>
+                    <section class="detail-section">
+                        <h4>Emitted shape</h4>
+                        <pre class="manifest-preview">{{ vm().manifestPreview() }}</pre>
+                    </section>
+                    <section class="detail-section">
+                        <h4>Study reference</h4>
+                        <div class="manifest-note">
+                            <strong>Do not copy sample data</strong>
+                            <span><code>sdlc/01.agent-manifests</code> shows the shape of domain/capability specs in eso-harness. For testeso this section defines the manifest contract; it does not import that inventory.</span>
+                        </div>
+                        <p class="detail-note">A manifest lets an AI find the right document and understand its structure without crawling the whole repo.</p>
+                    </section>
+                    <dl class="knowledge-detail-list">
+                        @for (item of detail.items; track item.label) {
+                            <div><dt>{{ item.label }}</dt><dd>{{ item.value }}</dd></div>
+                        }
+                    </dl>
+                </aside>
+            }
+        </div>
+    }
+</section>

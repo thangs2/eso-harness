@@ -7,7 +7,7 @@
 import type { FetchLike } from './config-client';
 
 export interface JudgmentGateOptions {
-    requirements: unknown[];
+    requirements?: unknown[];
     answers?: unknown[] | Record<string, unknown>;
     enforcement?: 'shadow' | 'enforce';
     mode?: string;
@@ -23,6 +23,7 @@ export interface JudgmentGateResult {
     mode: string;
     enforcement: 'shadow' | 'enforce';
     totalGaps: number;
+    gaps: unknown[];
 }
 
 export class JudgmentClientError extends Error {
@@ -49,7 +50,7 @@ export async function evaluateJudgment(input: {
             ...(input.token ? { authorization: `Bearer ${input.token}` } : {}),
         },
         body: JSON.stringify({
-            requirements: input.options.requirements,
+            ...(input.options.requirements !== undefined ? { requirements: input.options.requirements } : {}),
             answers: input.options.answers ?? [],
             enforcement: input.options.enforcement ?? 'shadow',
             ...(input.options.mode ? { mode: input.options.mode } : {}),
@@ -61,12 +62,16 @@ export async function evaluateJudgment(input: {
     if (!response.ok) throw new JudgmentClientError(`judgment HTTP ${response.status}`);
     const body = await response.json() as any;
     if (!body?.verdict || typeof body.verdict.level !== 'string') throw new JudgmentClientError('judgment response missing verdict');
+    const gaps = Array.isArray(body.gaps?.gap_items)
+        ? body.gaps.gap_items
+        : (Array.isArray(body.verdict?.gaps) ? body.verdict.gaps : []);
     return {
         level: body.verdict.level,
         decision: body.decision === 'block' ? 'block' : 'allow',
         wouldBlock: Boolean(body.wouldBlock),
         mode: String(body.verdict.mode ?? 'block'),
         enforcement: body.enforcement === 'enforce' ? 'enforce' : 'shadow',
-        totalGaps: Number(body.gaps?.total_gaps ?? 0),
+        totalGaps: Number(body.gaps?.total_gaps ?? gaps.length),
+        gaps,
     };
 }

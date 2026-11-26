@@ -1,0 +1,77 @@
+<section class="tester-card boundaries-simulator" aria-labelledby="tester-title">
+    <header class="tester-head">
+        <div class="tester-head-copy">
+            <span class="tester-badge">🧪 Dry-Run Engine</span>
+            <h3 id="tester-title">Policy Simulation &amp; Dry-Run Tester</h3>
+            <p>
+                Test authorization decisions in real-time. Evaluates exact path &gt; longest prefix &gt; glob.
+                Deny wins over allow; gated requires an active grant.
+            </p>
+        </div>
+
+        <div class="preset-chips" role="group" aria-label="Preset path scenarios">
+            <span class="preset-label">Test Scenarios:</span>
+            @for (preset of presets; track preset.path) {
+                <button
+                    type="button"
+                    class="preset-chip"
+                    [class.active]="simPath() === preset.path && simAction() === preset.action"
+                    (click)="applyPreset(preset)"
+                >
+                    {{ preset.label }}
+                </button>
+            }
+        </div>
+    </header>
+
+    <div class="tester-form">
+        <mat-form-field appearance="outline" subscriptSizing="dynamic" density="-2" class="tester-path-field">
+            <mat-label>Target Path</mat-label>
+            <input
+                matInput
+                [value]="simPath()"
+                (input)="pathChange.emit($any($event.target).value)"
+                placeholder="e.g. data-lake/raw/trades.parquet, .env.production, scripts/deploy.sh"
+                aria-label="Simulation target path"
+            >
+        </mat-form-field>
+
+        <div class="tester-action-toggle" role="group" aria-label="Action selector">
+            <button
+                type="button"
+                class="action-btn"
+                [class.active]="simAction() === 'read'"
+                (click)="actionChange.emit('read')"
+            >
+                READ
+            </button>
+            <button
+                type="button"
+                class="action-btn"
+                [class.active]="simAction() === 'write'"
+                (click)="actionChange.emit('write')"
+            >
+                WRITE
+            </button>
+        </div>
+    </div>
+
+    <div class="tester-verdict-box" [attr.data-verdict]="simulationResult().verdict">
+        <div class="verdict-banner">
+            <span
+                class="verdict-badge"
+                [class.allowed]="simulationResult().verdict === 'ALLOWED'"
+                [class.gated]="simulationResult().verdict === 'GATED'"
+                [class.blocked]="simulationResult().verdict === 'BLOCKED'"
+            >
+                {{ simulationResult().badgeLabel }}
+            </span>
+            @if (simulationResult().matchedPolicyIndex) {
+                <span class="verdict-rule-tag">
+                    Rule #{{ simulationResult().matchedPolicyIndex }}: <code>{{ simulationResult().matchedPattern }}</code>
+                </span>
+            }
+        </div>
+        <p class="verdict-explanation">{{ simulationResult().explanation }}</p>
+    </div>
+</section>

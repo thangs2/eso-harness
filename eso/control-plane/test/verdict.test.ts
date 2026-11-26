@@ -83,26 +83,80 @@ describe('P2 — adjudicate (pure)', () => {
         assert.equal(result.actor?.id, 'cursor');
     });
 
-    test('no decision.recorded ⇒ unknown + HOST_SILENT with a consequence', () => {
+    test('no decision.recorded with packet + actor + action ⇒ unknown + HOST_SILENT only, score 75', () => {
         const result = adjudicate('verdict-unit', [action(), packet()]);
         assert.equal(result.level, 'unknown');
-        assert.equal(result.gaps.length, 1);
-        assert.equal(result.gaps[0].code, 'HOST_SILENT');
+        assert.deepEqual(result.gaps.map((gap) => gap.code), ['HOST_SILENT']);
         assert.match(result.gaps[0].consequence, /cannot prove why/);
         assert.equal(result.score, 75);
         assert.match(result.basis, /^claim=none:/);
     });
 
-    test('host verdict unknown ⇒ unknown', () => {
-        const result = adjudicate('verdict-unit', [decision({ verdict: 'unknown' })]);
+    test('completely silent trace (no decision, packet, actor, action) ⇒ unknown + HOST_SILENT + proof gaps, score 0', () => {
+        const result = adjudicate('verdict-unit', [{ event: 'prompt.submitted', evidence: { userQuery: 'hello' } }]);
         assert.equal(result.level, 'unknown');
-        assert.deepEqual(result.gaps, []);
+        assert.deepEqual(result.gaps.map((gap) => gap.code), [
+            'HOST_SILENT',
+            'EVIDENCE_MISSING',
+            'ACTOR_MISSING',
+            'ACTION_MISSING',
+        ]);
+        assert.match(result.gaps[0].consequence, /cannot prove why/);
+        assert.equal(result.score, 0);
+        assert.match(result.basis, /^claim=none:/);
     });
 
-    test('host verdict partial ⇒ partial', () => {
+    test('host verdict unknown with all proofs and no host gaps ⇒ unknown + UNSPECIFIED_UNKNOWN, score 75', () => {
+        const result = adjudicate('verdict-unit', [decision({ verdict: 'unknown' }), packet(), action()]);
+        assert.equal(result.level, 'unknown');
+        assert.deepEqual(result.gaps.map((gap) => gap.code), ['UNSPECIFIED_UNKNOWN']);
+        assert.equal(result.score, 75);
+        assert.match(result.gaps[0].what, /decision\.recorded\.verdict/);
+        assert.ok(result.gaps[0].consequence.length > 0);
+    });
+
+    test('host verdict partial with all proofs and no host gaps ⇒ partial + UNSPECIFIED_PARTIAL, score 75', () => {
+        const result = adjudicate('verdict-unit', [decision({ verdict: 'partial' }), packet(), action()]);
+        assert.equal(result.level, 'partial');
+        assert.deepEqual(result.gaps.map((gap) => gap.code), ['UNSPECIFIED_PARTIAL']);
+        assert.equal(result.score, 75);
+        assert.match(result.gaps[0].what, /decision\.recorded\.verdict/);
+        assert.ok(result.gaps[0].consequence.length > 0);
+    });
+
+    test('host verdict partial missing proof packets ⇒ includes proof gaps and UNSPECIFIED_PARTIAL', () => {
         const result = adjudicate('verdict-unit', [decision({ verdict: 'partial' })]);
         assert.equal(result.level, 'partial');
-        assert.deepEqual(result.gaps, []);
+        assert.deepEqual(result.gaps.map((gap) => gap.code), [
+            'EVIDENCE_MISSING',
+            'ACTION_MISSING',
+            'UNSPECIFIED_PARTIAL',
+        ]);
+        assert.equal(result.score, 25);
+    });
+
+    test('host verdict partial/unknown with explicit host gaps ⇒ preserves host gaps instead of UNSPECIFIED_*', () => {
+        const hostGap = {
+            code: 'TEST_COVERAGE_GAP',
+            what: 'integration suite was skipped',
+            consequence: 'runtime wiring is unverified',
+        };
+        const partial = adjudicate('verdict-unit', [
+            decision({ verdict: 'partial', gaps: [hostGap, { code: 'INVALID_ONLY_CODE' }] }),
+            packet(),
+            action(),
+        ]);
+        assert.equal(partial.level, 'partial');
+        assert.deepEqual(partial.gaps, [hostGap]);
+        assert.equal(partial.score, 75);
+
+        const unknown = adjudicate('verdict-unit', [
+            decision({ verdict: 'unknown', gaps: [hostGap] }),
+            action(),
+        ]);
+        assert.equal(unknown.level, 'unknown');
+        assert.deepEqual(unknown.gaps.map((gap) => gap.code), ['EVIDENCE_MISSING', 'TEST_COVERAGE_GAP']);
+        assert.equal(unknown.score, 50);
     });
 
     test('allow without evidence.packet ⇒ partial + EVIDENCE_MISSING', () => {
@@ -142,6 +196,36 @@ describe('P2 — adjudicate (pure)', () => {
         assert.equal(allMissing.level, 'partial');
         assert.equal(allMissing.gaps.length, 3);
         assert.equal(allMissing.score, 25);
+    });
+
+    test('allow + evidence.verified(allVerified=false) ⇒ partial + EVIDENCE_UNVERIFIED', () => {
+        const unverified: Obs = {
+            event: 'evidence.verified',
+            evidence: {
+                actor: { kind: 'eso', id: 'predicate-verifier' },
+                allVerified: false,
+                sources: [{ requirementId: 'req-1', id: 'missing-doc', kind: 'knowledge', where: 'missing-doc', hash: null, verified: false }],
+            },
+        };
+        const result = adjudicate('verdict-unit', [decision(), packet(), unverified, action()]);
+        assert.equal(result.level, 'partial');
+        assert.deepEqual(result.gaps.map((gap) => gap.code), ['EVIDENCE_UNVERIFIED']);
+        assert.equal(result.score, 75);
+    });
+
+    test('allow + evidence.verified(allVerified=true) ⇒ allow, score 100', () => {
+        const verified: Obs = {
+            event: 'evidence.verified',
+            evidence: {
+                actor: { kind: 'eso', id: 'predicate-verifier' },
+                allVerified: true,
+                sources: [{ requirementId: 'req-1', id: 'docs/spec.md', kind: 'knowledge', where: 'docs/spec.md', hash: 'abc', verified: true }],
+            },
+        };
+        const result = adjudicate('verdict-unit', [decision(), packet(), verified, action()]);
+        assert.equal(result.level, 'allow');
+        assert.deepEqual(result.gaps, []);
+        assert.equal(result.score, 100);
     });
 });
 

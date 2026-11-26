@@ -71,17 +71,22 @@ const MANDATORY_STRINGS = [
 /** Pipeline v2 — the eight stages the stepper must keep (ids, not a local order). */
 const STAGE_IDS = ['intake-law', 'decision-jev', 'evidence-recon', 'sufficiency', 'slp', 'execution', 'seal', 'report'];
 
-test('layout markers render in the professional order: header → at-a-glance → stepper → flow → tabs', () => {
+test('layout markers render in the professional order: header → effectiveness → stepper → flow → glance → tabs', () => {
     const header = PAGE.indexOf('<header class="request-hero"');
     const glance = PAGE.indexOf('class="glance-grid top-grid"');
     const stepper = PAGE.indexOf('<nav class="pipeline-stepper"');
     const endflow = PAGE.indexOf('class="endflow"');
     const tabs = PAGE.indexOf('class="tabs drill-tabs"');
+    const pageHero = PAGE.indexOf('<eso-request-hero');
+    const pageEffectiveness = PAGE.indexOf('<eso-evidence-effectiveness');
+    const pageTabPanel = PAGE.indexOf('class="tab-panel" role="tabpanel"');
     assert.ok(header > 0, 'header hero marker');
     assert.ok(glance > 0, 'at-a-glance row marker');
     assert.ok(stepper > 0, 'pipeline stepper marker');
     assert.ok(endflow > 0, 'end-to-end flow marker');
     assert.ok(tabs > 0, 'drill tabs marker');
+    assert.ok(pageHero > 0 && pageEffectiveness > pageHero, '5-Axis Evidence Effectiveness panel sits below hero');
+    assert.ok(pageTabPanel > tabs, 'role="tabpanel" wraps the active drill tab content');
     assert.ok(header < glance, 'header renders before the at-a-glance row');
     assert.ok(glance < stepper, 'at-a-glance row renders before the stepper');
     assert.ok(stepper < endflow, 'stepper renders before the E2E flow');
@@ -95,8 +100,10 @@ test('header: real h1 prompt, badge row, one meta line and collapsible Identity'
     const start = PAGE.indexOf('<header class="request-hero"');
     const hero = PAGE.slice(start, PAGE.indexOf('</header>', start));
     assert.match(hero, /<h1 class="request-query">\{\{ queryText\(\) \}\}<\/h1>/);
-    assert.match(hero, /class="badge status-badge"[\s\S]{0,120}<span class="status-dot"/);
-    assert.match(hero, /class="badge verdict-badge"/);
+    assert.match(hero, /class="badges hero-badges"/);
+    assert.match(hero, /class="chip" \[class\]="'tone-' \+ item\.tone"[\s\S]{0,120}<span class="chip-dot"/);
+    assert.match(PAGE, /\{\s*label:\s*'status',\s*value:\s*status/);
+    assert.match(PAGE, /label:\s*'verdict',\s*value:/);
     assert.match(hero, /class="hero-meta"/);
     for (const key of ['Started', 'Duration', 'Host', 'Runtime', 'Model', 'Actor']) {
         assert.match(hero, new RegExp(`<span class="meta-key">${key}</span>`), `meta line carries ${key}`);
@@ -122,14 +129,16 @@ test('at-a-glance row: verdict + effectiveness, then the two large gate + cost c
     assert.match(row, /class="panel gate-card"/);
     assert.match(row, /class="panel tokens"/);
     assert.equal((row.match(/<div class="kpi-tile">/g) ?? []).length, 7, 'all seven effectiveness values stay');
-    assert.match(row, /class="token-tiles"/);
+    assert.match(row, /class="token-figures"/);
     assert.match(row, /Host signals:<\/span> not reported/, 'null signals fold to one inline line');
     // Legacy gate + cost row: two large cards on the second row of the at-a-glance grid.
     assert.match(STYLES, /\.glance-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/);
     assert.match(row, /class="gate-big"/, 'gate keeps a large state word');
-    assert.match(row, /class="token-gauge"/, 'cost keeps a proportion gauge');    assert.match(row, /class="verdict-meaning"/, 'verdict explains what the level means');
+    assert.match(row, /class="token-split-bar"/, 'cost keeps a proportion gauge');
+    assert.match(row, /class="verdict-meaning"/, 'verdict explains what the level means');
     assert.match(row, /class="score-track"/, 'verdict score has a proportion track');
-    assert.match(row, /class="gap-chip"/, 'verdict lists gap codes');    assert.match(row, /class="score-ledger"/, 'verdict shows the score arithmetic');
+    assert.match(row, /class="gap-chip"/, 'verdict lists gap codes');
+    assert.match(row, /class="score-ledger"/, 'verdict shows the score arithmetic');
     assert.match(row, /class="ledger-row negative"/, 'each gap subtracts 25 explicitly');
     assert.match(row, /class="score-impact"/, 'verdict explains what the score affects');
     assert.match(row, /PROOF_TOTAL/, 'proof total is named, not magic');
@@ -138,8 +147,8 @@ test('at-a-glance row: verdict + effectiveness, then the two large gate + cost c
     assert.match(row, /gate-action/, 'write gate says how to fix a missing decision');
     assert.match(row, /gate-criteria/, 'write gate states the three scope rules');
 
-    assert.match(STYLES, /\.gate-card h2, \.tokens h2\s*\{[^}]*font-size:\s*var\(--fs-h2-large\)/);
-    assert.match(STYLES, /\.token-tile strong\s*\{[^}]*font-size:\s*var\(--fs-big\)/);
+    assert.match(STYLES, /h2\s*\{[^}]*font-size:\s*var\(--fs-title\)/);
+    assert.match(STYLES, /\.figure\.headline strong\s*\{[^}]*font-size:\s*var\(--fs-big\)/);
     assert.match(STYLES, /\.mini-btn\s*\{/, 'small Show/Copy actions');
 });
 
@@ -149,11 +158,13 @@ test('card chrome mirrors the legacy language: icon chips, accent rails, status 
     assert.match(STYLES, /\.icon-chip\s*\{[\s\S]*?border:\s*1px solid[\s\S]*?border-radius:\s*\.5rem/);
     // Legacy accent left rail on every card.
     assert.match(STYLES, /border-left:\s*3px solid var\(--card-accent/);
-    // Status badges carry a dot as a second signal, not colour alone.
-    assert.match(PAGE, /class="badge status-badge"[\s\S]{0,120}<span class="status-dot"/);
+    // Status chips and gate state carry a dot as a second signal, not colour alone.
+    assert.match(PAGE, /class="chip" \[class\]="'tone-' \+ item\.tone"[\s\S]{0,120}<span class="chip-dot"/);
+    assert.match(PAGE, /class="gate-big"[\s\S]{0,120}<span class="status-dot"/);
     assert.match(STYLES, /\.status-dot\s*\{[^}]*border-radius:\s*50%/);
-    // Cost card keeps its token tiles; the telemetry tab keeps a second set.
-    assert.equal((PAGE.match(/class="token-tiles"/g) ?? []).length >= 2, true, 'tokens card + telemetry tab tiles');
+    // Cost card keeps its token figures; the telemetry tab keeps its token tiles.
+    assert.match(PAGE, /class="token-figures"/, 'tokens card figures');
+    assert.match(PAGE, /class="token-tiles"/, 'telemetry tab tiles');
     // Section rhythm: page stack owns the vertical gap.
     assert.match(STYLES, /\.detail-page\s*\{[\s\S]*?gap:\s*var\(--space-5\)/);
 });
@@ -189,12 +200,12 @@ test('stepper keeps the 8 v2 stage ids, legacy ring badges and a single selected
 
 test('E2E flow ports the legacy card anatomy and collapses empty steps to one slim row', () => {
     assert.match(PAGE, /@for \(step of steps\(\); track step\.id; let index = \$index\)/);
-    assert.match(PAGE, /class="endflow-card-title"[^>]*>STEP \{\{ index \+ 1 \}\} · \{\{ step\.label \}\}/);
+    assert.match(PAGE, /class="step-badge"[^>]*>STEP \{\{ index \+ 1 \}\}<\/span>\s*<span class="endflow-card-title">\{\{ step\.label \}\}<\/span>/);
     assert.match(PAGE, /class="endflow-subgrid" \[class\.single\]="step\.subcards\.length === 1"/);
     assert.match(PAGE, /class="sub-label">\{\{ sub\.label \}\}/);
     assert.match(PAGE, /class="sub-value">\{\{ sub\.value \}\}/);
     assert.match(PAGE, /class="sub-detail">\{\{ sub\.detail \}\}/);
-    assert.match(PAGE, /<span class="missing-tag">missing<\/span>/);
+    assert.match(PAGE, /class="status-pill" \[attr\.data-tone\]="tone\(step\)">\{\{ step\.status \}\}/);
     assert.match(PAGE, /No host evidence for this step/);
     assert.match(PAGE, /\(click\)="toggleStep\(step\)"/);
     assert.match(PAGE, /\[attr\.aria-expanded\]="isStepOpen\(step\)"/);
@@ -204,22 +215,23 @@ test('E2E flow ports the legacy card anatomy and collapses empty steps to one sl
     assert.match(PAGE, /class="endflow-connector"/);
     assert.match(STYLES, /\.endflow-no\s*\{[^}]*border-radius:\s*50%/);
     assert.match(STYLES, /\.endflow-connector\s*\{[^}]*background:\s*var\(--connector/);
-    assert.match(STYLES, /\.endflow-card\s*\{[^}]*padding:\s*1rem[^}]*border:\s*1px solid var\(--line\)[^}]*border-radius:\s*\.75rem/);
-    assert.match(STYLES, /\.endflow-card\[data-tone='decision'\]/);
-    assert.match(STYLES, /\.endflow-card\[data-tone='warn'\]/);
+    assert.match(STYLES, /\.endflow-card\s*\{[^}]*padding:\s*var\(--space-3\) var\(--space-4\)[^}]*border:\s*1px solid var\(--line\)[^}]*border-radius:\s*var\(--radius-md\)/);
+    assert.match(STYLES, /\[data-tone='decision'\]/);
+    assert.match(STYLES, /\[data-tone='warn'\]/);
     assert.match(STYLES, /\.endflow-subgrid\s*\{[^}]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/);
-    assert.match(STYLES, /\.endflow-sub\s*\{[^}]*background:\s*#0d1118/);
-    assert.match(STYLES, /\.endflow-sub \.sub-label\s*\{[^}]*font-size:\s*var\(--fs-label\)/);
+    assert.match(STYLES, /\.endflow-sub\s*\{[^}]*background:\s*var\(--surface-2\)/);
+    assert.match(STYLES, /\.endflow-sub \.sub-label\s*\{[^}]*font-size:/);
     assert.match(STYLES, /\.endflow-sub \.sub-detail\s*\{[^}]*font-size:\s*var\(--fs-label\)/);
-    // An empty step is one slim muted row, not a header-only stripe.
-    assert.match(PAGE, /@if \(step\.empty && !isStepOpen\(step\)\)/);
-    assert.match(PAGE, /class="endflow-collapsed"/);
-    assert.match(STYLES, /\.endflow-collapsed\s*\{[^}]*display:\s*flex/);
-    assert.match(STYLES, /\.collapsed-note\s*\{[^}]*color:\s*var\(--dim\)/);
+    // An empty step collapses when !isStepOpen(step) and shows an honest empty note when opened.
+    assert.match(PAGE, /\[class\.is-empty\]="step\.empty"\s*\[class\.is-open\]="isStepOpen\(step\)"/);
+    assert.match(PAGE, /class="endflow-empty-note"/);
+    assert.match(STYLES, /\.endflow-card-row\s*\{[^}]*display:\s*flex/);
+    assert.match(STYLES, /\.endflow-empty-note \.note-icon\s*\{[^}]*color:\s*var\(--dim\)/);
 });
 
 test('drill tabs are full width, icon + label + count, and keep the five tabs', () => {
     assert.match(PAGE, /class="tabs drill-tabs" role="tablist"/);
+    assert.match(PAGE, /class="tab-panel" role="tabpanel"/);
     for (const tab of ['waterfall', 'topology', 'decisions', 'rules', 'telemetry']) {
         assert.match(PAGE, new RegExp(`\\{ id: '${tab}' as const`), `tab ${tab}`);
     }
@@ -227,7 +239,7 @@ test('drill tabs are full width, icon + label + count, and keep the five tabs', 
     assert.match(PAGE, /class="tab-count">\{\{ tabCount\(tab\.id\) \}\}/);
     assert.match(PAGE, /\[class\.active\]="activeTab\(\) === tab\.id"/);
     assert.match(STYLES, /\.tabs\s*\{[^}]*width:\s*100%/);
-    assert.match(STYLES, /\.tabs button\s*\{[^}]*flex:\s*1 1 0/);
+    assert.match(STYLES, /\.tabs button\s*\{[^}]*flex:\s*1 1 auto/);
 });
 
 test('waterfall keeps the legacy rail only when data exists, plus dense event pills', () => {
@@ -271,10 +283,13 @@ test('every mandatory honest string survives the visual revamp', () => {
 
 test('all existing proof blocks are still rendered', () => {
     assert.match(PAGE, /aria-label="Turn verdict \(Q1\)"/);
+    assert.match(PAGE, /aria-label="5-Axis Evidence Effectiveness"/);
     assert.match(PAGE, /Why this verdict/);
-    assert.match(PAGE, /Q3<\/span> Sufficiency/);
+    assert.match(PAGE, /Q3<\/span> Turn Proof/);
+    assert.match(PAGE, /aria-label="Explicit Unknowns \(BR-18\)"/);
     assert.match(PAGE, /What changed/);
     assert.match(PAGE, /Q5<\/span> Integrity/);
+    assert.match(PAGE, /aria-label="Receipt v2 Verified Sources"/);
     assert.match(PAGE, /Q6<\/span> What next/);
     assert.match(PAGE, /aria-label="Orchestration effectiveness \(pipeline v2\)"/);
     assert.match(PAGE, /aria-label="Host signals \(P6c\)"/);
@@ -298,8 +313,9 @@ test('type scale: 13px body, 12px secondary, 14px card title, 26–28px h1, 11px
 });
 
 test('tokens-only styling: no hardcoded px outside borders and shadows', () => {
+    const cleanStyles = STYLES.replace(/\/\*[\s\S]*?\*\//g, '');
     const bad = [];
-    for (const match of STYLES.matchAll(/([a-z-]+)\s*:\s*([^;{}]+)/g)) {
+    for (const match of cleanStyles.matchAll(/([a-z-]+)\s*:\s*([^;{}]+)/g)) {
         const prop = match[1].trim();
         const value = match[2];
         if (/^border(?:-|$)/.test(prop) || prop === 'box-shadow') continue;

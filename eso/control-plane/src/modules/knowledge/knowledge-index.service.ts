@@ -157,6 +157,18 @@ function chunkDocument(doc: ScannedDoc): Array<{ chunkId: string; docId: string;
     return chunks;
 }
 
+export function listIndexableMarkdownFiles(root: string): string[] {
+    if (!root || !existsSync(root)) return [];
+    const files: string[] = [];
+    walk(root, root, files);
+    const policies = loadIndexPolicies(root);
+    const indexable = files
+        .filter((abs) => indexAllowed(root, abs, policies))
+        .map((abs) => relative(root, abs).split(sep).join('/'));
+    indexable.sort();
+    return indexable;
+}
+
 export class KnowledgeIndexService {
     constructor(private readonly store: PlatformStore) {}
 
@@ -167,19 +179,15 @@ export class KnowledgeIndexService {
         const root = consumer.root;
         if (!existsSync(root) || !statSync(root).isDirectory()) fail('ROOT_NOT_FOUND');
 
-        const files: string[] = [];
-        walk(root, root, files);
-        const policies = loadIndexPolicies(root);
-        const indexable = files.filter((abs) => indexAllowed(root, abs, policies));
-        indexable.sort();
+        const indexable = listIndexableMarkdownFiles(root);
 
         const docs: ScannedDoc[] = [];
         const byPath = new Map<string, ScannedDoc>();
         const sourceHash = createHash('sha256');
-        for (const abs of indexable) {
+        for (const rel of indexable) {
+            const abs = join(root, rel);
             const text = readFileSync(abs, 'utf8');
             sourceHash.update(text);
-            const rel = relative(root, abs).split(sep).join('/');
             const { header, body } = parseFrontmatter(text);
             const rawId = (header.id || '').trim();
             const baseId = rawId && /^[a-zA-Z0-9._:-]+$/.test(rawId) ? rawId : `doc-${createHash('sha1').update(rel).digest('hex').slice(0, 12)}`;
@@ -257,6 +265,7 @@ export class KnowledgeIndexService {
             }
         }
 
+        const approvedArtifacts = await this.store.listArtifacts(id, { ktState: 'approved' });
         const manifest = {
             manifest_version: 1,
             consumer_id: id,
@@ -270,6 +279,17 @@ export class KnowledgeIndexService {
                 title: doc.header.title || doc.sections[0]?.heading || doc.path,
                 content_hash: doc.hash,
                 headings: doc.sections.map((section) => ({ id: section.sectionId, level: section.level, text: section.heading })),
+            })),
+            artifacts: approvedArtifacts.map((art) => ({
+                id: art.id,
+                title: art.title,
+                origin: art.origin,
+                custodian: art.custodian,
+                kt_state: art.ktState,
+                liveness: art.liveness,
+                content_type: art.contentType,
+                created_at: art.createdAt,
+                updated_at: art.updatedAt,
             })),
         };
         const manifestId = `manifest-${Date.now()}`;
@@ -306,7 +326,14 @@ export class KnowledgeIndexService {
         await this.store.replaceKnowledgeIndex(id, payload);
         mkdirSync(join(root, '.harness'), { recursive: true });
         atomicWrite(join(root, '.harness', 'knowledge-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
-        return { ...(await this.store.knowledgeSummary(id)), manifestPath: '.harness/knowledge-manifest.json', buildId, chunks: chunks.length };
+        const summary = await this.store.knowledgeSummary(id);
+        return {
+            ...summary,
+            artifacts: summary.artifacts ?? approvedArtifacts.length,
+            manifestPath: '.harness/knowledge-manifest.json',
+            buildId,
+            chunks: chunks.length,
+        };
     }
 }
 

@@ -64,13 +64,13 @@ test('an unrecorded gate has the exact honest empty state', () => {
     assert.match(GATE_BLOCK, /No scope decision was recorded for this turn/);
 });
 
-test('write gate sits in the Q1/Q2 verdict panel above Q3 Sufficiency', () => {
+test('write gate sits in the Q1/Q2 verdict panel above Q3 Turn Proof', () => {
     const q2 = PAGE.indexOf('Q2</span> Why this verdict');
     const gate = PAGE.indexOf('class="write-gate"');
-    const q3 = PAGE.indexOf('Q3</span> Sufficiency');
+    const q3 = PAGE.indexOf('Q3</span> Turn Proof');
     assert.ok(q2 > 0 && gate > 0 && q3 > 0, 'Q2, the write gate and Q3 must all exist');
     assert.ok(q2 < gate, 'the write gate belongs in the Q2 area');
-    assert.ok(gate < q3, 'the write gate must render before the sufficiency block');
+    assert.ok(gate < q3, 'the write gate must render before the Turn Proof block');
 });
 
 test('write gate styles use layout/type tokens', () => {

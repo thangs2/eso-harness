@@ -44,16 +44,19 @@ import {
                         <p class="score-caption"><strong>{{ v.score }}</strong><span>/100 evidence score</span><small>{{ scoreFormula(v) }}</small></p>
                     </div>
                     <div class="score-ledger" aria-label="How the evidence score is calculated">
-                        <div class="ledger-row"><span class="ledger-op">Start</span><span class="ledger-val">100</span><span class="ledger-why">all four proof checks present</span></div>
-                        @for (gap of v.gaps; track gap.code) {
+                        <div class="ledger-row"><span class="ledger-op">Start</span><span class="ledger-val">100</span><span class="ledger-why">all four trace proof checks present</span></div>
+                        @for (gap of v.gaps.slice(0, 5); track gap.code + ':' + $index) {
                             <div class="ledger-row negative"><span class="ledger-op">−25</span><span class="ledger-val">{{ gap.code }}</span><span class="ledger-why">{{ gap.what }}</span></div>
                         }
-                        <div class="ledger-row total"><span class="ledger-op">=</span><span class="ledger-val">{{ v.score }}</span><span class="ledger-why">{{ proofsPresent(v) }}/{{ PROOF_TOTAL }} proofs present</span></div>
+                        @if (v.gaps.length > 5) {
+                            <div class="ledger-row more"><span class="ledger-op">…</span><span class="ledger-val">+{{ v.gaps.length - 5 }} more</span><span class="ledger-why">{{ v.gaps.length - 5 }} additional gap(s) listed in Verdict &amp; gaps tab</span></div>
+                        }
+                        <div class="ledger-row total"><span class="ledger-op">=</span><span class="ledger-val">{{ v.score }}</span><span class="ledger-why">{{ proofsPresent(v) }}/{{ PROOF_TOTAL }} trace proofs present@if (extraJudgmentGaps(v).length) { · {{ extraJudgmentGaps(v).length }} judgment gap(s) }</span></div>
                     </div>
                     <p class="score-impact">{{ scoreImpact(v) }}</p>
                     <div class="gap-row">
                         <span class="gap-label">Gaps</span>
-                        @for (gap of v.gaps.slice(0, 3); track gap.code) {
+                        @for (gap of v.gaps.slice(0, 3); track gap.code + ':' + $index) {
                             <span class="gap-chip" [title]="gap.what + ' — ' + gap.consequence">{{ gap.code }}</span>
                         } @empty {
                             <span class="gap-none">none recorded</span>
@@ -389,6 +392,7 @@ import {
         .ledger-op { color: var(--dim); font-variant-numeric: tabular-nums; text-transform: uppercase; letter-spacing: .05em; }
         .ledger-val { color: #e2e8f0; font-weight: 650; font-family: ui-monospace, monospace; }
         .ledger-row.negative .ledger-val { color: var(--warn-ink); }
+        .ledger-row.more .ledger-val { color: var(--muted); }
         .ledger-why { color: var(--muted); overflow-wrap: anywhere; }
         .ledger-row.total { margin-top: .125rem; padding-top: var(--space-1); border-top: 1px solid var(--line); }
         .ledger-row.total .ledger-val { color: #f1f5f9; font-size: var(--fs-title); }
@@ -606,25 +610,52 @@ export class GlanceCardsComponent {
         switch (v.level) {
             case 'allow': return 'Evidence supports this turn: the host claim was adjudicated and no gap was recorded.';
             case 'deny': return 'A recorded rule or decision blocked this turn.';
-            case 'partial': return gap ? `Evidence is incomplete: ${gap} means the claim cannot be fully supported.` : 'Evidence is incomplete for this turn.';
+            case 'partial':
+                if (v.gaps.length > 1) {
+                    const coreMissing = this.PROOF_TOTAL - this.proofsPresent(v);
+                    const extraCount = this.extraJudgmentGaps(v).length;
+                    return extraCount > 0
+                        ? `Evidence is incomplete: ${v.gaps.length} gap(s) recorded (${coreMissing} of ${this.PROOF_TOTAL} trace proofs missing; ${extraCount} judgment gap(s)), so the claim cannot be fully supported.`
+                        : `Evidence is incomplete: ${coreMissing} of ${this.PROOF_TOTAL} trace proofs missing, so the claim cannot be fully supported.`;
+                }
+                return gap ? `Evidence is incomplete: ${gap} means the claim cannot be fully supported.` : 'Evidence is incomplete for this turn.';
             default: return gap === 'HOST_SILENT'
                 ? 'Not allow: the host claim was never sustained. Not deny: no rule rejected it. The prompt ran, but no decision.recorded states why — the turn is unproven.'
                 : 'Not allow and not deny: no decision evidence was recorded, so ESO cannot judge the turn either way.';
         }
     }
 
-    /** The four proof checks named by the backend (HOST_SILENT, EVIDENCE_MISSING, ACTOR_MISSING, ACTION_MISSING). */
+    /** The four trace proof checks named by the backend (HOST_SILENT, EVIDENCE_MISSING, ACTOR_MISSING, ACTION_MISSING). */
     readonly PROOF_TOTAL = 4;
+    private readonly CORE_PROOF_CODES = new Set([
+        'HOST_SILENT',
+        'EVIDENCE_MISSING',
+        'ACTOR_MISSING',
+        'ACTION_MISSING',
+    ]);
+
+    coreProofGaps(v: TurnVerdictView) {
+        return v.gaps.filter((g) => this.CORE_PROOF_CODES.has((g.code || '').trim().toUpperCase()));
+    }
+
+    extraJudgmentGaps(v: TurnVerdictView) {
+        return v.gaps.filter((g) => !this.CORE_PROOF_CODES.has((g.code || '').trim().toUpperCase()));
+    }
 
     proofsPresent(v: TurnVerdictView): number {
-        return Math.max(0, this.PROOF_TOTAL - v.gaps.length);
+        const missingCore = new Set(this.coreProofGaps(v).map((g) => (g.code || '').trim().toUpperCase())).size;
+        return Math.max(0, this.PROOF_TOTAL - missingCore);
     }
 
     /** What the number changes downstream: it is receipt content, not a write-gate verdict. */
     scoreImpact(v: TurnVerdictView): string {
         if (!v.gaps.length) return 'Every required proof is present, so this verdict is sustainable and the sealed receipt carries 100.';
-        const missing = v.gaps.length;
-        return `${missing} of ${this.PROOF_TOTAL} proof checks failed, so the verdict is "${v.level}", not "allow". The score is written into the sealed receipt as evidenceScore; it does not by itself block a write.`;
+        const coreMissing = this.PROOF_TOTAL - this.proofsPresent(v);
+        const extraCount = this.extraJudgmentGaps(v).length;
+        if (extraCount > 0) {
+            return `${v.gaps.length} gap(s) recorded (${coreMissing} of ${this.PROOF_TOTAL} trace proofs missing; ${extraCount} judgment gap(s)), so the verdict is "${v.level}", not "allow". The score is written into the sealed receipt as evidenceScore; it does not by itself block a write.`;
+        }
+        return `${coreMissing} of ${this.PROOF_TOTAL} trace proof checks failed, so the verdict is "${v.level}", not "allow". The score is written into the sealed receipt as evidenceScore; it does not by itself block a write.`;
     }
 
     /** Score is a formula, not a vibe: 100 − 25 per gap, so a reader can reproduce it. */

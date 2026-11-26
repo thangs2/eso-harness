@@ -1,0 +1,116 @@
+<section class="policy-panel" aria-labelledby="path-policies-title">
+    <header class="section-head">
+        <div class="head-copy">
+            <h3 id="path-policies-title">Path policies</h3>
+            <p>Deny wins over allow. A gated write needs a matching grant.</p>
+        </div>
+        <div class="head-right">
+            <!-- Filter Pills -->
+            <div class="category-pills" role="tablist" aria-label="Policy category filter">
+                @for (cat of categories(); track cat.id) {
+                    <button
+                        type="button"
+                        class="cat-pill"
+                        [class.active]="selectedCategory() === cat.id"
+                        (click)="categoryChange.emit(cat.id)"
+                        role="tab"
+                        [attr.aria-selected]="selectedCategory() === cat.id"
+                    >
+                        @if (cat.icon) { <span class="pill-icon">{{ cat.icon }}</span> }
+                        <span>{{ cat.label }}</span>
+                        <span class="pill-count">{{ categoryCount(cat.id) }}</span>
+                    </button>
+                }
+            </div>
+        </div>
+    </header>
+
+    @if (policyForm().length === 0) {
+        <div class="empty-state">
+            <div class="empty-icon">🛡️</div>
+            <strong>No path policy</strong>
+            <span>Default policy applies: deny outside the repo root.</span>
+            <button mat-stroked-button type="button" (click)="add.emit()">Add first policy</button>
+        </div>
+    } @else {
+        <div class="policy-table">
+            <div class="policy-head" aria-hidden="true">
+                <span class="col-path">Path pattern</span>
+                <span class="col-type">Type</span>
+                <span class="col-read">Read</span>
+                <span class="col-write">Write</span>
+                <span class="col-index">Index</span>
+                <span class="col-actions">Actions</span>
+            </div>
+            <div class="policy-list">
+                @for (policy of policyForm().controls; track policy; let i = $index) {
+                    @if (isPolicyVisible(policy)) {
+                        <article
+                            class="policy-row"
+                            [class.highlighted-rule]="matchedPolicyIndex() === (i + 1)"
+                            [attr.data-policy-id]="policy.controls.id.value"
+                        >
+                            <div class="field-wrapper col-path">
+                                <mat-form-field appearance="outline" subscriptSizing="dynamic" density="-2" class="path-field">
+                                    <input
+                                        matInput
+                                        [formControl]="policy.controls.path"
+                                        placeholder="Path or glob (e.g. data-lake/**, .env*)"
+                                        aria-label="Path pattern"
+                                    >
+                                </mat-form-field>
+                            </div>
+
+                            <div class="field-wrapper col-type">
+                                <mat-form-field appearance="outline" subscriptSizing="dynamic" density="-2">
+                                    <mat-select [formControl]="policy.controls.pathType" aria-label="Path type">
+                                        <mat-option value="file">file</mat-option>
+                                        <mat-option value="directory">directory</mat-option>
+                                        <mat-option value="glob">glob</mat-option>
+                                    </mat-select>
+                                </mat-form-field>
+                            </div>
+
+                            <div class="field-wrapper col-read">
+                                <mat-form-field appearance="outline" subscriptSizing="dynamic" density="-2">
+                                    <mat-select [formControl]="policy.controls.read" aria-label="Read policy">
+                                        <mat-option value="allow">allow</mat-option>
+                                        <mat-option value="deny">deny</mat-option>
+                                    </mat-select>
+                                </mat-form-field>
+                            </div>
+
+                            <div class="field-wrapper col-write">
+                                <mat-form-field appearance="outline" subscriptSizing="dynamic" density="-2">
+                                    <mat-select [formControl]="policy.controls.write" aria-label="Write policy">
+                                        <mat-option value="bypass">bypass</mat-option>
+                                        <mat-option value="gated">gated</mat-option>
+                                        <mat-option value="warn">warn</mat-option>
+                                        <mat-option value="deny">deny</mat-option>
+                                    </mat-select>
+                                </mat-form-field>
+                            </div>
+
+                            <div class="index-cell col-index">
+                                <mat-checkbox [formControl]="policy.controls.index">Index</mat-checkbox>
+                            </div>
+
+                            <div class="col-actions">
+                                <button
+                                    mat-button
+                                    color="warn"
+                                    type="button"
+                                    class="delete-btn"
+                                    [attr.aria-label]="'Remove policy ' + (policy.controls.path.value || i + 1)"
+                                    (click)="remove.emit(i)"
+                                >
+                                    Remove
+                                </button>
+                            </div>
+                        </article>
+                    }
+                }
+            </div>
+        </div>
+    }
+</section>

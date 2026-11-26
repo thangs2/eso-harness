@@ -135,7 +135,11 @@ describe('entrypoint (dry integration, fake control plane)', () => {
 
         expect(harnessed.snapshotGets).toHaveLength(1);
         expect(harnessed.snapshotGets[0]).toContain('runtimeKey=cursor%3Acursor-agent');
-        expect(harnessed.posts).toHaveLength(1);
+        expect(harnessed.posts.map((post) => post.event)).toEqual([
+            'worker.completed',
+            'action.recorded',
+            'decision.recorded',
+        ]);
 
         const post = harnessed.posts[0];
         expect(post.traceId).toBe('trace-p3');
@@ -167,11 +171,12 @@ describe('entrypoint (dry integration, fake control plane)', () => {
         // worker-verify has no PASS edge in the fixture, so the host stops at flow-end.
         expect(report.stoppedReason).toBe('flow-end');
         expect(report.steps.map((step) => step.workerId)).toEqual(['worker-build', 'worker-verify']);
-        expect(harnessed.posts.map((post) => post.idempotencyKey)).toEqual([
+        const workerPosts = harnessed.posts.filter((post) => post.event === 'worker.completed' || post.event === 'worker.failed');
+        expect(workerPosts.map((post) => post.idempotencyKey)).toEqual([
             'trace-p3:worker-build:1',
             'trace-p3:worker-verify:2',
         ]);
-        expect(harnessed.posts[1].event).toBe('worker.completed');
+        expect(workerPosts[1].event).toBe('worker.completed');
     });
 
     it('reports FAIL and stops at the failing worker', async () => {
@@ -182,10 +187,15 @@ describe('entrypoint (dry integration, fake control plane)', () => {
         expect(report.ok).toBe(false);
         expect(report.stoppedReason).toBe('FAIL');
         expect(report.steps).toHaveLength(1);
-        expect(harnessed.posts).toHaveLength(1);
+        expect(harnessed.posts.map((post) => post.event)).toEqual([
+            'worker.failed',
+            'action.recorded',
+            'decision.recorded',
+        ]);
         expect(harnessed.posts[0].event).toBe('worker.failed');
         expect(harnessed.posts[0].outcome).toBe('FAIL');
         expect(harnessed.posts[0].evidence.exitCode).toBe(1);
+        expect(harnessed.posts[2].evidence.verdict).toBe('deny');
     });
 
     it('records a blocked adapter as BLOCKED evidence', async () => {
@@ -286,7 +296,11 @@ describe('entrypoint (dry integration, fake control plane)', () => {
         );
         expect(report.adapter).toBe('dry');
         expect(report.dryRun).toBe(true);
-        expect(harnessed.posts).toHaveLength(1);
+        expect(harnessed.posts.map((post) => post.event)).toEqual([
+            'worker.completed',
+            'action.recorded',
+            'decision.recorded',
+        ]);
         expect(harnessed.posts[0].evidence.adapter).toBe('dry');
     });
 
@@ -338,7 +352,7 @@ describe('entrypoint (dry integration, fake control plane)', () => {
             const harnessed = { fetchImpl: fake.fetchImpl, posts: [], snapshotGets: [] };
             const online = await runEntrypoint(options(harnessed, passAdapter(), { ...shared }));
             expect(online.ok).toBe(true);
-            expect(fake.observations).toHaveLength(1);
+            expect(fake.observations).toHaveLength(3);
 
             const downFetch: FetchLike = async () => {
                 throw new Error('control plane down');
@@ -355,11 +369,11 @@ describe('entrypoint (dry integration, fake control plane)', () => {
             expect(offline.warnings.some((entry) => entry.startsWith('SNAPSHOT_CACHE_USED:ageMs='))).toBe(true);
             expect(offline.warnings.some((entry) => entry.startsWith('OBSERVATIONS_BUFFERED:'))).toBe(true);
             expect(offline.steps[0].observationCreated).toBe(false);
-            expect(fake.observations).toHaveLength(1);
+            expect(fake.observations).toHaveLength(3);
 
             const recovered = await runEntrypoint(options({ fetchImpl: fake.fetchImpl, posts: [], snapshotGets: [] }, passAdapter(), { ...shared }));
             expect(recovered.warnings.some((entry) => entry.startsWith('OBSERVATIONS_FLUSHED:'))).toBe(true);
-            expect(fake.observations).toHaveLength(1); // idempotent replay: still one row
+            expect(fake.observations).toHaveLength(3); // idempotent replay: still the same three rows
         } finally {
             cache.cleanup();
         }

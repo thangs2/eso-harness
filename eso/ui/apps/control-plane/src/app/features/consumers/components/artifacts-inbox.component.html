@@ -1,0 +1,708 @@
+<div class="artifacts-inbox">
+    <!-- Header / Overview -->
+    <header class="artifacts-inbox-header">
+        <div class="header-copy">
+            <span class="eyebrow">Artifact Governance · Inbox</span>
+            <h3>Artifacts &amp; Projections</h3>
+            <p class="header-lede">Knowledge ledger: manage research &amp; working artifacts from users and agents alongside host runtime projections.</p>
+        </div>
+
+        <div class="header-actions">
+            <button mat-stroked-button type="button" class="btn-guide-action" (click)="openGuide()">
+                Architecture Deep Dive &rarr;
+            </button>
+            <div class="header-stats">
+                <div class="stat-pill">
+                    <strong>{{ artifacts().length }}</strong>
+                    <span>Research &amp; Working</span>
+                </div>
+                <div class="stat-pill">
+                    <strong>{{ hostProjections().length }}</strong>
+                    <span>Host Projections</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Architectural Foundation: The 3-Tier Doc-Driven ↔ Spec-Driven Continuum -->
+    <section class="doc-spec-bridge-card" aria-labelledby="bridge-card-title">
+        <div class="bridge-card-head">
+            <div class="head-left">
+                <div class="badge-row">
+                    <span class="badge badge-accent">Architectural Foundation</span>
+                    <span class="badge badge-neutral">3-Tier Knowledge Continuum</span>
+                    <span class="badge badge-neutral">SDLC Symmetry</span>
+                </div>
+                <h4 id="bridge-card-title">Doc-Driven &harr; Spec-Driven Architectural Continuum</h4>
+                <p class="head-lede">
+                    The cognitive bridge linking human intent (Doc-Driven) to deterministic machine contracts (Spec-Driven) through the 6-stage SDLC lifecycle and Knowledge Governance.
+                </p>
+            </div>
+            <button mat-stroked-button type="button" class="btn-sm" (click)="openGuide()">
+                Architecture Deep Dive &rarr;
+            </button>
+        </div>
+
+        <div class="bridge-card-body">
+            <!-- TIER 1: THE TWO ARCHITECTURAL POLES -->
+            <div class="tier-container tier-poles">
+                <div class="tier-header">
+                    <span class="tier-badge">Tier 1</span>
+                    <span class="tier-title">The Two Architectural Poles</span>
+                </div>
+                <div class="poles-grid">
+                    <div class="pole-card pole-doc">
+                        <div class="pole-head">
+                            <span class="pole-icon">📘</span>
+                            <div>
+                                <h5>DOC-DRIVEN: NARRATIVE &amp; CONTEXT</h5>
+                                <span class="pole-tag">Human Rationale &bull; "Why"</span>
+                            </div>
+                        </div>
+                        <ul class="pole-list">
+                            <li><strong>Actors:</strong> Humans (Product Managers, Architects, Tech Leads)</li>
+                            <li><strong>Focus:</strong> Business context, user pain points, rationale, trade-offs</li>
+                            <li><strong>Medium:</strong> PRD, RFC, ADR, Architecture Vision (Living Markdown)</li>
+                            <li><strong>Failure Mode:</strong> AI speculation, ungrounded data types, and &ldquo;vibe coding&rdquo;</li>
+                        </ul>
+                    </div>
+
+                    <div class="pole-card pole-spec">
+                        <div class="pole-head">
+                            <span class="pole-icon">⚙️</span>
+                            <div>
+                                <h5>SPEC-DRIVEN: CONTRACT &amp; DETERMINISM</h5>
+                                <span class="pole-tag">Machine Contract &bull; "What"</span>
+                            </div>
+                        </div>
+                        <ul class="pole-list">
+                            <li><strong>Actors:</strong> Machines, Compilers, CI Gates &amp; Autonomous AI Agents</li>
+                            <li><strong>Focus:</strong> Invariant constraints, I/O schemas, deterministic assertions</li>
+                            <li><strong>Medium:</strong> OpenAPI, JSON Schema, DB DDL, SHA-256 Manifest</li>
+                            <li><strong>Failure Mode:</strong> Premature rigidity, discovery friction, loss of business context</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TIER 2: THE 6-STAGE SDLC PIPELINE & CLOSED FEEDBACK LOOP -->
+            <div class="tier-container tier-pipeline">
+                <div class="tier-header">
+                    <span class="tier-badge">Tier 2</span>
+                    <span class="tier-title">The 6-Stage SDLC Pipeline &amp; Closed Feedback Loop</span>
+                </div>
+
+                <div class="pipeline-track" aria-label="SDLC Stages">
+                    <div class="pipeline-card doc-stage">
+                        <span class="stage-step">03</span>
+                        <h6>Inception</h6>
+                        <small>Vision &amp; Pain Points</small>
+                        <span class="stage-facet">Problem Space</span>
+                    </div>
+
+                    <span class="stage-arrow">&rarr;</span>
+
+                    <div class="pipeline-card doc-stage">
+                        <span class="stage-step">05</span>
+                        <h6>Requirements</h6>
+                        <small>PRD &amp; User Stories</small>
+                        <span class="stage-facet">Human Narrative</span>
+                    </div>
+
+                    <span class="stage-arrow">&rarr;</span>
+
+                    <div class="pipeline-card hinge-stage">
+                        <span class="hinge-badge">Hinge Pivot</span>
+                        <span class="stage-step">06</span>
+                        <h6>Analysis</h6>
+                        <small>AC Hinge &amp; Gherkin</small>
+                        <span class="stage-facet">Prose &rarr; Assertions</span>
+                    </div>
+
+                    <span class="stage-arrow">&rarr;</span>
+
+                    <div class="pipeline-card spec-stage">
+                        <span class="stage-step">07</span>
+                        <h6>Technical</h6>
+                        <small>Schemas &amp; DDL</small>
+                        <span class="stage-facet">Machine Contracts</span>
+                    </div>
+
+                    <span class="stage-arrow">&rarr;</span>
+
+                    <div class="pipeline-card spec-stage">
+                        <span class="stage-step">08</span>
+                        <h6>WBS Slices</h6>
+                        <small>Locked Allowed Files</small>
+                        <span class="stage-facet">Blast Radius Guard</span>
+                    </div>
+
+                    <span class="stage-arrow">&rarr;</span>
+
+                    <div class="pipeline-card spec-stage">
+                        <span class="stage-step">10</span>
+                        <h6>Test / Code</h6>
+                        <small>SCN &amp; Gate Pass</small>
+                        <span class="stage-facet">Deterministic Run</span>
+                    </div>
+                </div>
+
+                <!-- Feedback Loop Bar -->
+                <div class="feedback-loop-bar">
+                    <div class="feedback-start">
+                        <span class="loop-icon">&larr;</span>
+                        <strong>CLOSED FEEDBACK LOOP</strong>
+                    </div>
+                    <p class="loop-text">
+                        When <code>10.test / code</code> fails (FAIL) or contract linters (X1–X42) detect inconsistencies, knowledge routes back to <code>06.analysis</code> (adjust AC) or <code>03.inception</code> (re-evaluate requirements) before proceeding.
+                    </p>
+                    <span class="loop-badge">Fail-Closed Route</span>
+                </div>
+            </div>
+
+            <!-- TIER 3: TAB KNOWLEDGE & ARTIFACTS GOVERNANCE LAYER -->
+            <div class="tier-container tier-governance">
+                <div class="tier-header">
+                    <span class="tier-badge">Tier 3</span>
+                    <span class="tier-title">Tab Knowledge &amp; Artifacts Governance Layer (Operational Bridge)</span>
+                </div>
+
+                <div class="governance-grid">
+                    <div class="gov-card highlight-inbox">
+                        <div class="gov-head">
+                            <span class="gov-num">06</span>
+                            <strong>artifacts</strong>
+                        </div>
+                        <span class="gov-label">Research Inbox</span>
+                        <p>Living staging inbox for Category 2 drafts (<code>raw</code> &bull; <code>proposed</code>). Staging ground for exploratory spikes.</p>
+                        <span class="gov-tag active">Current Section</span>
+                    </div>
+
+                    <div class="gov-card">
+                        <div class="gov-head">
+                            <span class="gov-num">02</span>
+                            <strong>sources</strong>
+                        </div>
+                        <span class="gov-label">Repository Sources</span>
+                        <p>Maps canonical markdown source files in repository (<code>sdlc/</code>). Files are the single source of truth.</p>
+                        <span class="gov-tag">Source of Truth</span>
+                    </div>
+
+                    <div class="gov-card">
+                        <div class="gov-head">
+                            <span class="gov-num">04</span>
+                            <strong>index</strong>
+                        </div>
+                        <span class="gov-label">Index &amp; Health</span>
+                        <p>Extracts Doc Graph edges, vector RAG embeddings, and verifies broken anchor links (KM-01..06).</p>
+                        <span class="gov-tag">Derived Index</span>
+                    </div>
+
+                    <div class="gov-card">
+                        <div class="gov-head">
+                            <span class="gov-num">03</span>
+                            <strong>contract</strong>
+                        </div>
+                        <span class="gov-label">Integrity Rules</span>
+                        <p>Validates cross-layer logic (X1–X42), end-to-end traceability (PRD &rarr; Spec &rarr; Code), and governance standards (G1–G16).</p>
+                        <span class="gov-tag">Integrity Guard</span>
+                    </div>
+
+                    <div class="gov-card">
+                        <div class="gov-head">
+                            <span class="gov-num">05</span>
+                            <strong>manifest</strong>
+                        </div>
+                        <span class="gov-label">Frozen Contract</span>
+                        <p>Freezes specifications into deterministic machine contracts sealed with SHA-256 hashes (<code>knowledge-manifest.json</code>).</p>
+                        <span class="gov-tag">Machine Contract</span>
+                    </div>
+
+                    <div class="gov-card">
+                        <div class="gov-head">
+                            <span class="gov-num">01</span>
+                            <strong>overview</strong>
+                        </div>
+                        <span class="gov-label">Preflight &amp; Readiness</span>
+                        <p>Runs preflight checks (01..03) verifying anchor resolution, derived source boundaries, and operational health.</p>
+                        <span class="gov-tag">Preflight Gate</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- EFFECT - IMPACT - RELATIONS INTERACTION ROW -->
+            <div class="impact-effect-strip">
+                <div class="impact-item">
+                    <span class="impact-rel">Doc &rarr; Artifacts</span>
+                    <strong>Preserves Context</strong>
+                    <p>Exploratory insights and session spikes are saved into Category 2 living drafts, preventing knowledge loss upon session exit.</p>
+                </div>
+                <div class="impact-item">
+                    <span class="impact-rel">Artifacts &rarr; Spec</span>
+                    <strong>Contractual Enforcement</strong>
+                    <p>Operator promotion (Gate S17) seals SHA-256 into manifest and indexes RAG, converting narrative into an immutable contract.</p>
+                </div>
+                <div class="impact-item">
+                    <span class="impact-rel">Spec &rarr; Verify</span>
+                    <strong>Evidence Generation</strong>
+                    <p>Verification subagents execute against strict schemas and AC, emitting deterministic PASS/FAIL logs and halting hallucinations.</p>
+                </div>
+                <div class="impact-item">
+                    <span class="impact-rel">Verify &rarr; Doc</span>
+                    <strong>Living Documentation Loop</strong>
+                    <p>Defects and audit findings route back to generate new ADRs and refine requirements for subsequent development cycles.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Host Projections (Category 1) -->
+    <section class="artifacts-section host-projections-section" aria-labelledby="host-projections-title">
+        <header class="section-head">
+            <div>
+                <h4 id="host-projections-title">Host Projections (Category 1 &mdash; Host-managed)</h4>
+                <p>Runtime host targets (.agents/, .cursor/, AGENTS.local.md) projected from canonical configuration to guarantee zero-drift.</p>
+            </div>
+            <div class="section-actions">
+                <button mat-stroked-button type="button" class="btn-sm" (click)="syncProjections.emit()">
+                    Refresh / Sync Projections
+                </button>
+                <span class="badge badge-neutral">Managed Projections</span>
+            </div>
+        </header>
+
+        <div class="projections-grid">
+            @for (proj of hostProjections(); track proj.path) {
+                <div class="projection-card">
+                    <div class="proj-head">
+                        <strong class="proj-target">{{ proj.target }}</strong>
+                        <span class="badge" [class.badge-success]="proj.status === 'generated' || proj.status === 'synced'" [class.badge-warn]="proj.status === 'missing' || proj.status === 'drifted'" [class.badge-neutral]="proj.status === 'pending'">{{ proj.status }}</span>
+                    </div>
+                    <code class="proj-path">{{ proj.path }}</code>
+                    <p class="proj-desc">{{ proj.description }}</p>
+                    <div class="proj-meta">
+                        <small>Files: {{ proj.fileCount }}</small>
+                        <small>Updated: {{ proj.lastGeneratedAt | date:'short' }}</small>
+                    </div>
+                </div>
+            }
+        </div>
+    </section>
+
+    <!-- Research & Working Artifacts (Category 2) -->
+    <section class="artifacts-section research-artifacts-section" aria-labelledby="research-artifacts-title">
+        <header class="section-head">
+            <div>
+                <h4 id="research-artifacts-title">Research &amp; Working Artifacts (Category 2 &mdash; User/Agent Created)</h4>
+                <p>Deep-dive analyses, technical RFCs, draft PRDs, and exploratory spikes produced during working sessions.</p>
+            </div>
+            <span class="badge badge-neutral">{{ filteredArtifacts().length }} items</span>
+        </header>
+
+        <!-- Causality Flow: Intersections & Compositions (A → B → C → D) -->
+        <div class="causal-pipeline-container" aria-label="Artifact Provenance & Cross-Tab Causality Flow">
+            <div class="causal-pipeline-head">
+                <div class="head-title">
+                    <span class="badge badge-accent">CAUSAL LIFECYCLE FLOW</span>
+                    <strong>Prerequisites, Intersections &amp; Compositions: How Artifacts Progress</strong>
+                </div>
+                <span class="head-hint">Step A &rarr; Step B &rarr; Step C &rarr; Multi-destination Fan-Out</span>
+            </div>
+
+            <div class="causal-steps-track">
+                <!-- Step 1: Session Agent / User -->
+                <div class="causal-step-card step-session">
+                    <div class="step-badge-row">
+                        <span class="step-pill">Step 1</span>
+                        <span class="step-type">Initiation</span>
+                    </div>
+                    <h5>Session Creation</h5>
+                    <p class="step-summary">User or Agent initiates a research spike, draft ADR, or PRD during working sessions.</p>
+                    <div class="intersection-box">
+                        <div class="box-label">
+                            <span class="intersect-tag">Intersection 1</span>
+                            <strong>Boundaries Check</strong>
+                        </div>
+                        <p class="box-desc">Requires write grant; fail-closed blocking prevents writing to locked repo paths.</p>
+                        <button type="button" class="tab-link-chip" (click)="navigateToTab('boundaries')" title="View workspace read/write boundaries">
+                            🛡️ Boundaries Policy ↗
+                        </button>
+                    </div>
+                </div>
+
+                <div class="causal-arrow-col">
+                    <span class="causal-arrow">&rarr;</span>
+                    <span class="arrow-condition">Write Allowed</span>
+                </div>
+
+                <!-- Step 2: Category 2 Artifacts Inbox -->
+                <div class="causal-step-card step-inbox">
+                    <div class="step-badge-row">
+                        <span class="step-pill active">Step 2</span>
+                        <span class="step-type">Staging Ledger</span>
+                    </div>
+                    <h5>Artifacts Inbox</h5>
+                    <p class="step-summary">Staged here as mutable living documents (<code>raw</code> &bull; <code>proposed</code>) separated from repo sources.</p>
+                    <div class="intersection-box">
+                        <div class="box-label">
+                            <span class="intersect-tag">Intersection 2</span>
+                            <strong>Contract Gates Check</strong>
+                        </div>
+                        <p class="box-desc">Must satisfy Acceptance Criteria and G1–G16 gates before promotion is permitted.</p>
+                        <button type="button" class="tab-link-chip" (click)="navigateToSection('contract')" title="View SDLC governance rules & AC gates">
+                            📜 Contract Gates ↗
+                        </button>
+                    </div>
+                </div>
+
+                <div class="causal-arrow-col">
+                    <span class="causal-arrow">&rarr;</span>
+                    <span class="arrow-condition">Checks Pass</span>
+                </div>
+
+                <!-- Step 3: Human Promotion Action (Gate S17) -->
+                <div class="causal-step-card step-action">
+                    <div class="step-badge-row">
+                        <span class="step-pill highlight">Step 3</span>
+                        <span class="step-type">Promotion Gate</span>
+                    </div>
+                    <h5>Operator Sign-Off</h5>
+                    <p class="step-summary">Operator clicks <strong>&ldquo;Promote to KB&rdquo;</strong> (Gate S17) approving transition from draft to contract.</p>
+                    <div class="action-trigger-box">
+                        <div class="trigger-badge">Trigger: Gate S17</div>
+                        <span class="trigger-label">Changes kt-state:</span>
+                        <code class="state-trans">proposed &rarr; approved</code>
+                    </div>
+                </div>
+
+                <div class="causal-arrow-col fanout-arrow-col">
+                    <span class="causal-arrow">&rarr;</span>
+                    <span class="arrow-condition">Fan-Out Trio</span>
+                </div>
+
+                <!-- Step 4: Composition (3 Simultaneous Destinations) -->
+                <div class="causal-step-card step-composition">
+                    <div class="step-badge-row">
+                        <span class="step-pill success">Step 4</span>
+                        <span class="step-type">Composition</span>
+                    </div>
+                    <h5>Tripartite Fan-Out</h5>
+                    <p class="step-summary">One approved artifact composes 3 distinct system targets simultaneously:</p>
+                    
+                    <div class="trio-destinations">
+                        <div class="dest-item">
+                            <button type="button" class="dest-link-btn" (click)="navigateToSection('sources')">
+                                📁 Sources (sdlc/) ↗
+                            </button>
+                            <span class="dest-desc">Writes canonical markdown into Git repository source files.</span>
+                        </div>
+                        <div class="dest-item">
+                            <button type="button" class="dest-link-btn" (click)="navigateToSection('index')">
+                                🗄️ Index &amp; RAG ↗
+                            </button>
+                            <span class="dest-desc">Extracts graph edges and vector embeddings for AI retrieval.</span>
+                        </div>
+                        <div class="dest-item">
+                            <button type="button" class="dest-link-btn" (click)="navigateToSection('manifest')">
+                                🔒 Manifest (SHA-256) ↗
+                            </button>
+                            <span class="dest-desc">Cryptographically locks hash in knowledge-manifest.json.</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filters & Search -->
+        <div class="artifacts-filter-bar">
+            <div class="filter-controls">
+                <mat-form-field appearance="outline" subscriptSizing="dynamic" class="filter-field">
+                    <mat-label>Origin</mat-label>
+                    <mat-select [value]="filterOrigin()" (selectionChange)="filterOriginChange.emit($event.value)">
+                        <mat-option value="all">All origins</mat-option>
+                        <mat-option value="agent">Agent</mat-option>
+                        <mat-option value="user">User</mat-option>
+                        <mat-option value="host">Host</mat-option>
+                        <mat-option value="machine">Machine</mat-option>
+                    </mat-select>
+                </mat-form-field>
+
+                <mat-form-field appearance="outline" subscriptSizing="dynamic" class="filter-field">
+                    <mat-label>KT State</mat-label>
+                    <mat-select [value]="filterKtState()" (selectionChange)="filterKtStateChange.emit($event.value)">
+                        <mat-option value="all">All states</mat-option>
+                        <mat-option value="raw">Raw (Draft)</mat-option>
+                        <mat-option value="proposed">Proposed (Pending review)</mat-option>
+                        <mat-option value="approved">Approved (Verified)</mat-option>
+                        <mat-option value="retired">Retired (Archived)</mat-option>
+                    </mat-select>
+                </mat-form-field>
+            </div>
+
+            <div class="search-field">
+                <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                    <mat-label>Search artifacts</mat-label>
+                    <input matInput [ngModel]="searchQuery()" (ngModelChange)="searchQuery.set($event)" placeholder="Search by title, ID, or content…">
+                </mat-form-field>
+            </div>
+        </div>
+
+        @if (loading()) {
+            <p class="muted">Loading artifacts…</p>
+        } @else if (filteredArtifacts().length === 0) {
+            <div class="empty-state">
+                <p class="muted">No research &amp; working artifacts found matching current filters.</p>
+            </div>
+        } @else {
+            <div class="worker-table-wrap artifacts-table-wrap">
+                <table class="worker-table artifacts-table">
+                    <thead>
+                        <tr>
+                            <th>Artifact &amp; Identity</th>
+                            <th>Origin</th>
+                            <th>KT State</th>
+                            <th>Custodian &amp; Liveness</th>
+                            <th>Creator / Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (art of filteredArtifacts(); track art.id) {
+                            <tr class="artifact-row">
+                                <td class="col-title">
+                                    <strong>{{ art.title }}</strong>
+                                    <code class="artifact-id">{{ art.id }}</code>
+                                    @if (art.derivedFrom && art.derivedFrom.length > 0) {
+                                        <small class="derived-from">Derived from: {{ art.derivedFrom.join(', ') }}</small>
+                                    }
+                                </td>
+                                <td>
+                                    <span class="origin-pill" [attr.data-origin]="art.origin">{{ art.origin }}</span>
+                                </td>
+                                <td>
+                                    <span class="badge" [class.badge-warn]="art.ktState === 'raw'" [class.badge-proposed]="art.ktState === 'proposed'" [class.badge-success]="art.ktState === 'approved'" [class.badge-neutral]="art.ktState === 'retired'">
+                                        {{ art.ktState }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="text-sm">{{ art.custodian }}</span>
+                                    <small class="block-sub">{{ art.liveness }}</small>
+                                </td>
+                                <td>
+                                    <span class="text-sm">{{ art.metadata?.creator || art.metadata?.owner || 'system' }}</span>
+                                    <small class="block-sub">{{ art.createdAt | date:'short' }}</small>
+                                </td>
+                                <td class="col-actions">
+                                    @if (art.ktState === 'proposed') {
+                                        <button mat-flat-button color="primary" type="button" class="btn-sm" (click)="onPromote(art.id)" title="Promote to Living Manifest and RAG Index">
+                                            Promote to KB
+                                        </button>
+                                    } @else if (art.ktState === 'approved') {
+                                        <span class="approved-check">✓ Promoted to Manifest</span>
+                                    } @else {
+                                        <span class="muted-action">—</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    <!-- Long-form Architectural Reference Dialog -->
+    <dialog #guideDialog class="artifacts-guide-dialog" aria-labelledby="guide-dialog-title" (click)="onBackdrop($event)">
+        <article class="guide-dialog-panel">
+            <header class="guide-dialog-head">
+                <div>
+                    <p class="guide-dialog-eyebrow">Architecture Reference · SDLC Knowledge Governance</p>
+                    <h3 id="guide-dialog-title">Doc-Driven vs. Spec-Driven &amp; Artifact Governance</h3>
+                    <p class="guide-dialog-lede">
+                        Root cause analysis, SDLC symmetry axis, 3 artifact categories, and closed feedback loop in agentic software engineering.
+                    </p>
+                </div>
+                <button type="button" class="guide-dialog-close" aria-label="Close architecture guide" (click)="closeGuide()">×</button>
+            </header>
+
+            <div class="guide-dialog-body">
+                <!-- Section 1: The Root Cause -->
+                <section>
+                    <h4>1. Root Cause: The Ambiguity Trap in AI Workflows</h4>
+                    <p>
+                        In traditional human engineering, <strong>Document-Driven</strong> development (PRDs, ADRs, RFCs) works well because human engineers intuitively resolve ambiguities, ask clarifying questions, and adapt to unwritten business context.
+                    </p>
+                    <p>
+                        <strong>Why it breaks with AI agents:</strong> Autonomous AI agents cannot infer unstated constraints. When given free-form prose without strict machine boundaries, agents speculate on missing data types, invent ungrounded schemas, and drift away from architectural intent (&ldquo;vibe coding&rdquo;). Natural language prose cannot be verified by automated CI gates or deterministic test runners.
+                    </p>
+                </section>
+
+                <!-- Section 2: The Rigidity Trap -->
+                <section>
+                    <h4>2. The Rigidity Trap: Premature Spec-Driven in Early Inception</h4>
+                    <p>
+                        <strong>Specification-Driven</strong> methodologies (OpenAPI schemas, JSON Schemas, Protobuf, strict TDD Acceptance Criteria) guarantee 100% deterministic verification (PASS/FAIL).
+                    </p>
+                    <p>
+                        <strong>Why it breaks in early phases:</strong> Mandating strict formal schemas during early discovery, spikes, and brainstorming creates immense friction. If requirements pivot, maintaining rigid schemas wastes engineering effort. Crucially, schemas specify <em>&ldquo;What&rdquo;</em> (inputs/outputs), but completely omit <em>&ldquo;Why&rdquo;</em> (business rationale, discarded alternatives, and trade-offs).
+                    </p>
+                </section>
+
+                <!-- Section 3: Comparative Matrix -->
+                <section>
+                    <h4>3. Doc-Driven vs. Spec-Driven Comparison Matrix</h4>
+                    <div class="guide-table-wrap">
+                        <table class="guide-table">
+                            <thead>
+                                <tr>
+                                    <th>Dimension</th>
+                                    <th>Document-Driven (Doc-Driven)</th>
+                                    <th>Specification-Driven (Spec-Driven)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><strong>Primary Medium</strong></td>
+                                    <td>Markdown, PRD, ADR, RFC, Architecture Vision</td>
+                                    <td>OpenAPI schemas, JSON Schema, Protobuf, DDL</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Core Question</strong></td>
+                                    <td><strong>&ldquo;Why&rdquo; &amp; Context:</strong> Rationale, business drivers, trade-offs</td>
+                                    <td><strong>&ldquo;What&rdquo; &amp; Invariants:</strong> Field types, constraints, state machines</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Target Consumer</strong></td>
+                                    <td>Humans: PMs, architects, developers, stakeholders</td>
+                                    <td>Machines: Compilers, typecheckers, CI test gates, deterministic AI</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Verification</strong></td>
+                                    <td>Peer review, architectural review board</td>
+                                    <td>Automated test gates, schema linters (PASS/FAIL)</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Failure Mode</strong></td>
+                                    <td>AI hallucination, context drift, &ldquo;vibe coding&rdquo;</td>
+                                    <td>Premature rigidity, missing business context</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Role in ESO</strong></td>
+                                    <td>Staged in Artifacts Inbox (<code>raw</code> / <code>proposed</code>)</td>
+                                    <td>Frozen in <code>knowledge-manifest.json</code> (<code>approved</code>)</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- Section 4: SDLC Symmetry Axis, Closed Feedback Loop & Tab Knowledge Architecture -->
+                <section>
+                    <h4>4. SDLC Symmetry Axis, Closed Feedback Loop &amp; Tab Knowledge Mapping</h4>
+                    <p>
+                        The complete architectural blueprint shows the continuum from human narrative exploration to deterministic machine execution, the central AC hinge, the closed feedback loop, and how each sub-tab of Knowledge governs this lifecycle:
+                    </p>
+
+                    <!-- The Architectural Blueprint Diagram -->
+                    <div class="guide-blueprint-card">
+                        <div class="blueprint-head">
+                            <span class="blueprint-badge">ARCHITECTURE BLUEPRINT</span>
+                            <span class="blueprint-title">SDLC Symmetry Axis &bull; Closed Feedback Loop &bull; Knowledge Governance</span>
+                        </div>
+                        <pre class="guide-ascii-blueprint"><code>[ DOC-DRIVEN: NARRATIVE &amp; CONTEXT ]                       [ SPEC-DRIVEN: CONTRACT &amp; DETERMINISM ]
+  (Humans · Context · Why)                                   (Machines · Contract · What)
+         │                                                                   ▲
+         ▼                                                                   │
+  03.inception  ──►  05.requirements  ──► [ 06.analysis ] ──► 07.technical ──► 08.wbs ──► 10.test / code
+  (Pain &amp; Vision)       (PRD / FRD)       (HINGE PIVOT: AC)   (Schema &amp; DDL)  (Slices)     (SCN &amp; Verify)
+         │                                      │                                             │
+         │                                      ▼                                             │
+         │                         [ CLOSED FEEDBACK LOOP (FAIL / REVISE) ] ◄─────────────────┘
+         │                                      ▲
+         └──────────────────────────────────────┼─────────────────────────────────────────────┘
+                                                │
+                                  [ TAB KNOWLEDGE &amp; ARTIFACTS ]
+               • artifacts : Staging inbox for working research (raw / proposed)
+               • sources   : Canonical repository doc sources (sdlc/)
+               • index     : Doc Graph, embeddings, anchor verification (KM-01..06)
+               • contract  : Cross-layer integrity &amp; logic rules (X1–X42, G1–G16)
+               • manifest  : Frozen contract sealed by SHA-256 hash
+               • overview  : Preflight checks &amp; readiness verification</code></pre>
+                    </div>
+
+                    <!-- Mapping of the 6 Knowledge Sub-tabs -->
+                    <div class="knowledge-tabs-mapping">
+                        <h5>The 6 Knowledge Sub-Tabs Across the Continuum:</h5>
+                        <div class="mapping-grid">
+                            <div class="map-card">
+                                <span class="map-tab">1. Overview</span>
+                                <strong>Preflight &amp; Readiness</strong>
+                                <p>Preflight checks (01..03) ensuring links resolve, derived sources labelled, and boundaries respected.</p>
+                            </div>
+                            <div class="map-card">
+                                <span class="map-tab">2. Sources</span>
+                                <strong>Repository Sources (sdlc/)</strong>
+                                <p>Maps canonical markdown source documents. Files are the source of truth; providers are optional.</p>
+                            </div>
+                            <div class="map-card">
+                                <span class="map-tab">3. Contract</span>
+                                <strong>Integrity Rules (X1–X42)</strong>
+                                <p>Enforces semantic integrity, cross-layer trace links (PRD &rarr; Spec &rarr; Code), and governance standards (G1–G16).</p>
+                            </div>
+                            <div class="map-card">
+                                <span class="map-tab">4. Index &amp; Health</span>
+                                <strong>Doc Graph &amp; Embeddings</strong>
+                                <p>Extracts document vertices, dependency edges, vector embeddings, and reports open findings.</p>
+                            </div>
+                            <div class="map-card">
+                                <span class="map-tab">5. Manifest</span>
+                                <strong>Machine Contract (SHA-256)</strong>
+                                <p>Generates <code>knowledge-manifest.json</code> with cryptographic hashes for immutable AI agent contracts.</p>
+                            </div>
+                            <div class="map-card active">
+                                <span class="map-tab">6. Artifacts</span>
+                                <strong>Inbox &amp; Host Projections</strong>
+                                <p>Staging ground for Category 2 research drafts (<code>raw</code> &rarr; <code>proposed</code>) and Category 1 zero-drift runtime projections.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <ul>
+                        <li><strong>The Phase-Transition Hinge (06.analysis):</strong> Acceptance Criteria (AC / Gherkin) serve as the unique pivot translating human story narrative into machine-verifiable assertions.</li>
+                        <li><strong>The Mandatory Boundary Guard (08.wbs):</strong> Work breakdown slicing with locked <code>allowed_files</code> constrains agent blast radius before code implementation starts.</li>
+                        <li><strong>The Closed Feedback Loop:</strong> When <code>10.test / code</code> fails or contract linters detect inconsistencies, knowledge routes back to <code>06.analysis</code> or <code>03.inception</code> for revision prior to release.</li>
+                    </ul>
+                </section>
+
+                <!-- Section 5: The Three Artifact Categories -->
+                <section>
+                    <h4>5. The Three Artifact Categories in ESO</h4>
+                    <dl class="guide-grid">
+                        <div>
+                            <dt>Category 1: Host Projections</dt>
+                            <dd>Machine-generated configurations (<code>.agents/</code>, <code>.cursor/</code>, <code>AGENTS.local.md</code>) projected from canonical source to guarantee zero-drift across IDE runtimes.</dd>
+                        </div>
+                        <div>
+                            <dt>Category 2: Working Artifacts</dt>
+                            <dd>Living research spikes, deep dives, and draft RFCs created in human-agent sessions, staged in the Inbox through states: <code>raw</code> → <code>proposed</code> → <code>approved</code> → <code>retired</code>.</dd>
+                        </div>
+                        <div>
+                            <dt>Category 3: Formal Contracts</dt>
+                            <dd>Approved specifications locked by SHA-256 hash in <code>knowledge-manifest.json</code> and indexed into vector RAG embeddings for all AI agents.</dd>
+                        </div>
+                    </dl>
+                </section>
+
+                <!-- Section 6: System Pathologies & Guardrails -->
+                <section>
+                    <h4>6. System Pathologies &amp; Governance Guardrails</h4>
+                    <ul>
+                        <li><strong>Artifact Pollution:</strong> Prevented by Gate S17 human review; autonomous AI agents are strictly prohibited from self-promoting unverified claims into production.</li>
+                        <li><strong>Split-Brain Custodianship:</strong> Enforced by Single Source of Truth; staging lives in the database while approved contracts reside immutably in the Git repository.</li>
+                        <li><strong>Phantom Drift:</strong> Prevented by generator checks (<code>build-host-trees.mjs --check</code>); hand-editing host projection trees is blocked.</li>
+                    </ul>
+                </section>
+            </div>
+        </article>
+    </dialog>
+</div>

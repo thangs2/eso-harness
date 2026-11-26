@@ -126,6 +126,8 @@ export interface ActionEvidence {
 export interface EvidencePacketItem {
     id: string;
     kind: string;
+    hash?: string;
+    requirementId?: string;
 }
 
 export interface EvidencePacketEvidence {
@@ -361,6 +363,8 @@ function validateEvidencePacket(evidence: UnknownRecord): void {
             const item = asObject(entry, `evidence.items[${index}]`);
             requiredString(item, 'id', `evidence.items[${index}]`);
             requiredString(item, 'kind', `evidence.items[${index}]`);
+            optionalString(item, 'hash', `evidence.items[${index}]`);
+            optionalString(item, 'requirementId', `evidence.items[${index}]`);
         });
         hasItems = true;
     }

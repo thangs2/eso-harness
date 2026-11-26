@@ -34,6 +34,7 @@ import type {
     KnowledgeSummaryDto,
     KnowledgeDocDto,
     KnowledgeFindingDto,
+    KnowledgeSufficiencyDto,
     KnowledgeDocDetailDto,
     KnowledgeCheckDto,
     KnowledgeRetrievalDto,
@@ -45,6 +46,7 @@ import type {
     ObservationDto,
     RequestSummaryDto,
     RequestDetailDto,
+    EvidenceReceiptDto,
     ReceiptVerificationDto,
     PromptSummaryDto,
     LegacyHarnessReportDto,
@@ -59,6 +61,13 @@ import type {
     BoundaryViewDto,
     FolderPolicyDto,
     BoundaryGrantDto,
+    ConsumerArtifactDto,
+    ReconciliationScanScope,
+    SdlcPipelineStageCoverageDto,
+    PostgresKnowledgeStatsDto,
+    ReconciliationGapDto,
+    ReconciliationScanResultDto,
+    ReconciliationGapsResponseDto,
 } from './types.js';
 
 export class ControlPlaneApiClient {
@@ -371,6 +380,15 @@ export class ControlPlaneApiClient {
         return (await res.json()) as KnowledgeFindingDto[];
     }
 
+    async getConsumerKnowledgeSufficiency(id: string, kinds?: string[]): Promise<KnowledgeSufficiencyDto> {
+        const qs = kinds?.length ? `?kinds=${encodeURIComponent(kinds.join(','))}` : '';
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/knowledge/sufficiency${qs}`, {
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as KnowledgeSufficiencyDto;
+    }
+
     async indexConsumerKnowledge(id: string): Promise<KnowledgeSummaryDto> {
         const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/knowledge/index`, {
             method: 'POST',
@@ -504,6 +522,15 @@ export class ControlPlaneApiClient {
         });
         if (!res.ok) throw await this.problem(res);
         return await res.json() as RequestDetailDto;
+    }
+
+    /** P4/S5 — fetch the full sealed receipt (including v2 server-verified sources[]) for one request. */
+    async getRequestReceipt(id: string, requestId: string): Promise<EvidenceReceiptDto> {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/requests/${encodeURIComponent(requestId)}/receipt`, {
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return await res.json() as EvidenceReceiptDto;
     }
 
     /** P4/P5a — re-verify one sealed receipt; the server recomputes the hash, the client never does. */
@@ -948,6 +975,90 @@ export class ControlPlaneApiClient {
         });
         if (!res.ok) throw await this.problem(res);
         return (await res.json()) as { revoked: boolean };
+    }
+
+    async listArtifacts(id: string, query?: { origin?: string; ktState?: string }): Promise<ConsumerArtifactDto[]> {
+        const params = new URLSearchParams();
+        if (query?.origin && query.origin !== 'all') params.set('origin', query.origin);
+        if (query?.ktState && query.ktState !== 'all') params.set('ktState', query.ktState);
+        const qs = params.toString() ? `?${params.toString()}` : '';
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/artifacts${qs}`, {
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as ConsumerArtifactDto[];
+    }
+
+    async createArtifact(id: string, body: Partial<ConsumerArtifactDto>): Promise<ConsumerArtifactDto> {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/artifacts`, {
+            method: 'POST',
+            headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as ConsumerArtifactDto;
+    }
+
+    async promoteArtifact(id: string, artifactId: string): Promise<ConsumerArtifactDto> {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/artifacts/${encodeURIComponent(artifactId)}/promote`, {
+            method: 'POST',
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as ConsumerArtifactDto;
+    }
+
+    async scanReconciliation(id: string, scope: ReconciliationScanScope = 'full'): Promise<ReconciliationScanResultDto> {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/reconciliation/scan`, {
+            method: 'POST',
+            headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ scope }),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as ReconciliationScanResultDto;
+    }
+
+    async getReconciliationGaps(id: string): Promise<ReconciliationGapsResponseDto> {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/reconciliation/gaps`, {
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as ReconciliationGapsResponseDto;
+    }
+
+    async ignoreReconciliationGap(
+        id: string,
+        payload: { gapId: string; filePath?: string; symbol?: string; reason?: string }
+    ): Promise<{ ignored: boolean; gapId: string; ignoredCount: number }> {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/reconciliation/ignore`, {
+            method: 'POST',
+            headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as { ignored: boolean; gapId: string; ignoredCount: number };
+    }
+
+    async relockReconciliationHash(
+        id: string,
+        payload: { gapId: string; filePath: string }
+    ): Promise<{ relocked: boolean; gapId: string; sha256: string }> {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/reconciliation/relock`, {
+            method: 'POST',
+            headers: { ...this.getHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as { relocked: boolean; gapId: string; sha256: string };
+    }
+
+    async syncReconciliationIndex(id: string): Promise<ReconciliationScanResultDto> {
+        const res = await this.fetchImpl(`${this.baseUrl}/api/v1/consumers/${encodeURIComponent(id)}/reconciliation/sync-index`, {
+            method: 'POST',
+            headers: this.getHeaders(),
+        });
+        if (!res.ok) throw await this.problem(res);
+        return (await res.json()) as ReconciliationScanResultDto;
     }
 
     /**

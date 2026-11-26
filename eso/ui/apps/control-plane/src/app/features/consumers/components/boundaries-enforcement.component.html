@@ -1,0 +1,36 @@
+<section class="enforcement-card" aria-labelledby="enforcement-box-title">
+    <div class="mode-info">
+        <span class="engine-icon" aria-hidden="true">🛡️</span>
+        <div class="mode-details">
+            <div class="mode-header">
+                <strong id="enforcement-box-title">
+                    Enforcement Engine: {{ formGroup().controls.enforcement.value === 'enforce' ? 'Fail-Closed Active' : 'Passive Audit Mode' }}
+                </strong>
+                <span class="mode-badge" [class.enforced]="formGroup().controls.enforcement.value === 'enforce'">
+                    {{ formGroup().controls.enforcement.value === 'enforce' ? 'HARD BLOCK' : 'AUDIT ONLY' }}
+                </span>
+            </div>
+            <p class="mode-desc">
+                @if (formGroup().controls.enforcement.value === 'enforce') {
+                    Host hook write-gate intercepts tool calls and blocks writes to denied paths immediately with <code>BOUNDARY_DENIED</code>.
+                } @else {
+                    Tool calls to denied paths log an audit warning in the observation stream but are not interrupted.
+                }
+            </p>
+        </div>
+    </div>
+
+    <div class="enforcement-controls">
+        <mat-form-field appearance="outline" subscriptSizing="dynamic" density="-2" class="enforcement-mode-field">
+            <mat-label>Enforcement Mode</mat-label>
+            <mat-select [formControl]="formGroup().controls.enforcement" aria-label="Enforcement Mode Selection">
+                <mat-option value="enforce">Enforce — Host hook denies</mat-option>
+                <mat-option value="audit">Audit — Log only</mat-option>
+            </mat-select>
+        </mat-form-field>
+
+        <button mat-stroked-button type="button" class="add-policy-btn" (click)="addPolicy.emit()">
+            + Add path policy
+        </button>
+    </div>
+</section>

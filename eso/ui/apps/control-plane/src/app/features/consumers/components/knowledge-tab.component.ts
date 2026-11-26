@@ -8,6 +8,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { KnowledgeContractComponent } from './knowledge-contract.component.js';
 import { KnowledgeOverviewComponent } from './knowledge-overview.component.js';
+import { ArtifactsInboxComponent } from './artifacts-inbox.component.js';
 import type { ConsumerSettingsPage } from '../pages/consumer-settings.page.js';
 
 @Component({
@@ -23,6 +24,7 @@ import type { ConsumerSettingsPage } from '../pages/consumer-settings.page.js';
         MatSlideToggleModule,
         KnowledgeOverviewComponent,
         KnowledgeContractComponent,
+        ArtifactsInboxComponent,
     ],
     templateUrl: './knowledge-tab.component.html',
     encapsulation: ViewEncapsulation.None,

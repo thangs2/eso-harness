@@ -161,6 +161,32 @@ export interface KnowledgeFindingDto {
     created_at: string;
 }
 
+export interface KnowledgeSufficiencyFindingDto {
+    code: string;
+    kind: string | null;
+    reason: string;
+    consequence: string;
+    severity: 'error' | 'warning';
+    copies?: Array<{ path: string; docId: string; similarity: number }>;
+    quotes?: Array<{ path: string; statement: string }>;
+}
+
+export interface KnowledgeSufficiencyDto {
+    consumerId: string;
+    status: 'clear' | 'findings';
+    blockMerge: boolean;
+    findings: KnowledgeSufficiencyFindingDto[];
+    summary: {
+        missingKind: number;
+        orphanArtifact: number;
+        ownerMissing: number;
+        nearDuplicate: number;
+        contradicts: number;
+        upstream: number;
+        dropped: number;
+    };
+}
+
 export interface WorkerSourceStatusDto {
     source: number;
     projections: number;
@@ -637,6 +663,52 @@ export interface RequestReceiptSummaryDto {
     createdAt: string;
 }
 
+/** S5 — one server-verified evidence source sealed into a v2+ receipt. */
+export interface ReceiptEvidenceSourceDto {
+    requirementId: string | null;
+    where: string;
+    hash: string | null;
+    verifiedAt: string;
+    verified: boolean;
+}
+
+/** P4/S5 — full sealed receipt returned by GET /consumers/:id/requests/:requestId/receipt. */
+export interface EvidenceReceiptDto {
+    receiptId: string;
+    consumerId: string;
+    traceId: string;
+    prevHash: string;
+    hash: string;
+    hmac: string | null;
+    specVersion: number;
+    verdictLevel?: 'allow' | 'deny' | 'partial' | 'unknown';
+    payload: {
+        specVersion: number;
+        consumerId: string;
+        traceId: string;
+        verdict: {
+            level: 'allow' | 'deny' | 'partial' | 'unknown';
+            basis: string;
+            actor: Record<string, unknown> | null;
+            gaps: Array<{ code: string; what: string; consequence: string }>;
+            score: number;
+        };
+        eventDigests: Array<{
+            observationId: string;
+            event: string;
+            outcome: string | null;
+            at: string;
+        }>;
+        specRef?: {
+            doc: string;
+            version: string;
+            section: string;
+        };
+        sources?: ReceiptEvidenceSourceDto[];
+    };
+    createdAt: string;
+}
+
 /** P4 — result of GET /consumers/:id/receipts/:receiptId/verify. */
 export interface ReceiptVerificationDto {
     ok: boolean;
@@ -933,3 +1005,87 @@ export interface StackVersionsDto {
     consumerId: string;
     versions: StackVersionDto[];
 }
+
+export interface ConsumerArtifactDto {
+    id: string;
+    consumerId: string;
+    title: string;
+    origin: 'host' | 'user' | 'agent' | 'machine';
+    custodian: 'host-local' | 'staging' | 'repo' | 'provider';
+    ktState: 'raw' | 'proposed' | 'approved' | 'retired';
+    liveness: 'ephemeral' | 'living' | 'frozen';
+    derivedFrom?: string[];
+    contentType: string;
+    body: string;
+    metadata?: Record<string, any>;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export type ReconciliationScanScope = 'full' | 'git-diff';
+
+export type DiscrepancyType =
+    | 'GAP_A_ORPHAN_ROUTE'
+    | 'GAP_B_UNFED_SCHEMA'
+    | 'GAP_C_STALE_HASH'
+    | 'GAP_D_UNLINKED_SPIKE'
+    | 'GAP_E_MISSING_SDLC_DOC'
+    | 'GAP_F_INDEX_DRIFT';
+
+export type DiscrepancySeverity = 'critical' | 'warning' | 'info';
+
+export type ReconciliationGapStatus = 'open' | 'staged_in_inbox' | 'resolved';
+
+export interface SdlcPipelineStageCoverageDto {
+    stage: string;
+    name: string;
+    owner: string;
+    group: 'A' | 'B' | 'C' | 'D';
+    directory: string;
+    docCount: number;
+    status: 'covered' | 'missing' | 'drift';
+}
+
+export interface PostgresKnowledgeStatsDto {
+    diskMarkdownCount: number;
+    indexedDocsCount: number;
+    unindexedCount: number;
+    staleDbCount: number;
+    lastSyncedAt: string | null;
+}
+
+export interface ReconciliationGapDto {
+    id: string;
+    type: DiscrepancyType;
+    severity: DiscrepancySeverity;
+    symbol: string;
+    filePath: string;
+    lines: string;
+    codeSnippet?: string;
+    detectedAt: string;
+    detail: string;
+    suggestedTarget: string;
+    promptTemplate: string;
+    status: ReconciliationGapStatus;
+}
+
+export interface ReconciliationScanResultDto {
+    consumerId: string;
+    scannedAt: string;
+    scope?: ReconciliationScanScope;
+    ignoredCount?: number;
+    pipelineStages?: SdlcPipelineStageCoverageDto[];
+    postgresStats?: PostgresKnowledgeStatsDto;
+    gaps: ReconciliationGapDto[];
+}
+
+export interface ReconciliationGapsResponseDto {
+    consumerId: string;
+    scannedAt: string | null;
+    scope?: ReconciliationScanScope;
+    ignoredCount?: number;
+    pipelineStages?: SdlcPipelineStageCoverageDto[];
+    postgresStats?: PostgresKnowledgeStatsDto;
+    gaps: ReconciliationGapDto[];
+}
+

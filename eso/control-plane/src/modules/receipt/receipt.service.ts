@@ -8,6 +8,7 @@ import {
     REQUEST_SPEC_REF,
     type EvidenceReceipt,
     type ReceiptEventDigest,
+    type ReceiptEvidenceSource,
     type ReceiptPayload,
     type ReceiptSpecRef,
     type ReceiptVerification,
@@ -111,6 +112,57 @@ function eventDigests(rows: ReadonlyArray<any>, traceId: string): ReceiptEventDi
         .sort((left, right) => left.at.localeCompare(right.at) || left.observationId.localeCompare(right.observationId));
 }
 
+function parseEvidenceRecord(value: unknown): Record<string, unknown> | null {
+    if (typeof value === 'string') {
+        try {
+            return parseEvidenceRecord(JSON.parse(value));
+        } catch {
+            return null;
+        }
+    }
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+    return value as Record<string, unknown>;
+}
+
+/** S5 — extract server-verified sources from `evidence.verified` observations, sorted deterministically. */
+function verifiedSources(rows: ReadonlyArray<any>, traceId: string): ReceiptEvidenceSource[] {
+    const out: ReceiptEvidenceSource[] = [];
+    for (const row of rows) {
+        if (String(row?.trace_id ?? row?.traceId ?? '') !== traceId) continue;
+        if (String(row?.event ?? '') !== 'evidence.verified') continue;
+        const evidence = parseEvidenceRecord(row?.evidence);
+        if (!evidence || !Array.isArray(evidence.sources)) continue;
+        const fallbackAt = typeof evidence.verifiedAt === 'string' && evidence.verifiedAt.trim()
+            ? evidence.verifiedAt.trim()
+            : isoAt(row?.at ?? row?.received_at ?? row?.receivedAt);
+        for (const entry of evidence.sources) {
+            const source = parseEvidenceRecord(entry);
+            if (!source) continue;
+            const where = String(source.where ?? source.id ?? '').trim();
+            if (!where) continue;
+            out.push({
+                requirementId: typeof source.requirementId === 'string' && source.requirementId.trim()
+                    ? source.requirementId.trim()
+                    : null,
+                where,
+                hash: typeof source.hash === 'string' && source.hash.trim() ? source.hash.trim() : null,
+                verifiedAt: typeof source.verifiedAt === 'string' && source.verifiedAt.trim()
+                    ? source.verifiedAt.trim()
+                    : fallbackAt,
+                verified: Boolean(source.verified),
+            });
+        }
+    }
+    return out.sort(
+        (left, right) =>
+            (left.requirementId ?? '').localeCompare(right.requirementId ?? '')
+            || left.where.localeCompare(right.where)
+            || left.verifiedAt.localeCompare(right.verifiedAt)
+            || (left.hash ?? '').localeCompare(right.hash ?? '')
+            || Number(left.verified) - Number(right.verified)
+    );
+}
+
 /** Build the canonical payload from a stored verdict plus the raw observations of its trace. */
 export function buildReceiptPayload(
     consumerId: string,
@@ -127,6 +179,8 @@ export function buildReceiptPayload(
         // B0-9 — a new receipt commits to the normative spec it was adjudicated against. The
         // reference only: no spec prose is sealed, and the doc is never read at runtime.
         specRef: specRefOf(REQUEST_SPEC_REF),
+        // S5 — server-verified evidence sources sealed into v2+ receipts.
+        sources: verifiedSources(observations, traceId),
     };
 }
 

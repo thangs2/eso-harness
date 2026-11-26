@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
-import type { KnowledgeCheckDto, KnowledgeEmbeddingStatusDto, KnowledgeSummaryDto } from '../../../../../../../libs/api-client/types.js';
+import type { KnowledgeCheckDto, KnowledgeEmbeddingStatusDto, KnowledgeSufficiencyDto, KnowledgeSummaryDto } from '../../../../../../../libs/api-client/types.js';
 
-export type KnowledgeSection = 'overview' | 'sources' | 'contract' | 'index' | 'manifest';
+export type KnowledgeSection = 'overview' | 'sources' | 'contract' | 'index' | 'manifest' | 'artifacts';
 export type KnowledgeProviderRouting = Record<'work' | 'design' | 'content', string>;
 
 @Component({
@@ -17,6 +17,7 @@ export class KnowledgeOverviewComponent {
     readonly summary = input<KnowledgeSummaryDto | null>(null);
     readonly embeddingStatus = input<KnowledgeEmbeddingStatusDto | null>(null);
     readonly check = input<KnowledgeCheckDto | null>(null);
+    readonly sufficiency = input<KnowledgeSufficiencyDto | null>(null);
     readonly section = input.required<KnowledgeSection>();
     readonly checking = input(false);
     readonly indexing = input(false);
@@ -37,5 +38,6 @@ export class KnowledgeOverviewComponent {
         { id: 'contract', label: 'Contract', hint: 'SDLC & governance' },
         { id: 'index', label: 'Index & health', hint: 'Documents & findings' },
         { id: 'manifest', label: 'Manifest', hint: 'Machine contract' },
+        { id: 'artifacts', label: 'Artifacts', hint: 'Inbox & projections' },
     ];
 }

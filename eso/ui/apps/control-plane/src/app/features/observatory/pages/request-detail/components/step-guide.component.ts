@@ -61,7 +61,11 @@ const GUIDES: Record<string, StepGuide> = {
             { label: 'deny', text: 'A recorded decision or rule rejected the turn.' },
             { label: 'unknown', text: 'No decision or host unknown; not allow and not deny.' },
         ],
-        limits: ['This is Q1 of the proof surface; it does not rerun the host.', 'Score = max(0, 100 − 25 × gaps); it measures evidence completeness, not model quality.'],
+        limits: [
+            'This is Q1/Q3 of the turn proof surface; it does not rerun the host.',
+            'Score = max(0, 100 − 25 × gaps); it measures turn proof-gap completeness, not model quality.',
+            'Turn proof score is distinct from knowledge sufficiency (which checks contradictions, near-duplicates, and missing artifact kinds in Knowledge settings).',
+        ],
         change: 'Record the decision and its proofs; the Turn verdict card gives the full arithmetic.',
     },
     slp: {

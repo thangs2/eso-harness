@@ -50,6 +50,8 @@ import { SchemaProvisioningService } from '../../provisioning/schema/schema-prov
 import { MaterialProvisioningService } from '../../provisioning/material/material-provisioning.service.js';
 import { ProvisioningStateService } from '../../provisioning/state/provisioning-state.service.js';
 import { WorkerFileService } from '../../modules/workers/worker-file.service.js';
+import { ArtifactLifecycleService } from '../../modules/knowledge/artifact-lifecycle.service.js';
+import { ReconciliationScannerService } from '../../modules/knowledge/reconciliation-scanner.service.js';
 import { KnowledgeIndexService } from '../../modules/knowledge/knowledge-index.service.js';
 import { KnowledgeCheckService } from '../../modules/knowledge/knowledge-check.service.js';
 import { KnowledgeRetrievalService } from '../../modules/knowledge/knowledge-retrieval.service.js';
@@ -146,6 +148,8 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
     const stateProvisioning = new ProvisioningStateService(store);
     const workerFiles = new WorkerFileService(store);
     const knowledgeIndex = new KnowledgeIndexService(store);
+    const artifactLifecycle = new ArtifactLifecycleService(store, knowledgeIndex);
+    const reconciliationScanner = new ReconciliationScannerService(store, knowledgeIndex);
     const knowledgeCheck = new KnowledgeCheckService(store);
     const knowledgeEmbedding = new LocalEmbeddingService(store);
     const knowledgeRetrieval = new KnowledgeRetrievalService(store, knowledgeEmbedding);
@@ -249,7 +253,7 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
             (request as any).actor = auth.authenticate(request.headers.authorization);
         } catch (error) {
             const response = toErrorResponse(error);
-            reply.code(response.status).send(response.body);
+            return reply.code(response.status).send(response.body);
         }
     };
 
@@ -804,6 +808,61 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
 
     app.get('/api/v1/consumers/:id/knowledge', { preHandler: requireAuth }, async (request) => {
         return store.knowledgeSummary((request.params as any).id);
+    });
+
+    app.post('/api/v1/consumers/:id/artifacts', { preHandler: requireAuth }, async (request, reply) => {
+        reply.code(201);
+        return artifactLifecycle.ingest((request.params as any).id, (request.body || {}) as any);
+    });
+
+    app.get('/api/v1/consumers/:id/artifacts', { preHandler: requireAuth }, async (request) => {
+        const q = request.query as any;
+        return artifactLifecycle.list((request.params as any).id, { origin: q?.origin, ktState: q?.ktState });
+    });
+
+    app.post('/api/v1/consumers/:id/artifacts/:artifactId/promote', { preHandler: requireAuth }, async (request) => {
+        const { id, artifactId } = request.params as any;
+        return artifactLifecycle.promote(id, artifactId);
+    });
+
+    app.get('/api/v1/consumers/:id/artifacts/:artifactId', { preHandler: requireAuth }, async (request, reply) => {
+        const { id, artifactId } = request.params as any;
+        const artifact = await artifactLifecycle.get(id, artifactId);
+        if (!artifact) {
+            return reply.code(404).send({ code: 'NOT_FOUND', message: `Artifact ${artifactId} not found` });
+        }
+        return artifact;
+    });
+
+    app.post('/api/v1/consumers/:id/reconciliation/scan', { preHandler: requireAuth }, async (request) => {
+        const body = (request.body || {}) as any;
+        return reconciliationScanner.scan((request.params as any).id, { scope: body?.scope });
+    });
+
+    app.get('/api/v1/consumers/:id/reconciliation/gaps', { preHandler: requireAuth }, async (request) => {
+        return reconciliationScanner.getLastScan((request.params as any).id);
+    });
+
+    app.post('/api/v1/consumers/:id/reconciliation/ignore', { preHandler: requireAuth }, async (request) => {
+        const body = (request.body || {}) as any;
+        return reconciliationScanner.ignoreGap((request.params as any).id, {
+            gapId: body?.gapId,
+            filePath: body?.filePath,
+            symbol: body?.symbol,
+            reason: body?.reason,
+        });
+    });
+
+    app.post('/api/v1/consumers/:id/reconciliation/relock', { preHandler: requireAuth }, async (request) => {
+        const body = (request.body || {}) as any;
+        return reconciliationScanner.relockHash((request.params as any).id, {
+            gapId: body?.gapId,
+            filePath: body?.filePath,
+        });
+    });
+
+    app.post('/api/v1/consumers/:id/reconciliation/sync-index', { preHandler: requireAuth }, async (request) => {
+        return reconciliationScanner.syncIndex((request.params as any).id);
     });
 
     app.post('/api/v1/consumers/:id/knowledge/index', { preHandler: requireAuth }, async (request) => {

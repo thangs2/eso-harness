@@ -165,6 +165,26 @@ export const SCOPE_DECISION_DDL = `CREATE TABLE IF NOT EXISTS platform.scope_dec
 export const SCOPE_DECISION_TRACE_INDEX_DDL = `CREATE INDEX IF NOT EXISTS idx_scope_decision_trace
     ON platform.scope_decision (consumer_id, trace_id, at desc)`;
 
+export const CONSUMER_ARTIFACTS_TABLE = 'platform.consumer_artifacts';
+export const CONSUMER_ARTIFACTS_DDL = `CREATE TABLE IF NOT EXISTS platform.consumer_artifacts (
+    id           text primary key,
+    consumer_id  text not null references platform.consumer(id) on delete cascade,
+    title        text not null,
+    origin       text not null check (origin in ('host','user','agent','machine')),
+    custodian    text not null check (custodian in ('host-local','staging','repo','provider')),
+    kt_state     text not null check (kt_state in ('raw','proposed','approved','retired')),
+    liveness     text not null check (liveness in ('ephemeral','living','frozen')),
+    derived_from jsonb not null default '[]'::jsonb,
+    content_type text not null,
+    body         text not null,
+    metadata     jsonb not null default '{}'::jsonb,
+    created_at   timestamptz not null default now(),
+    updated_at   timestamptz not null default now()
+)`;
+
+export const CONSUMER_ARTIFACTS_INDEX_DDL = `CREATE INDEX IF NOT EXISTS idx_consumer_artifacts_consumer
+    ON platform.consumer_artifacts (consumer_id, kt_state, created_at desc)`;
+
 export const PLATFORM_DDL: readonly string[] = [
     `CREATE SCHEMA IF NOT EXISTS platform`,
     `CREATE TABLE IF NOT EXISTS platform.consumer (
@@ -260,6 +280,8 @@ export const PLATFORM_DDL: readonly string[] = [
     EVIDENCE_RECEIPT_CONSUMER_INDEX_DDL,
     SCOPE_DECISION_DDL,
     SCOPE_DECISION_TRACE_INDEX_DDL,
+    CONSUMER_ARTIFACTS_DDL,
+    CONSUMER_ARTIFACTS_INDEX_DDL,
 ];
 
 export const CONSUMER_ID_PATTERN = /^[a-z0-9][a-z0-9-]{1,31}$/;

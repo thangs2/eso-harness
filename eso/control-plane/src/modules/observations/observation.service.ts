@@ -1,5 +1,6 @@
 import { PlatformError } from '../../platform/registry/errors.js';
 import { assertConsumerId, type PlatformStore } from '../../platform/registry/store.js';
+import { EvidencePredicateService } from '../judgment/evidence-predicate.service.js';
 import { validateObservedEvent } from './event-contract.js';
 
 /**
@@ -81,7 +82,11 @@ function observationDto(row: any): any {
 }
 
 export class ObservationService {
-    constructor(private readonly store: PlatformStore) {}
+    private readonly predicate: EvidencePredicateService;
+
+    constructor(private readonly store: PlatformStore, predicate?: EvidencePredicateService) {
+        this.predicate = predicate ?? new EvidencePredicateService(store);
+    }
 
     async ingest(consumerId: string, body: any, actor: ObservationActor = {}): Promise<any> {
         const id = assertConsumerId(consumerId);
@@ -132,6 +137,41 @@ export class ObservationService {
             at: isoOrNull(body?.at),
             idempotencyKey,
         });
+
+        // S2 — server-side evidence predicate verification at ingest time.
+        // CRITICAL INVARIANT: ingest NEVER rejects an evidence.packet because verification failed.
+        // The host's observation is already persisted; verification only appends an internal
+        // `evidence.verified` observation when Option A applies.
+        if (created && event === 'evidence.packet') {
+            try {
+                const verification = await this.predicate.verifyPacket(id, evidence);
+                if (verification.checked) {
+                    const packetObservationId = String(observation?.observation_id ?? observation?.observationId ?? observationId);
+                    await this.store.insertObservation(id, {
+                        observationId: `${packetObservationId}:verified`,
+                        traceId,
+                        hostId: 'eso',
+                        runtimeKey: 'eso:predicate-verifier',
+                        workerId: null,
+                        event: 'evidence.verified',
+                        outcome: verification.allVerified ? 'verified' : 'unverified',
+                        evidence: {
+                            actor: { kind: 'eso', id: 'predicate-verifier' },
+                            packetObservationId,
+                            allVerified: verification.allVerified,
+                            snapshotId: verification.snapshotId,
+                            verifiedAt: verification.verifiedAt,
+                            sources: verification.sources,
+                        },
+                        at: verification.verifiedAt,
+                        idempotencyKey: `${idempotencyKey}:verified`,
+                    });
+                }
+            } catch {
+                // Never crash observation ingest if verification encounters unexpected I/O or store issues.
+            }
+        }
+
         return { ok: true, created, observation: observationDto(observation) };
     }
 

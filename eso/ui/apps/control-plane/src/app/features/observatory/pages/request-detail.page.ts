@@ -1,7 +1,10 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { combineLatest } from 'rxjs';
 import { CONTROL_PLANE_API_CLIENT } from '../../../core/tokens.js';
+import type { EvidenceReceiptDto, KnowledgeSufficiencyDto } from '../../../../../../../libs/api-client/types.js';
+import { EvidenceEffectivenessPanelComponent } from './request-detail/components/evidence-effectiveness-panel.component.js';
 import { GlanceCardsComponent } from './request-detail/components/glance-cards.component.js';
 import { GraphPanelComponent } from './request-detail/components/graph-panel.component.js';
 import { PipelineFlowComponent } from './request-detail/components/pipeline-flow.component.js';
@@ -11,6 +14,7 @@ import { RulesPanelComponent } from './request-detail/components/rules-panel.com
 import { TelemetryPanelComponent } from './request-detail/components/telemetry-panel.component.js';
 import { VerdictPanelComponent } from './request-detail/components/verdict-panel.component.js';
 import { WaterfallPanelComponent } from './request-detail/components/waterfall-panel.component.js';
+import { buildEvidenceEffectivenessView, type EvidenceEffectivenessView } from './request-detail/evidence-effectiveness.selectors.js';
 import {
     TAB_GLYPH,
     shortIdOf,
@@ -20,6 +24,7 @@ import {
     type HostSignalsView,
     type JevView,
     type PipelineStepView,
+    type PreTurnGateView,
     type ReceiptVerificationState,
     type RequestDetailWithVerdict,
     type RequestReceiptSummaryDto,
@@ -29,7 +34,7 @@ import {
     type TurnVerdictView,
     type WriteGateView,
 } from './request-detail/request-detail.models.js';
-import { toActionEvents, toFlowSteps, toTraceEvents } from './request-detail/request-detail.selectors.js';
+import { toActionEvents, toFlowSteps, toPreTurnGate, toTraceEvents } from './request-detail/request-detail.selectors.js';
 
 /**
  * Request detail container — it loads one payload, owns the two independent UI selections
@@ -39,7 +44,7 @@ import { toActionEvents, toFlowSteps, toTraceEvents } from './request-detail/req
 @Component({
     selector: 'eso-request-detail-page',
     standalone: true,
-    imports: [MatButtonModule, RouterLink, RequestHeroComponent, GlanceCardsComponent, PipelineStepperComponent, PipelineFlowComponent, WaterfallPanelComponent, VerdictPanelComponent, RulesPanelComponent, GraphPanelComponent, TelemetryPanelComponent],
+    imports: [MatButtonModule, RouterLink, RequestHeroComponent, EvidenceEffectivenessPanelComponent, GlanceCardsComponent, PipelineStepperComponent, PipelineFlowComponent, WaterfallPanelComponent, VerdictPanelComponent, RulesPanelComponent, GraphPanelComponent, TelemetryPanelComponent],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div class="detail-page">
@@ -57,6 +62,10 @@ import { toActionEvents, toFlowSteps, toTraceEvents } from './request-detail/req
                 </nav>
 
                 <eso-request-hero [detail]="detail" [verdict]="verdict()" />
+
+                @if (evidenceEffectiveness(); as ee) {
+                    <eso-evidence-effectiveness [view]="ee" [consumerId]="consumerId()" />
+                }
 
                 <eso-pipeline-stepper [stages]="detail.systemStages" [selectedStepId]="selectedStepId()" [evidencedSteps]="effectiveness()?.stepsWithEvidence ?? null" (stepSelected)="selectStep($event)" />
 
@@ -90,24 +99,27 @@ import { toActionEvents, toFlowSteps, toTraceEvents } from './request-detail/req
                     }
                 </div>
 
-                @if (activeTab() === 'waterfall') {
-                    <eso-waterfall-panel [events]="traceEvents()" [files]="detail.telemetry.files" [tools]="detail.telemetry.tools" [llmCalls]="detail.telemetry.llmCalls" (rawEvidenceOpened)="trackRawEvidence()" />
-                } @else if (activeTab() === 'topology') {
-                    <eso-graph-panel [detail]="detail" />
-                } @else if (activeTab() === 'decisions') {
-                    <eso-verdict-panel [verdict]="verdict()" [spec]="spec()" [writeGate]="writeGate()" [jev]="jev()" [receipt]="receipt()" [receiptVerification]="receiptVerification()" [checks]="detail.checks" [stages]="detail.pipeline" [actionEvents]="actionEvents()" />
-                } @else if (activeTab() === 'rules') {
-                    <eso-rules-panel [detail]="detail" />
-                } @else if (activeTab() === 'telemetry') {
-                    <eso-telemetry-panel [calls]="detail.telemetry.llmCalls" [tokens]="tokenSummary()" [toolCount]="detail.telemetry.tools.length" [fileCount]="detail.telemetry.files.length" />
-                }
+                <div class="tab-panel" role="tabpanel" [attr.data-tab]="activeTab()">
+                    @if (activeTab() === 'waterfall') {
+                        <eso-waterfall-panel [events]="traceEvents()" [files]="detail.telemetry.files" [tools]="detail.telemetry.tools" [llmCalls]="detail.telemetry.llmCalls" (rawEvidenceOpened)="trackRawEvidence()" />
+                    } @else if (activeTab() === 'topology') {
+                        <eso-graph-panel [detail]="detail" />
+                    } @else if (activeTab() === 'decisions') {
+                        <eso-verdict-panel [verdict]="verdict()" [preTurnGate]="preTurnGate()" [spec]="spec()" [writeGate]="writeGate()" [jev]="jev()" [receipt]="receipt()" [receiptVerification]="receiptVerification()" [receiptSources]="receiptSources()" [explicitUnknowns]="explicitUnknowns()" [checks]="detail.checks" [stages]="detail.pipeline" [actionEvents]="actionEvents()" />
+                    } @else if (activeTab() === 'rules') {
+                        <eso-rules-panel [detail]="detail" />
+                    } @else if (activeTab() === 'telemetry') {
+                        <eso-telemetry-panel [calls]="detail.telemetry.llmCalls" [tokens]="tokenSummary()" [toolCount]="detail.telemetry.tools.length" [fileCount]="detail.telemetry.files.length" />
+                    }
+                </div>
             }
         </div>
     `,
     styles: [`
-        :host { display: block; }
+        :host { display: block; min-width: 0; max-width: 100%; }
         .detail-page { --surface: #131722; --surface-2: #0d1118; --surface-3: #0f1a2b; --line: #253047; --line-soft: #1e2a3e; --ink: #e2e8f0; --muted: #8b97ab; --dim: #64748b; --brand: #5aa9ff; --brand-ink: #ffffff; --warn-ink: #e0b341; --ok-ink: #4ec97a; --danger-ink: #ff6b6b; --fs-h1: 1.625rem; --fs-h1-lg: 1.75rem; --fs-title: 0.875rem; --fs-body: 0.8125rem; --fs-secondary: var(--text-xs); --fs-badge: 0.6875rem; --lh: 1.35; }
-        .detail-page { display: grid; gap: var(--space-5); row-gap: var(--space-4); width: 100%; max-width: calc(var(--content-max) + var(--page-pad) * 2); margin: 0 auto; padding: var(--page-pad); box-sizing: border-box; color: var(--ink); font-size: var(--fs-body); line-height: var(--lh); }
+        .detail-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); row-gap: var(--space-4); width: 100%; max-width: calc(var(--content-max) + var(--page-pad) * 2); min-width: 0; overflow-x: clip; margin: 0 auto; padding: var(--page-pad); box-sizing: border-box; color: var(--ink); font-size: var(--fs-body); line-height: var(--lh); }
+        .tab-panel { min-width: 0; max-width: 100%; }
         .detail-nav { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
         .crumb { display: inline-flex; align-items: center; gap: var(--space-2); min-width: 0; color: var(--muted); font-size: var(--fs-secondary); }
         .crumb a { color: var(--brand); text-decoration: none; }
@@ -143,12 +155,15 @@ export class RequestDetailPage implements OnInit {
     private readonly uiSession = crypto.randomUUID();
     /** Guards against double-load races (route + query subscriptions) re-verifying or overwriting. */
     private loadSeq = 0;
+    private lastLoadKey = '';
 
     readonly loading = signal(true);
     readonly error = signal('');
     readonly consumerId = signal('');
     readonly detail = signal<RequestDetailWithVerdict | null>(null);
-    readonly activeTab = signal<TabKey>('waterfall');
+    readonly fullReceipt = signal<EvidenceReceiptDto | null>(null);
+    readonly kbSufficiency = signal<KnowledgeSufficiencyDto | null>(null);
+    readonly activeTab = signal<TabKey>('decisions');
     readonly selectedStepId = signal<string | null>(null);
     /** Per-step disclosure override; unset follows the step's own empty state. */
     readonly stepOpen = signal<Record<string, boolean>>({});
@@ -165,6 +180,7 @@ export class RequestDetailPage implements OnInit {
     readonly traceEvents = computed(() => toTraceEvents(this.detail()?.events ?? []));
     readonly flowSteps = computed<PipelineStepView[]>(() => toFlowSteps(this.detail()?.systemStages ?? []));
     readonly actionEvents = computed<ActionEventView[]>(() => toActionEvents(this.detail()?.events ?? []));
+    readonly preTurnGate = computed<PreTurnGateView | null>(() => toPreTurnGate(this.detail()?.events ?? []));
     readonly tokenSummary = computed<TokenSummaryView>(() => {
         const metrics = this.detail()?.requestMetrics;
         return {
@@ -197,6 +213,22 @@ export class RequestDetailPage implements OnInit {
     readonly spec = computed<SpecRefView | null>(() => this.detail()?.spec ?? null);
     /** P5a — receipt summary for Q5; absent on payloads that predate the field, never fabricated. */
     readonly receipt = computed<RequestReceiptSummaryDto | null>(() => this.detail()?.receipt ?? null);
+    /** 5-Axis Evidence Effectiveness view — strictly derived from real DTOs (BR-12). */
+    readonly evidenceEffectiveness = computed<EvidenceEffectivenessView | null>(() => {
+        const detail = this.detail();
+        if (!detail) return null;
+        return buildEvidenceEffectivenessView({
+            detail,
+            preTurnGate: this.preTurnGate(),
+            actionEvents: this.actionEvents(),
+            tokenSummary: this.tokenSummary(),
+            fullReceipt: this.fullReceipt(),
+            receiptVerification: this.receiptVerification(),
+            kbSufficiency: this.kbSufficiency(),
+        });
+    });
+    readonly receiptSources = computed(() => this.evidenceEffectiveness()?.receiptSources ?? []);
+    readonly explicitUnknowns = computed(() => this.evidenceEffectiveness()?.explicitUnknowns ?? []);
 
     readonly expandedStepIds = computed<ReadonlySet<string>>(() => {
         const open = new Set<string>();
@@ -209,20 +241,17 @@ export class RequestDetailPage implements OnInit {
 
     ngOnInit(): void {
         this.trackSurface('surface.request.open');
-        // BUG-30: the id must be observed, not frozen at first render.
-        this.route.paramMap.subscribe((params) => {
-            const next = decodeURIComponent(params.get('requestId') || '');
-            if (next === this.requestId()) return;
-            this.requestId.set(next);
+        // BUG-30: observe both route params and query params together without double-firing load().
+        combineLatest([this.route.paramMap, this.route.queryParamMap]).subscribe(([params, query]) => {
+            const nextReq = decodeURIComponent(params.get('requestId') || '');
+            const nextConsumer = query.get('consumer') || 'fineso';
+            const key = `${nextConsumer}::${nextReq}`;
+            if (key === this.lastLoadKey) return;
+            this.lastLoadKey = key;
+            this.requestId.set(nextReq);
+            this.consumerId.set(nextConsumer);
             void this.load();
         });
-        this.route.queryParamMap.subscribe((query) => {
-            const next = query.get('consumer') || 'fineso';
-            if (next === this.consumerId()) return;
-            this.consumerId.set(next);
-            void this.load();
-        });
-        void this.load();
     }
 
     /** Stepper click — select + expand + scroll. It never changes the tab. */
@@ -275,20 +304,29 @@ export class RequestDetailPage implements OnInit {
         this.consumerId.set(query.get('consumer') || 'fineso');
         // Q5 — a new load invalidates the previous verdict; nothing is claimed verified until re-checked.
         this.receiptVerification.set('unavailable');
+        this.fullReceipt.set(null);
+        this.kbSufficiency.set(null);
         this.selectedStepId.set(null);
         this.stepOpen.set({});
         let loaded: RequestDetailWithVerdict | null = null;
         try {
-            loaded = await this.api.getRequestDetail(this.consumerId(), this.requestId());
+            const [detailRes, receiptRes, kbRes] = await Promise.all([
+                this.api.getRequestDetail(this.consumerId(), this.requestId()),
+                this.api.getRequestReceipt(this.consumerId(), this.requestId()).catch(() => null),
+                this.api.getConsumerKnowledgeSufficiency(this.consumerId()).catch(() => null),
+            ]);
+            loaded = detailRes;
             if (seq !== this.loadSeq) return;
             this.detail.set(loaded);
+            this.fullReceipt.set(receiptRes);
+            this.kbSufficiency.set(kbRes);
         } catch (error) {
             if (seq !== this.loadSeq) return;
             this.error.set((error as { detail?: string; message?: string })?.detail || (error as Error)?.message || 'Unable to load request');
         } finally {
             if (seq === this.loadSeq) this.loading.set(false);
         }
-        const receiptId = loaded?.receipt?.receiptId ?? loaded?.verdict?.receiptId ?? '';
+        const receiptId = loaded?.receipt?.receiptId ?? loaded?.verdict?.receiptId ?? this.fullReceipt()?.receiptId ?? '';
         if (receiptId) await this.verifyReceipt(seq, receiptId);
     }
 

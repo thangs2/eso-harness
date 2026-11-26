@@ -72,6 +72,25 @@ export interface VerdictGap {
     consequence: string;
 }
 
+/** Unified gap/finding read-model across pre-turn gate, post-turn proof, and knowledge sufficiency. */
+export type GapDomain = 'pre' | 'post' | 'knowledge';
+
+export interface UnifiedGapItem {
+    domain: GapDomain;
+    code: string;
+    what: string;
+    where?: string;
+    consequence: string;
+}
+
+/** Pre-turn gate summary extracted from any trace observation carrying `evidence.judgment`. */
+export interface PreTurnGateView {
+    level: string;
+    decision: string;
+    enforcement: string;
+    gaps: UnifiedGapItem[];
+}
+
 /** A reference the host cited as the rule/basis of its decision. */
 export interface VerdictRuleRef {
     kind: string;

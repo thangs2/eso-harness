@@ -541,16 +541,30 @@ export function parseArgs(argv: string[], env: Record<string, string | undefined
         if (raw.values.traceId) options.traceId = raw.values.traceId;
         if (raw.values.cacheDir) options.cacheDir = raw.values.cacheDir;
         if (raw.values.bufferDir) options.bufferDir = raw.values.bufferDir;
-        if (raw.values.judgmentRequirements) {
-            let requirements: unknown;
-            try { requirements = JSON.parse(raw.values.judgmentRequirements); } catch { throw new CliUsageError('--judgment-requirements must be valid JSON'); }
-            if (!Array.isArray(requirements)) throw new CliUsageError('--judgment-requirements must be a JSON array');
-            let answers: unknown = [];
-            if (raw.values.judgmentAnswers) {
-                try { answers = JSON.parse(raw.values.judgmentAnswers); } catch { throw new CliUsageError('--judgment-answers must be valid JSON'); }
+        if (raw.values.judgmentRequirements || raw.values.judgmentEnforcement || raw.values.judgmentAnswers) {
+            let requirements: unknown[] | undefined;
+            if (raw.values.judgmentRequirements) {
+                let parsedReqs: unknown;
+                try { parsedReqs = JSON.parse(raw.values.judgmentRequirements); } catch { throw new CliUsageError('--judgment-requirements must be valid JSON'); }
+                if (!Array.isArray(parsedReqs)) throw new CliUsageError('--judgment-requirements must be a JSON array');
+                requirements = parsedReqs;
             }
-            const enforcement = raw.values.judgmentEnforcement === 'enforce' ? 'enforce' : 'shadow';
-            options.judgment = { requirements, answers: answers as unknown[] | Record<string, unknown>, enforcement };
+            let answers: unknown[] | Record<string, unknown> | undefined;
+            if (raw.values.judgmentAnswers) {
+                let parsedAnswers: unknown;
+                try { parsedAnswers = JSON.parse(raw.values.judgmentAnswers); } catch { throw new CliUsageError('--judgment-answers must be valid JSON'); }
+                answers = parsedAnswers as unknown[] | Record<string, unknown>;
+            }
+            const rawEnforcement = (raw.values.judgmentEnforcement ?? '').trim();
+            if (rawEnforcement && rawEnforcement !== 'shadow' && rawEnforcement !== 'enforce') {
+                throw new CliUsageError(`--judgment-enforcement must be shadow | enforce, got: ${rawEnforcement}`);
+            }
+            const enforcement = rawEnforcement === 'enforce' ? 'enforce' : 'shadow';
+            options.judgment = {
+                enforcement,
+                ...(requirements !== undefined ? { requirements } : {}),
+                ...(answers !== undefined ? { answers } : {}),
+            };
         }
         return { command, json: raw.json, options };
     }

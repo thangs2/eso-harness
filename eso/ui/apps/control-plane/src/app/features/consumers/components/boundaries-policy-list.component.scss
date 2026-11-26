@@ -1,0 +1,218 @@
+// ============================================================================
+// Boundaries Policy List Component SCSS
+// ESO Golden Standard: De-nested clean table rows, host block, rem tokens
+// ============================================================================
+
+:host {
+    display: block;
+    min-width: 0;
+}
+
+.policy-panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+}
+
+.section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding-bottom: var(--space-3);
+    border-bottom: 1px solid var(--line);
+    flex-wrap: wrap;
+
+    .head-copy {
+        display: flex;
+        flex-direction: column;
+        gap: 0.15rem;
+
+        h3 {
+            margin: 0;
+            font-size: var(--text-lg);
+            font-weight: 600;
+            line-height: 1.25;
+            color: var(--ink);
+            text-transform: none;
+        }
+
+        p {
+            margin: 0;
+            font-size: var(--text-xs);
+            color: var(--muted);
+            line-height: 1.45;
+        }
+    }
+}
+
+.head-right {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+}
+
+.category-pills {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+}
+
+.cat-pill {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: 0.2rem 0.6rem;
+    border: 1px solid var(--line);
+    border-radius: 9999px;
+    background: var(--surface-2);
+    color: var(--muted);
+    font-size: var(--text-xs);
+    font-weight: 550;
+    cursor: pointer;
+    transition: all 0.15s ease-in-out;
+
+    .pill-icon {
+        font-size: 0.75rem;
+    }
+
+    .pill-count {
+        padding: 0 0.35rem;
+        border-radius: 9999px;
+        background: color-mix(in srgb, var(--ink) 8%, transparent);
+        color: var(--ink);
+        font-size: 0.65rem;
+        font-weight: 600;
+    }
+
+    &:hover {
+        border-color: var(--ink);
+        color: var(--ink);
+    }
+
+    &.active {
+        border-color: var(--brand);
+        background: color-mix(in srgb, var(--brand) 12%, var(--surface));
+        color: var(--brand);
+
+        .pill-count {
+            background: var(--brand);
+            color: var(--brand-ink);
+        }
+    }
+}
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    padding: var(--space-6) var(--space-4);
+    text-align: center;
+    border: 1px dashed var(--line);
+    border-radius: var(--radius-md);
+
+    .empty-icon {
+        font-size: 2rem;
+    }
+
+    strong {
+        font-size: var(--text-sm);
+        color: var(--ink);
+    }
+
+    span {
+        font-size: var(--text-xs);
+        color: var(--muted);
+    }
+}
+
+// Flat table container (no nested cards on rows)
+.policy-table {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: var(--surface);
+}
+
+.policy-head,
+.policy-row {
+    display: grid;
+    grid-template-columns: minmax(14rem, 2fr) minmax(6.5rem, 0.8fr) 6.5rem 7rem 5.5rem auto;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.policy-head {
+    padding: var(--space-2) var(--space-3);
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--line);
+    color: var(--muted);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.policy-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.policy-row {
+    padding: 0.3rem var(--space-3);
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 40%, transparent);
+    background: transparent;
+    transition: background 0.15s ease;
+
+    &:last-child {
+        border-bottom: none;
+    }
+
+    &:hover {
+        background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+    }
+
+    &.highlighted-rule {
+        border-left: 3px solid var(--brand);
+        background: color-mix(in srgb, var(--brand) 10%, transparent);
+        padding-left: calc(var(--space-3) - 3px);
+    }
+
+    .field-wrapper {
+        min-width: 0;
+
+        mat-form-field {
+            width: 100%;
+
+            input {
+                font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+                font-size: var(--text-xs);
+            }
+        }
+    }
+
+    .index-cell {
+        display: flex;
+        align-items: center;
+        font-size: var(--text-xs);
+        white-space: nowrap;
+    }
+
+    .delete-btn {
+        font-size: var(--text-xs);
+        padding: 0.25rem 0.5rem;
+        min-width: unset;
+    }
+}

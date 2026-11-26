@@ -9,6 +9,8 @@
  * what makes the dry integration verifiable end to end without calling a model.
  */
 
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { ConfigClient, findHostRuntime, splitRuntimeKey, validateSnapshotVersion } from './config-client';
 import type { ConfigSnapshot, FetchLike, SnapshotFlow, SnapshotHostRuntime } from './config-client';
 import { nextEdge } from './flow-engine';
@@ -21,7 +23,9 @@ import { buildBlockedEvidence, buildEvidence, eventForOutcome, parseEvidenceRepo
 import type { EvidenceRedaction, Outcome, WorkerEvidence } from './evidence';
 import { ObservationClient, ObservationClientError, buildObservationBody } from './observation-client';
 import { evaluateJudgment } from './judgment-client';
-import type { JudgmentGateOptions } from './judgment-client';
+import type { JudgmentGateOptions, JudgmentGateResult } from './judgment-client';
+import { collectLocalAnswers, computePacketHash, extractCitedFilePaths } from './answer-collector';
+import type { EvidencePacketItem, RequirementTarget } from './answer-collector';
 import { DryAdapter } from './adapters/dry';
 import { CursorAdapter } from './adapters/cursor';
 import { AgyAdapter } from './adapters/agy';
@@ -133,6 +137,37 @@ export function clampMaxSteps(value: number | undefined): number {
     const requested = Number.isFinite(value) ? Math.trunc(Number(value)) : DEFAULT_MAX_STEPS;
     if (!Number.isFinite(requested) || requested < 1) return DEFAULT_MAX_STEPS;
     return Math.min(requested, MAX_HOST_STEPS);
+}
+
+function normalizeJudgmentGaps(
+    rawGaps: unknown[],
+    level: string,
+): Array<{ code: string; what: string; consequence: string }> {
+    const normalized: Array<{ code: string; what: string; consequence: string }> = [];
+    for (const entry of rawGaps) {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+        const record = entry as Record<string, unknown>;
+        const whatCandidate = record.what ?? record.subject ?? record.requirement ?? record.id;
+        const what = typeof whatCandidate === 'string' && whatCandidate.trim()
+            ? whatCandidate.trim()
+            : 'unspecified judgment requirement';
+        const rawCode = typeof record.code === 'string' && record.code.trim()
+            ? record.code.trim()
+            : typeof record.status === 'string' && record.status.trim()
+                ? `JUDGMENT_GAP_${record.status.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_')}`
+                : 'JUDGMENT_GAP';
+        const rawConsequence = record.consequence ?? record.reason;
+        const detail = typeof record.exists === 'string' && record.exists.trim()
+            ? `exists=${record.exists.trim()}`
+            : typeof record.status === 'string' && record.status.trim()
+                ? `status=${record.status.trim()}`
+                : '';
+        const consequence = typeof rawConsequence === 'string' && rawConsequence.trim()
+            ? rawConsequence.trim()
+            : `pre-turn judgment ${level}${detail ? ` (${detail})` : ''}`;
+        normalized.push({ code: rawCode, what, consequence });
+    }
+    return normalized;
 }
 
 function createAdapter(name: string, options: { env?: Record<string, string | undefined>; homeDir?: string }): HostAdapter {
@@ -334,6 +369,7 @@ export async function runEntrypoint(options: EntrypointOptions): Promise<RunRepo
         hostStep: number;
         model?: string | null;
         tier?: string | null;
+        judgment?: Record<string, unknown>;
     }): Promise<StepReport> => {
         const evidence = buildBlockedEvidence({
             adapter: adapterName,
@@ -344,6 +380,7 @@ export async function runEntrypoint(options: EntrypointOptions): Promise<RunRepo
             hostStep: input.hostStep,
             reason: input.code,
             detail: input.message,
+            judgment: input.judgment,
             redaction,
         });
         return appendStep({ workerId: input.workerId, hostStep: input.hostStep, evidence });
@@ -478,8 +515,33 @@ export async function runEntrypoint(options: EntrypointOptions): Promise<RunRepo
             }
         }
 
+        const stepCwd = options.cwd ?? snapshot.consumer.root ?? process.cwd();
+        const preStepPacketItems: EvidencePacketItem[] = [];
+        let preTurnJudgment: JudgmentGateResult | null = null;
+
         if (options.judgment) {
             const enforcement = options.judgment.enforcement ?? 'shadow';
+            let resolvedAnswers = options.judgment.answers;
+            if (resolvedAnswers === undefined) {
+                const reqTargets: RequirementTarget[] = Array.isArray(options.judgment.requirements)
+                    ? options.judgment.requirements
+                          .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
+                          .map((item) => ({
+                              subject: typeof item.subject === 'string' ? item.subject : '',
+                              where_hint: typeof item.where_hint === 'string' ? item.where_hint : undefined,
+                              source: typeof item.source === 'string' ? item.source : undefined,
+                          }))
+                          .filter((item) => item.subject.trim().length > 0)
+                    : [];
+                const lawFiles = existsSync(join(stepCwd, 'AGENTS.md')) ? ['AGENTS.md'] : [];
+                const collected = collectLocalAnswers({
+                    cwd: stepCwd,
+                    requirements: reqTargets,
+                    files: lawFiles,
+                });
+                resolvedAnswers = collected.answers;
+                preStepPacketItems.push(...collected.packetItems);
+            }
             try {
                 const gate = await evaluateJudgment({
                     baseUrl: options.baseUrl,
@@ -488,12 +550,14 @@ export async function runEntrypoint(options: EntrypointOptions): Promise<RunRepo
                     fetchImpl: options.fetchImpl,
                     options: {
                         ...options.judgment,
+                        answers: resolvedAnswers,
                         enforcement,
                         flowId: flow.id,
                         workerId: current.worker.id,
                         intent: options.prompt,
                     },
                 });
+                preTurnJudgment = gate;
                 if (gate.wouldBlock) {
                     if (enforcement === 'enforce' && gate.decision === 'block') {
                         steps.push(
@@ -503,6 +567,13 @@ export async function runEntrypoint(options: EntrypointOptions): Promise<RunRepo
                                 workerId: current.worker.id,
                                 hostStep,
                                 tier: resolution.tier,
+                                judgment: {
+                                    level: gate.level,
+                                    wouldBlock: gate.wouldBlock,
+                                    decision: gate.decision,
+                                    enforcement: gate.enforcement,
+                                    gaps: gate.gaps,
+                                },
                             }),
                         );
                         return finalReport(false, 'JUDGMENT_BLOCKED');
@@ -526,13 +597,23 @@ export async function runEntrypoint(options: EntrypointOptions): Promise<RunRepo
             }
         }
 
+        const preTurnJudgmentSummary = preTurnJudgment
+            ? {
+                  level: preTurnJudgment.level,
+                  wouldBlock: preTurnJudgment.wouldBlock,
+                  decision: preTurnJudgment.decision,
+                  enforcement: preTurnJudgment.enforcement,
+                  gaps: preTurnJudgment.gaps,
+              }
+            : undefined;
+
         const adapterRequest: AdapterRequest = {
             workerId: current.worker.id,
             model: resolution.model,
             ...(resolution.effort ? { effort: resolution.effort } : {}),
             prompt,
             timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-            cwd: options.cwd ?? snapshot.consumer.root ?? process.cwd(),
+            cwd: stepCwd,
             env: options.env ?? process.env,
         };
         let result = await adapter.run(adapterRequest);
@@ -593,6 +674,7 @@ export async function runEntrypoint(options: EntrypointOptions): Promise<RunRepo
             files: report?.files ?? [],
             recon: report?.recon ?? [],
             reprompt: reprompt ?? undefined,
+            ...(preTurnJudgmentSummary ? { judgment: preTurnJudgmentSummary } : {}),
             redaction,
         });
 
@@ -617,6 +699,140 @@ export async function runEntrypoint(options: EntrypointOptions): Promise<RunRepo
             warning: resolution.warning,
         });
         steps.push(step);
+
+        // Collect verified local file artifacts from pre-step checks, report.files, and stdout citations.
+        const packetById = new Map<string, EvidencePacketItem>();
+        for (const item of preStepPacketItems) {
+            packetById.set(item.id, item);
+        }
+        const reportedPaths = (report?.files ?? []).map((entry) => entry.path).filter(Boolean);
+        const citedPaths = extractCitedFilePaths(result.stdout, stepCwd);
+        const postCandidatePaths = [...new Set([...reportedPaths, ...citedPaths])];
+        if (postCandidatePaths.length > 0) {
+            const postCollected = collectLocalAnswers({ cwd: stepCwd, files: postCandidatePaths });
+            for (const item of postCollected.packetItems) {
+                const existing = packetById.get(item.id);
+                packetById.set(item.id, existing?.requirementId ? { ...item, requirementId: existing.requirementId } : item);
+            }
+        }
+        const packetItems = [...packetById.values()];
+        const verifiedRelativePaths = packetItems.map((item) => item.id);
+        const workerRole = typeof current.worker.role === 'string' && current.worker.role.trim()
+            ? current.worker.role.trim()
+            : undefined;
+        const contractActor = {
+            kind: 'host' as const,
+            id: current.worker.id,
+            ...(workerRole ? { role: workerRole } : {}),
+        };
+
+        if (packetItems.length > 0) {
+            const packetObsId = `obs-packet-${traceId}-${current.worker.id}-${hostStep}`.slice(0, 128);
+            const combinedSha256 = computePacketHash(packetItems);
+            try {
+                await observationClient.append({
+                    observationId: packetObsId,
+                    traceId,
+                    hostId: runtimeKey.split(':')[0],
+                    runtimeKey,
+                    workerId: current.worker.id,
+                    event: 'evidence.packet',
+                    outcome: evidence.outcome,
+                    evidence: {
+                        items: packetItems,
+                        hash: combinedSha256,
+                        actor: contractActor,
+                        schemaVersion: 1,
+                    },
+                    at: new Date().toISOString(),
+                    idempotencyKey: `${traceId}:${current.worker.id}:evidence-packet:${hostStep}`,
+                });
+            } catch (error) {
+                if (error instanceof ObservationClientError && error.buffered) {
+                    warnings.push(`OBSERVATIONS_BUFFERED:${packetObsId}`);
+                } else {
+                    warnings.push('EVIDENCE_PACKET_OBSERVATION_FAILED');
+                    log(`[warn] evidence.packet observation failed: ${error instanceof Error ? error.message : String(error)}`);
+                }
+            }
+        }
+
+        const emitContractObservations = executionMode !== 'B' || Boolean(options.judgment) || packetItems.length > 0;
+        if (emitContractObservations) {
+            const actionObsId = `obs-action-${traceId}-${current.worker.id}-${hostStep}`.slice(0, 128);
+            try {
+                await observationClient.append({
+                    observationId: actionObsId,
+                    traceId,
+                    hostId: runtimeKey.split(':')[0],
+                    runtimeKey,
+                    workerId: current.worker.id,
+                    event: 'action.recorded',
+                    outcome: evidence.outcome,
+                    evidence: {
+                        tool: adapterName,
+                        outcome: evidence.outcome,
+                        files: verifiedRelativePaths,
+                        actor: contractActor,
+                        schemaVersion: 1,
+                    },
+                    at: new Date().toISOString(),
+                    idempotencyKey: `${traceId}:${current.worker.id}:action:${hostStep}`,
+                });
+            } catch (error) {
+                if (error instanceof ObservationClientError && error.buffered) {
+                    warnings.push(`OBSERVATIONS_BUFFERED:${actionObsId}`);
+                } else {
+                    warnings.push('ACTION_OBSERVATION_FAILED');
+                    log(`[warn] action.recorded observation failed: ${error instanceof Error ? error.message : String(error)}`);
+                }
+            }
+
+            const decisionObsId = `obs-decision-${traceId}-${current.worker.id}-${hostStep}`.slice(0, 128);
+            const decisionVerdict: 'allow' | 'deny' | 'partial' =
+                evidence.outcome !== 'PASS'
+                    ? 'deny'
+                    : preTurnJudgment?.wouldBlock
+                        ? 'partial'
+                        : 'allow';
+            const decisionBasis = preTurnJudgment
+                ? `pre-turn judgment ${preTurnJudgment.level} (${preTurnJudgment.enforcement}, ${preTurnJudgment.totalGaps} gaps); host ${evidence.outcome}`
+                : `host ${adapterName} ${evidence.outcome} (exit=${result.exitCode ?? 'n/a'})`;
+            const normalizedGaps =
+                decisionVerdict === 'partial' && preTurnJudgment && preTurnJudgment.gaps.length > 0
+                    ? normalizeJudgmentGaps(preTurnJudgment.gaps, preTurnJudgment.level)
+                    : [];
+            try {
+                await observationClient.append({
+                    observationId: decisionObsId,
+                    traceId,
+                    hostId: runtimeKey.split(':')[0],
+                    runtimeKey,
+                    workerId: current.worker.id,
+                    event: 'decision.recorded',
+                    outcome: evidence.outcome,
+                    evidence: {
+                        winner: current.worker.id,
+                        verdict: decisionVerdict,
+                        basis: decisionBasis,
+                        latencyMs: Math.max(0, Math.round(result.durationMs)),
+                        actor: contractActor,
+                        ...(preTurnJudgmentSummary ? { judgment: preTurnJudgmentSummary } : {}),
+                        ...(normalizedGaps.length > 0 ? { gaps: normalizedGaps } : {}),
+                        schemaVersion: 1,
+                    },
+                    at: new Date().toISOString(),
+                    idempotencyKey: `${traceId}:${current.worker.id}:decision:${hostStep}`,
+                });
+            } catch (error) {
+                if (error instanceof ObservationClientError && error.buffered) {
+                    warnings.push(`OBSERVATIONS_BUFFERED:${decisionObsId}`);
+                } else {
+                    warnings.push('DECISION_OBSERVATION_FAILED');
+                    log(`[warn] decision.recorded observation failed: ${error instanceof Error ? error.message : String(error)}`);
+                }
+            }
+        }
 
         if (evidence.outcome !== 'PASS') {
             ok = false;
