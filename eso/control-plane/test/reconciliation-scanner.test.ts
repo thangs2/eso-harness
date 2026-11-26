@@ -618,13 +618,22 @@ describe('ReconciliationScannerService — Unified 3-Pillar Engine & Artifact Pr
         assert.equal(synced.postgresStats.ghostDbCount, 0);
         assert.equal(synced.gaps.filter((g) => g.type === 'GAP_F_INDEX_DRIFT').length, 0);
 
-        // Uppercase SDLC/ stages S1..S7, S10, S11, S15 are all green 'covered' with true disk casing!
-        for (const st of ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S10', 'S11', 'S15']) {
+        // Uppercase SDLC/ stages S1..S7, S10, S11 are all green 'covered' with true disk casing!
+        for (const st of ['S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S10', 'S11']) {
             const stageObj = synced.pipelineStages.find((s) => s.stage === st);
             assert.ok(stageObj, `Missing stage ${st}`);
             assert.equal(stageObj.status, 'covered', `Expected ${st} to be covered, got ${stageObj.status}`);
             assert.ok(stageObj.expectedFolder.startsWith('SDLC/'), `Expected uppercase SDLC/ for ${st}, got ${stageObj.expectedFolder}`);
         }
+
+        // S15 (Test) is NOT a sign-off stage: once its test plan is really indexed, real index
+        // evidence makes it 'covered'. (BR-05 only forbids inferring S16/S17 sign-off from a filename.)
+        const s15 = synced.pipelineStages.find((s) => s.stage === 'S15');
+        assert.ok(s15);
+        assert.equal(s15.docCount, 1);
+        assert.equal(s15.indexedCount, 1);
+        assert.equal(s15.status, 'covered');
+        assert.ok(s15.expectedFolder.startsWith('SDLC/'));
 
         // GAP-A: detects Bun routes (/api/v1/packs/run, /api/v1/reports/), ignores /health, documented-endpoint, and test/
         const gapA = synced.gaps.filter((g) => g.type === 'GAP_A_ORPHAN_ROUTE');
@@ -641,5 +650,281 @@ describe('ReconciliationScannerService — Unified 3-Pillar Engine & Artifact Pr
         // GAP-D: detects scratch/perf-notes.md
         const gapD = synced.gaps.filter((g) => g.type === 'GAP_D_UNLINKED_SPIKE');
         assert.ok(gapD.some((g) => g.filePath === 'scratch/perf-notes.md'));
+    });
+
+    test('detects .on(METHOD, path) Fastify/Router routes and filters .on(GET, /health) noise', async () => {
+        const store = new MemoryPlatformStore();
+        const root = tempRoot();
+        const cid = 'recon-on-route';
+        await store.insertConsumer(consumerRecord(cid, root));
+
+        mkdirSync(join(root, 'src', 'orders'), { recursive: true });
+        writeFileSync(
+            join(root, 'src', 'orders', 'router.ts'),
+            [
+                'export function wire(router: any) {',
+                "  router.on('GET', '/health', () => ({ ok: true }));",
+                "  router.on('GET', '/api/v1/orders', () => []);",
+                "  router.on('POST', '/api/v1/orders/cancel', () => ({ cancelled: true }));",
+                '}',
+            ].join('\n'),
+        );
+
+        const scanner = new ReconciliationScannerService(store);
+        const res = await scanner.scan(cid);
+        const gapA = res.gaps.filter((g) => g.type === 'GAP_A_ORPHAN_ROUTE');
+
+        assert.equal(gapA.length, 2);
+        assert.ok(gapA.some((g) => g.symbol === 'GET /api/v1/orders' && g.lines === '3-3'));
+        assert.ok(gapA.some((g) => g.symbol === 'POST /api/v1/orders/cancel' && g.lines === '4-4'));
+        assert.equal(gapA.some((g) => g.symbol.includes('/health')), false);
+    });
+
+    test('S16/S17 are never covered from a filename, only from an approved artifact (BR-05)', async () => {
+        const store = new MemoryPlatformStore();
+        const root = tempRoot();
+        const cid = 'recon-signoff';
+        await store.insertConsumer(consumerRecord(cid, root));
+
+        // Regression: `02.pre-coding-gate.md` belongs to S2, never to the S17 release sign-off.
+        mkdirSync(join(root, 'sdlc', '01.inception'), { recursive: true });
+        writeFileSync(join(root, 'sdlc', '01.inception', '02.pre-coding-gate.md'), '# Gate\n');
+        // Even a doc that lives under S16/S17's canonical folder must not set `covered`.
+        mkdirSync(join(root, 'sdlc', '12.phases'), { recursive: true });
+        writeFileSync(join(root, 'sdlc', '12.phases', '01.release-gate.md'), '# Release gate\n');
+        writeFileSync(join(root, 'sdlc', '12.phases', '01.verify-report.md'), '# Verify\n');
+
+        const scanner = new ReconciliationScannerService(store);
+        const before = await scanner.scan(cid);
+
+        const s17Before = before.pipelineStages.find((s) => s.stage === 'S17');
+        const s16Before = before.pipelineStages.find((s) => s.stage === 'S16');
+        assert.ok(s17Before && s16Before);
+        assert.equal(s17Before.status, 'missing');
+        assert.equal(s16Before.status, 'missing');
+        assert.equal(s17Before.gapId, undefined);
+        assert.equal(s16Before.gapId, undefined);
+        // isDocStage stays false for S14..S17 => no GAP-E is ever emitted for them.
+        const gapEForDStages = before.gaps.filter(
+            (g) => g.type === 'GAP_E_MISSING_SDLC_DOC' && /\((Code|Test|Verify|Gate)\)/.test(g.symbol),
+        );
+        assert.equal(gapEForDStages.length, 0);
+
+        const now = new Date().toISOString();
+        const artifact = (overrides: Record<string, any>) => ({
+            consumerId: cid,
+            title: 'sign-off',
+            origin: 'agent' as const,
+            custodian: 'consumer' as const,
+            ktState: 'approved' as const,
+            liveness: 'living' as const,
+            derivedFrom: [] as string[],
+            contentType: 'text/markdown',
+            body: '# sign-off',
+            metadata: {} as Record<string, any>,
+            createdAt: now,
+            updatedAt: now,
+            ...overrides,
+        });
+
+        // A merely PROPOSED artifact naming S17 must not count as evidence.
+        await store.saveArtifact(
+            artifact({ id: 'art-s17-proposed', ktState: 'proposed', metadata: { stage: 'S17' } }) as any,
+        );
+        const proposedOnly = await scanner.scan(cid);
+        assert.equal(proposedOnly.pipelineStages.find((s) => s.stage === 'S17')?.status, 'missing');
+
+        // Approved + metadata.stage === 'S17' => covered.
+        await store.saveArtifact(artifact({ id: 'art-s17', metadata: { stage: 'S17' } }) as any);
+        const afterStageMeta = await scanner.scan(cid);
+        assert.equal(afterStageMeta.pipelineStages.find((s) => s.stage === 'S17')?.status, 'covered');
+        // S16 has no evidence yet and is independent of the S17 artifact.
+        assert.equal(afterStageMeta.pipelineStages.find((s) => s.stage === 'S16')?.status, 'missing');
+
+        // Approved + metadata.stageId === 'S16' => covered (stageId accepted too).
+        await store.saveArtifact(artifact({ id: 'art-s16', metadata: { stageId: 'S16' } }) as any);
+        const afterStageId = await scanner.scan(cid);
+        assert.equal(afterStageId.pipelineStages.find((s) => s.stage === 'S16')?.status, 'covered');
+        // Sign-off stages never invent GAP-E.
+        assert.equal(
+            afterStageId.gaps.filter((g) => g.type === 'GAP_E_MISSING_SDLC_DOC' && /\(Gate\)|\(Verify\)/.test(g.symbol)).length,
+            0,
+        );
+    });
+
+    test('S17 accepts an approved artifact whose derivedFrom targets the stage canonical folder', async () => {
+        const store = new MemoryPlatformStore();
+        const root = tempRoot();
+        const cid = 'recon-signoff-path';
+        await store.insertConsumer(consumerRecord(cid, root));
+
+        const now = new Date().toISOString();
+        await store.saveArtifact({
+            id: 'art-gate-path',
+            consumerId: cid,
+            title: 'Release gate sign-off',
+            origin: 'agent',
+            custodian: 'consumer',
+            ktState: 'approved',
+            liveness: 'living',
+            derivedFrom: ['sdlc/12.phases/01.release-gate.md'],
+            contentType: 'text/markdown',
+            body: '# gate',
+            metadata: {},
+            createdAt: now,
+            updatedAt: now,
+        } as any);
+
+        const scanner = new ReconciliationScannerService(store);
+        const res = await scanner.scan(cid);
+        assert.equal(res.pipelineStages.find((s) => s.stage === 'S17')?.status, 'covered');
+    });
+
+    test('S17 is NOT signed off by non-repo-relative path hints (scheme, absolute, traversal, vendor prefix)', async () => {
+        const hints = [
+            'http://host/sdlc/12.phases/01.release-gate.md',
+            '/Users/someone/sdlc/12.phases/01.release-gate.md',
+            'vendor/sdlc/12.phases/01.release-gate.md',
+            './../sdlc/12.phases/01.release-gate.md',
+        ];
+        const store = new MemoryPlatformStore();
+        const root = tempRoot();
+        const cid = 'recon-signoff-loose';
+        await store.insertConsumer(consumerRecord(cid, root));
+        const now = new Date().toISOString();
+        for (const [i, hint] of hints.entries()) {
+            await store.saveArtifact({
+                id: `art-loose-${i}`,
+                consumerId: cid,
+                title: `Loose sign-off ${i}`,
+                origin: 'agent',
+                custodian: 'consumer',
+                ktState: 'approved',
+                liveness: 'living',
+                derivedFrom: [hint],
+                contentType: 'text/markdown',
+                body: '# gate',
+                metadata: {},
+                createdAt: now,
+                updatedAt: now,
+            } as any);
+        }
+        const scanner = new ReconciliationScannerService(store);
+        const res = await scanner.scan(cid);
+        assert.equal(res.pipelineStages.find((s) => s.stage === 'S17')?.status, 'missing');
+
+        // A repo-relative hint under the canonical folder still signs it off.
+        await store.saveArtifact({
+            id: 'art-tight',
+            consumerId: cid,
+            title: 'Real sign-off',
+            origin: 'agent',
+            custodian: 'consumer',
+            ktState: 'approved',
+            liveness: 'living',
+            derivedFrom: ['./sdlc/12.phases/01.release-gate.md'],
+            contentType: 'text/markdown',
+            body: '# gate',
+            metadata: {},
+            createdAt: now,
+            updatedAt: now,
+        } as any);
+        const res2 = await scanner.scan(cid);
+        assert.equal(res2.pipelineStages.find((s) => s.stage === 'S17')?.status, 'covered');
+    });
+
+    test('S12 is covered by a phase plan kept under 08.wbs/ without swallowing S11 WBS docs', async () => {
+        const store = new MemoryPlatformStore();
+        const root = tempRoot();
+        const cid = 'recon-phases';
+        await store.insertConsumer(consumerRecord(cid, root));
+
+        mkdirSync(join(root, 'sdlc', '08.wbs'), { recursive: true });
+        writeFileSync(join(root, 'sdlc', '08.wbs', '01.wbs.md'), '# WBS\n');
+        writeFileSync(join(root, 'sdlc', '08.wbs', '02.phase-1-review.md'), '# Phase 1 review\n');
+
+        const scanner = new ReconciliationScannerService(store);
+        const res = await scanner.scan(cid);
+
+        const s12 = res.pipelineStages.find((s) => s.stage === 'S12');
+        const s11 = res.pipelineStages.find((s) => s.stage === 'S11');
+        assert.ok(s12 && s11);
+        assert.equal(s12.docCount, 1);
+        // Found via the widened matcher, but not yet indexed => drift (never 'covered' from a name).
+        assert.equal(s12.status, 'drift');
+        assert.equal(s12.expectedFolder, 'sdlc/08.wbs/');
+        // S11 still matches every doc under 08.wbs/ (pre-existing behaviour); widening S12 does not
+        // remove anything from S11.
+        assert.equal(s11.docCount, 2);
+        // Any gap id on S11 is a REAL drift gap (unindexed docs here), never an invented one.
+        assert.ok(s11.gapId === undefined || s11.gapId.includes('GAP_F_INDEX_DRIFT'));
+
+        // No "becomes covered after syncIndex()" assertion here: this test uses `MemoryPlatformStore`,
+        // whose `replaceKnowledgeIndex` is a no-op and whose `knowledgeSummary` is hard-coded to
+        // `docs: 0` (store.ts), so no doc can ever become indexed on this store and the assertion would
+        // be unreachable-by-construction. The index -> covered path is covered elsewhere: the
+        // "detects GAP-F ... and clears after syncIndex()" test uses `InMemoryKnowledgeStore` and does
+        // assert real indexing (indexedDocsCount 0 -> 5).
+
+        // The plain WBS doc (no "phase" in its base name) is NOT absorbed by S12.
+        const onlyWbsRoot = tempRoot();
+        mkdirSync(join(onlyWbsRoot, 'sdlc', '08.wbs'), { recursive: true });
+        writeFileSync(join(onlyWbsRoot, 'sdlc', '08.wbs', '01.wbs.md'), '# WBS\n');
+        const wbsOnlyCid = 'recon-phases-wbs-only';
+        await store.insertConsumer(consumerRecord(wbsOnlyCid, onlyWbsRoot));
+        const wbsOnly = await scanner.scan(wbsOnlyCid);
+        assert.equal(wbsOnly.pipelineStages.find((s) => s.stage === 'S12')?.docCount, 0);
+        assert.equal(wbsOnly.pipelineStages.find((s) => s.stage === 'S11')?.docCount, 1);
+    });
+
+    test('reports truncated drop counts when the GAP-F budget is exceeded instead of silently capping', async () => {
+        const store = new InMemoryKnowledgeStore();
+        const root = tempRoot();
+        const cid = 'recon-truncated';
+        await store.insertConsumer(consumerRecord(cid, root));
+
+        // 25 indexable docs, none indexed => 25 unindexed GAP-F candidates vs cap 20.
+        mkdirSync(join(root, 'sdlc', '01.inception'), { recursive: true });
+        for (let i = 0; i < 25; i++) {
+            writeFileSync(join(root, 'sdlc', '01.inception', `doc-${String(i).padStart(2, '0')}.md`), `# Doc ${i}\n`);
+        }
+
+        const scanner = new ReconciliationScannerService(store, new KnowledgeIndexService(store));
+        const res = await scanner.scan(cid);
+
+        const gapF = res.gaps.filter((g) => g.type === 'GAP_F_INDEX_DRIFT');
+        assert.equal(gapF.length, 20);
+        assert.equal(res.postgresStats.unindexedCount, 25);
+        assert.equal(res.truncated.GAP_F_INDEX_DRIFT, 5);
+        // Types that hit no cap are absent (zero-drop keys are omitted).
+        assert.equal(res.truncated.GAP_A_ORPHAN_ROUTE, undefined);
+
+        // getLastScan refreshes gap statuses but keeps the truncation report.
+        const last = await scanner.getLastScan(cid);
+        assert.equal(last.truncated.GAP_F_INDEX_DRIFT, 5);
+
+        // Nothing dropped => empty object, not a zero-filled map.
+        mkdirSync(join(root, 'sdlc', '01.inception'), { recursive: true });
+        rmSync(join(root, 'sdlc', '01.inception'), { recursive: true, force: true });
+        const empty = await scanner.scan(cid);
+        assert.deepEqual(empty.truncated, {});
+    });
+
+    test('reports truncated drop counts for GAP-A routes beyond MAX_GAPS_PER_CATEGORY', async () => {
+        const store = new MemoryPlatformStore();
+        const root = tempRoot();
+        const cid = 'recon-truncated-a';
+        await store.insertConsumer(consumerRecord(cid, root));
+
+        mkdirSync(join(root, 'src'), { recursive: true });
+        const routeLines: string[] = [];
+        for (let i = 0; i < 18; i++) routeLines.push(`app.get('/api/v1/thing-${i}', () => ${i});`);
+        writeFileSync(join(root, 'src', 'routes.ts'), routeLines.join('\n'));
+
+        const scanner = new ReconciliationScannerService(store);
+        const res = await scanner.scan(cid);
+
+        assert.equal(res.gaps.filter((g) => g.type === 'GAP_A_ORPHAN_ROUTE').length, 15);
+        assert.equal(res.truncated.GAP_A_ORPHAN_ROUTE, 3);
     });
 });

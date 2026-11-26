@@ -68,6 +68,13 @@ export interface ReconciliationPostgresStatsDto {
     ghostDbCount: number;
 }
 
+/**
+ * Count of gap items that were DROPPED because a per-type emission cap was hit
+ * (they are not part of `gaps`). Keys are present only when the drop count is
+ * non-zero, so `{}` means "nothing was truncated". Serialisable as plain JSON.
+ */
+export type ReconciliationTruncatedByType = Partial<Record<DiscrepancyType, number>>;
+
 export interface ReconciliationScanResultDto {
     consumerId: string;
     scannedAt: string;
@@ -76,6 +83,8 @@ export interface ReconciliationScanResultDto {
     postgresStats: ReconciliationPostgresStatsDto;
     pipelineStages: SdlcStageCoverageDto[];
     gaps: ReconciliationGapDto[];
+    /** Items silently dropped by emission caps (MAX_GAPS_PER_CATEGORY / MAX_INDEX_DRIFT_GAPS). */
+    truncated: ReconciliationTruncatedByType;
 }
 
 export interface IgnoreGapInput {
@@ -130,6 +139,11 @@ interface SdlcStageDefinition {
     coreSpec: boolean;
     defaultFileName: string;
     matches: (doc: SdlcDocInfo) => boolean;
+    /**
+     * Sign-off stages (S16 verify, S17 release gate) are `covered` only by an `approved`
+     * artifact whose metadata or provenance points at the stage. Filenames never count.
+     */
+    requiresSignOff?: boolean;
 }
 
 function isIndexDoc(baseNameLower: string): boolean {
@@ -317,7 +331,12 @@ const SDLC_PIPELINE_STAGES: readonly SdlcStageDefinition[] = [
         matches: (d) =>
             d.lowerRelFromSdlc.startsWith('12.phases/') ||
             /(?:^|\/)\d*\.?phases\//.test(d.lowerRelFromSdlc) ||
-            ['phase', 'phase-plan'].includes(d.frontmatterType),
+            // Consumers keep phase plans under WBS (e.g. sdlc/08.wbs/02.phase-1-review.md).
+            // The base name must actually name a phase (`phase`, `phase-1`, `phase_plan`), so plain
+            // WBS docs like 01.wbs.md stay S11-only instead of being swallowed by S12.
+            (/(?:^|\/)\d*\.?wbs\//.test(d.lowerRelFromSdlc) &&
+                /(?:^|[._-])phases?(?:[._-]|$)/.test(d.baseNameLower)) ||
+            ['phase', 'phase-plan', 'phase-review'].includes(d.frontmatterType),
     },
     {
         stage: 'S13',
@@ -335,6 +354,13 @@ const SDLC_PIPELINE_STAGES: readonly SdlcStageDefinition[] = [
             ['scn', 'scenario', 'scenarios'].includes(d.frontmatterType),
     },
     // Group D: Implementation, Test & Release Gate (S14..S17)
+    //
+    // S16 (Verify) and S17 (Gate) are SIGN-OFF stages. Coverage requires promote/sign-off evidence —
+    // an approved artifact targeting the stage — because BR-05 forbids deriving a human signature
+    // from a filename (an agent or a file must never sign Done). So for S14..S17 `matches` is
+    // ignored by evaluatePipelineStages: no path, base-name or frontmatter guess can set
+    // `covered`, and S14/S15 stay non-sign-off but likewise never infer coverage from nothing.
+    // None of the four emits GAP-E (isDocStage stays false); they may still report `drift`.
     {
         stage: 'S14',
         group: 'D',
@@ -369,10 +395,9 @@ const SDLC_PIPELINE_STAGES: readonly SdlcStageDefinition[] = [
         isDocStage: false,
         coreSpec: false,
         defaultFileName: '01.verify-report.md',
-        matches: (d) =>
-            d.lowerRelFromSdlc.startsWith('12.phases/') ||
-            /verify|verification/.test(d.baseNameLower) ||
-            ['verify', 'verification'].includes(d.frontmatterType),
+        // Evidence-only: `covered` needs an approved artifact for S16 (see evaluatePipelineStages).
+        matches: () => false,
+        requiresSignOff: true,
     },
     {
         stage: 'S17',
@@ -383,12 +408,73 @@ const SDLC_PIPELINE_STAGES: readonly SdlcStageDefinition[] = [
         isDocStage: false,
         coreSpec: false,
         defaultFileName: '01.release-gate.md',
-        matches: (d) =>
-            d.lowerRelFromSdlc.startsWith('12.phases/') ||
-            /release-gate|pre-coding-gate/.test(d.baseNameLower) ||
-            ['gate', 'release-gate'].includes(d.frontmatterType),
+        // Evidence-only: `covered` needs an approved artifact for S17 (see evaluatePipelineStages).
+        // A doc called `02.pre-coding-gate.md` belongs to S2, not to the S17 release sign-off.
+        matches: () => false,
+        requiresSignOff: true,
     },
 ];
+
+/** S14 (Code) is not a sign-off stage and must never be inferred from a filename. */
+const NON_SIGNOFF_D_STAGES = new Set(['S14']);
+
+function isSignOffEvidenceArtifact(artifact: ConsumerArtifact | null | undefined): boolean {
+    return Boolean(artifact && artifact.ktState === 'approved');
+}
+
+function collectArtifactPathHints(artifact: ConsumerArtifact): string[] {
+    const hints: string[] = [];
+    for (const source of [artifact.derivedFrom, artifact.metadata?.suggestedTarget, artifact.metadata?.target_path]) {
+        if (Array.isArray(source)) {
+            for (const value of source) {
+                if (typeof value === 'string') hints.push(value);
+            }
+        } else if (typeof source === 'string') {
+            hints.push(source);
+        }
+    }
+    return hints;
+}
+
+function artifactTargetsStage(artifact: ConsumerArtifact, stage: string, canonicalSubfolder: string): boolean {
+    const meta = artifact.metadata ?? {};
+    const declaredStage = [meta.stage, meta.stageId]
+        .filter((value): value is string => typeof value === 'string')
+        .map((value) => value.trim().toUpperCase());
+    if (declaredStage.includes(stage.toUpperCase())) return true;
+
+    // Path hints only count when they are genuinely repo-relative: a hint like
+    // `http://host/sdlc/12.phases/x` or `vendor/sdlc/12.phases/x` must NOT sign the stage off.
+    // `canonicalSubfolder` is relative to the SDLC root (e.g. `12.phases/`), so a hint qualifies
+    // when it contains `<sdlc>/<canonicalSubfolder>/...` at the root — i.e. the segment must not be
+    // preceded by an unrelated folder such as `vendor/`.
+    const folder = canonicalSubfolder.toLowerCase().replace(/^\/+|\/+$/g, '');
+    const tail = `/${folder}/`;
+    return collectArtifactPathHints(artifact).some((hint) => {
+        const normalized = hint.replace(/\\/g, '/').replace(/^\.\//, '').toLowerCase().trim();
+        if (!normalized) return false;
+        if (/^[a-z][a-z0-9+.-]*:/.test(normalized)) return false; // scheme (http:, file:, ...)
+        if (normalized.startsWith('/') || normalized.startsWith('~')) return false; // absolute / home
+        if (normalized.split('/').includes('..')) return false; // traversal
+        const atRoot = `/${normalized}`;
+        const idx = atRoot.indexOf(tail);
+        if (idx === -1) return false;
+        // Everything before the stage folder must be exactly one SDLC-root segment (e.g. `sdlc`
+        // or `SDLC`), never an unrelated prefix such as `vendor`.
+        const prefix = atRoot.slice(0, idx);
+        return prefix !== '' && !prefix.slice(1).includes('/');
+    });
+}
+
+function findSignOffArtifact(
+    artifacts: readonly ConsumerArtifact[],
+    stage: string,
+    canonicalSubfolder: string,
+): ConsumerArtifact | undefined {
+    return artifacts.find(
+        (artifact) => isSignOffEvidenceArtifact(artifact) && artifactTargetsStage(artifact, stage, canonicalSubfolder),
+    );
+}
 
 const SKIP_DIRS = new Set([
     'node_modules',
@@ -418,6 +504,7 @@ const MAX_SNIPPET_LINES = 12;
 
 const DECORATOR_ROUTE_RE = /@(Get|Post|Put|Delete|Patch)\s*\(\s*(['"`])([^'"`]+)\2/;
 const CALL_ROUTE_RE = /\b(?:app|router)\.(get|post|put|delete|patch)\s*\(\s*(['"`])([^'"`]+)\2/;
+const ON_ROUTE_RE = /\.\s*on\s*\(\s*(['"`])(GET|POST|PUT|DELETE|PATCH)\1\s*,\s*(['"`])([^'"`]+)\3/i;
 const BUN_PATHNAME_EQ_RE = /\b(?:url\.)?pathname\s*===?\s*(['"`])(\/api\/[^'"`]+)\1/;
 const BUN_PATHNAME_SW_RE = /\b(?:url\.)?pathname\.startsWith\s*\(\s*(['"`])(\/api\/[^'"`]+)\1/;
 
@@ -685,6 +772,45 @@ function matchesIgnoreList(gap: ReconciliationGapDto, entries: ReconcileIgnoreEn
     return false;
 }
 
+/**
+ * Per-scan bookkeeping for emission caps. When a cap is hit, every remaining candidate of that
+ * type is counted as DROPPED (not only the one item where the `>= cap` check fired), so
+ * `truncated[type]` is the true number of gaps missing from the result.
+ */
+class ScanEmissionTracker {
+    private readonly dropped: Partial<Record<DiscrepancyType, number>> = {};
+    private readonly saturated = new Set<DiscrepancyType>();
+
+    isSaturated(type: DiscrepancyType): boolean {
+        return this.saturated.has(type);
+    }
+
+    /** Filters a candidate list through `cap`, marking the type saturated and counting the overflow. */
+    budget<T>(type: DiscrepancyType, candidates: T[], cap: number): T[] {
+        if (this.saturated.has(type)) {
+            this.count(type, candidates.length);
+            return [];
+        }
+        // A zero cap only means "no budget left", not that this type is (or is not) overflowing.
+        if (cap <= 0) {
+            this.count(type, candidates.length);
+            return [];
+        }
+        if (candidates.length <= cap) return candidates;
+        this.saturated.add(type);
+        this.count(type, candidates.length - cap);
+        return candidates.slice(0, cap);
+    }
+
+    count(type: DiscrepancyType, n: number): void {
+        if (n > 0) this.dropped[type] = (this.dropped[type] ?? 0) + n;
+    }
+
+    snapshot(): ReconciliationTruncatedByType {
+        return { ...this.dropped };
+    }
+}
+
 export class ReconciliationScannerService {
     private readonly lastScanCache = new Map<string, ReconciliationScanResultDto>();
 
@@ -709,6 +835,7 @@ export class ReconciliationScannerService {
         const statusByGapId = buildGapStatusMap(artifacts);
 
         const rawGaps: ReconciliationGapDto[] = [];
+        const emissions = new ScanEmissionTracker();
         const root = consumer.root;
         let effectiveScope: ReconciliationScanScope = requestedScope;
         let ignoreEntries: ReconcileIgnoreEntry[] = [];
@@ -787,10 +914,28 @@ export class ReconciliationScannerService {
             }
 
             // GAP-A: Orphan Routes
-            this.scanOrphanRoutes(root, sdlcRootName, docCorpusLower, scannedAt, statusByGapId, changedFiles, rawGaps);
+            this.scanOrphanRoutes(
+                root,
+                sdlcRootName,
+                docCorpusLower,
+                scannedAt,
+                statusByGapId,
+                changedFiles,
+                rawGaps,
+                emissions,
+            );
 
             // GAP-B: Unfed Schemas
-            this.scanUnfedSchemas(root, sdlcRootName, docCorpusLower, scannedAt, statusByGapId, changedFiles, rawGaps);
+            this.scanUnfedSchemas(
+                root,
+                sdlcRootName,
+                docCorpusLower,
+                scannedAt,
+                statusByGapId,
+                changedFiles,
+                rawGaps,
+                emissions,
+            );
 
             // GAP-C: Stale Hashes in .harness/knowledge-manifest.json
             if (manifestJson && typeof manifestJson === 'object') {
@@ -811,6 +956,7 @@ export class ReconciliationScannerService {
                 statusByGapId,
                 changedFiles,
                 rawGaps,
+                emissions,
             );
             postgresStats = pgResult.stats;
 
@@ -825,6 +971,7 @@ export class ReconciliationScannerService {
                 pgResult.indexedPaths,
                 pgResult.driftGapByPath,
                 rawGaps,
+                artifacts,
             );
         }
 
@@ -846,6 +993,7 @@ export class ReconciliationScannerService {
             postgresStats,
             pipelineStages,
             gaps,
+            truncated: emissions.snapshot(),
         };
         this.lastScanCache.set(id, result);
         return result;
@@ -865,6 +1013,7 @@ export class ReconciliationScannerService {
 
         const artifacts = await this.store.listArtifacts(id);
         const statusByGapId = buildGapStatusMap(artifacts);
+        // `...cached` carries `truncated` through untouched: caps are a property of the last scan.
         const refreshed: ReconciliationScanResultDto = {
             ...cached,
             gaps: cached.gaps.map((gap) => ({
@@ -1069,6 +1218,7 @@ export class ReconciliationScannerService {
         statusByGapId: Map<string, ReconciliationGapStatus>,
         changedFiles: Set<string> | null,
         out: ReconciliationGapDto[],
+        emissions: ScanEmissionTracker,
     ): Promise<{
         stats: ReconciliationPostgresStatsDto;
         indexedPaths: Set<string>;
@@ -1142,13 +1292,20 @@ export class ReconciliationScannerService {
             ghostDbCount: ghostList.length,
         };
 
+        // Stale, unindexed and ghost share ONE budget (MAX_INDEX_DRIFT_GAPS), applied in tier order.
+        // Everything that survives the scope filter but not the budget is reported as truncated.
+        const inScope = <T extends { relPath: string }>(list: T[]): T[] =>
+            changedFiles ? list.filter((item) => changedFiles!.has(item.relPath)) : list;
+        const scopedStale = emissions.budget('GAP_F_INDEX_DRIFT', inScope(staleList), MAX_INDEX_DRIFT_GAPS);
+        const remainingBudget = Math.max(0, MAX_INDEX_DRIFT_GAPS - scopedStale.length);
+        const scopedUnindexed = emissions.budget('GAP_F_INDEX_DRIFT', inScope(unindexedList), remainingBudget);
+        const ghostBudget = Math.max(0, remainingBudget - scopedUnindexed.length);
+        const scopedGhost = emissions.budget('GAP_F_INDEX_DRIFT', inScope(ghostList), ghostBudget);
+
         const driftGapByPath = new Map<string, string>();
-        let emitted = 0;
 
         // 1. Stale DB rows (critical)
-        for (const item of staleList) {
-            if (changedFiles && !changedFiles.has(item.relPath)) continue;
-            if (emitted >= MAX_INDEX_DRIFT_GAPS) break;
+        for (const item of scopedStale) {
             const lineCount = Math.max(1, item.lines.length);
             const symbol = `Stale PG Index: ${item.relPath}`;
             const id = makeGapId('GAP_F_INDEX_DRIFT', item.relPath, symbol);
@@ -1167,13 +1324,10 @@ export class ReconciliationScannerService {
                 status: statusByGapId.get(id) ?? 'open',
                 codeSnippet: extractCodeSnippet(item.lines, 1, lineCount),
             });
-            emitted++;
         }
 
         // 2. Unindexed disk files (warning)
-        for (const item of unindexedList) {
-            if (changedFiles && !changedFiles.has(item.relPath)) continue;
-            if (emitted >= MAX_INDEX_DRIFT_GAPS) break;
+        for (const item of scopedUnindexed) {
             const lineCount = Math.max(1, item.lines.length);
             const symbol = `Unindexed Doc: ${item.relPath}`;
             const id = makeGapId('GAP_F_INDEX_DRIFT', item.relPath, symbol);
@@ -1192,13 +1346,10 @@ export class ReconciliationScannerService {
                 status: statusByGapId.get(id) ?? 'open',
                 codeSnippet: extractCodeSnippet(item.lines, 1, lineCount),
             });
-            emitted++;
         }
 
         // 3. Ghost DB rows (info)
-        for (const item of ghostList) {
-            if (changedFiles && !changedFiles.has(item.relPath)) continue;
-            if (emitted >= MAX_INDEX_DRIFT_GAPS) break;
+        for (const item of scopedGhost) {
             const symbol = `Ghost PG Row: ${item.relPath}`;
             const id = makeGapId('GAP_F_INDEX_DRIFT', item.relPath, symbol);
             driftGapByPath.set(item.relPath, id);
@@ -1215,7 +1366,6 @@ export class ReconciliationScannerService {
                 promptTemplate: `Run PostgreSQL index sync to prune deleted ghost document '${item.relPath}' from knowledge_doc.`,
                 status: statusByGapId.get(id) ?? 'open',
             });
-            emitted++;
         }
 
         return { stats, indexedPaths, driftGapByPath };
@@ -1231,6 +1381,7 @@ export class ReconciliationScannerService {
         indexedPaths: Set<string>,
         driftGapByPath: Map<string, string>,
         out: ReconciliationGapDto[],
+        artifacts: readonly ConsumerArtifact[],
     ): SdlcStageCoverageDto[] {
         const stages: SdlcStageCoverageDto[] = [];
 
@@ -1260,6 +1411,29 @@ export class ReconciliationScannerService {
                     indexedCount: codeFiles.length,
                     status: codeFiles.length === 0 ? 'missing' : hasCodeDrift ? 'drift' : 'covered',
                     gapId: firstCodeGap?.id,
+                });
+                continue;
+            }
+
+            if (def.requiresSignOff || NON_SIGNOFF_D_STAGES.has(def.stage)) {
+                // S16/S17: only an approved artifact for the stage can make them `covered` (BR-05).
+                // S14 is handled above with code-file counting; S15 (Test) is NOT a sign-off stage and
+                // falls through to the normal doc path below, where real index state decides its status.
+                const evidenceDoc = sdlcDocs.find((doc) => def.matches(doc));
+                const signOff: ConsumerArtifact | undefined = def.requiresSignOff
+                    ? findSignOffArtifact(artifacts, def.stage, def.canonicalSubfolder)
+                    : undefined;
+                stages.push({
+                    stage: def.stage,
+                    group: def.group,
+                    label: def.label,
+                    leadRole: def.leadRole,
+                    expectedFolder: evidenceDoc?.dirRel ?? `${sdlcRootName}/${def.canonicalSubfolder}`,
+                    docCount: evidenceDoc ? 1 : 0,
+                    indexedCount: evidenceDoc && indexedPaths.has(evidenceDoc.relPath) ? 1 : 0,
+                    status: signOff ? 'covered' : 'missing',
+                    // Never invent a gap id here: only a real drift gap for the evidence doc counts.
+                    gapId: evidenceDoc ? driftGapByPath.get(evidenceDoc.relPath) : undefined,
                 });
                 continue;
             }
@@ -1345,6 +1519,7 @@ export class ReconciliationScannerService {
         statusByGapId: Map<string, ReconciliationGapStatus>,
         changedFiles: Set<string> | null,
         out: ReconciliationGapDto[],
+        emissions: ScanEmissionTracker,
     ): void {
         const searchRoots = ['src', 'apps', 'packages'].map((dir) => join(root, dir));
         const codeFiles: string[] = [];
@@ -1359,7 +1534,6 @@ export class ReconciliationScannerService {
         const seen = new Set<string>();
 
         for (const absPath of codeFiles) {
-            if (found >= MAX_GAPS_PER_CATEGORY) break;
             const relPath = toPosixPath(relative(root, absPath));
             if (changedFiles && !changedFiles.has(relPath)) continue;
 
@@ -1369,7 +1543,6 @@ export class ReconciliationScannerService {
             const lines = content.split(/\r?\n/);
 
             for (let i = 0; i < lines.length; i++) {
-                if (found >= MAX_GAPS_PER_CATEGORY) break;
                 const line = lines[i];
 
                 let method: string | null = null;
@@ -1380,10 +1553,16 @@ export class ReconciliationScannerService {
                     method = stdMatch[1].toUpperCase();
                     routeStr = stdMatch[3].trim();
                 } else {
-                    const bunMatch = BUN_PATHNAME_EQ_RE.exec(line) || BUN_PATHNAME_SW_RE.exec(line);
-                    if (bunMatch) {
-                        method = 'HTTP';
-                        routeStr = bunMatch[2].trim();
+                    const onMatch = ON_ROUTE_RE.exec(line);
+                    if (onMatch) {
+                        method = onMatch[2].toUpperCase();
+                        routeStr = onMatch[4].trim();
+                    } else {
+                        const bunMatch = BUN_PATHNAME_EQ_RE.exec(line) || BUN_PATHNAME_SW_RE.exec(line);
+                        if (bunMatch) {
+                            method = 'HTTP';
+                            routeStr = bunMatch[2].trim();
+                        }
                     }
                 }
 
@@ -1397,6 +1576,12 @@ export class ReconciliationScannerService {
                 const dedupKey = `${relPath}:${symbol}`;
                 if (seen.has(dedupKey)) continue;
                 seen.add(dedupKey);
+
+                if (found >= MAX_GAPS_PER_CATEGORY) {
+                    // Budget exhausted: still walk the candidates so the drop count is exact.
+                    emissions.count('GAP_A_ORPHAN_ROUTE', 1);
+                    continue;
+                }
 
                 const id = makeGapId('GAP_A_ORPHAN_ROUTE', relPath, symbol);
                 const slug = toSlug(`${method}-${routeStr}`);
@@ -1430,6 +1615,7 @@ export class ReconciliationScannerService {
         statusByGapId: Map<string, ReconciliationGapStatus>,
         changedFiles: Set<string> | null,
         out: ReconciliationGapDto[],
+        emissions: ScanEmissionTracker,
     ): void {
         const schemaFileSet = new Set<string>(
             walkFiles(root, (_p, name) => isSchemaFile(name), MAX_SCHEMA_FILES, [], CODE_SKIP_DIRS),
@@ -1456,7 +1642,6 @@ export class ReconciliationScannerService {
         const suggestedTarget = `${sdlcRootName}/07.technical/02.data-design/03.data-dictionary.md`;
 
         for (const absPath of schemaFileSet) {
-            if (found >= MAX_GAPS_PER_CATEGORY) break;
             const relPath = toPosixPath(relative(root, absPath));
             if (changedFiles && !changedFiles.has(relPath)) continue;
 
@@ -1466,7 +1651,6 @@ export class ReconciliationScannerService {
             const lines = content.split(/\r?\n/);
 
             for (let i = 0; i < lines.length; i++) {
-                if (found >= MAX_GAPS_PER_CATEGORY) break;
                 const line = lines[i];
 
                 let rawName: string | null = null;
@@ -1501,6 +1685,11 @@ export class ReconciliationScannerService {
                 if (seen.has(dedupKey)) continue;
                 seen.add(dedupKey);
 
+                if (found >= MAX_GAPS_PER_CATEGORY) {
+                    emissions.count('GAP_B_UNFED_SCHEMA', 1);
+                    continue;
+                }
+
                 const id = makeGapId('GAP_B_UNFED_SCHEMA', relPath, symbol);
                 const lineRange = `${i + 1}-${i + 1}`;
 
@@ -1522,8 +1711,9 @@ export class ReconciliationScannerService {
             }
         }
 
-        // Also scan **/schema/*.schema.json files
-        if (found < MAX_GAPS_PER_CATEGORY) {
+        // Also scan **/schema/*.schema.json files. When struct/sql pass already filled the budget
+        // this pass runs purely to count its DROPPED items (nothing is emitted).
+        {
             const jsonSchemas = walkFiles(
                 root,
                 (absPath, name) => {
@@ -1538,7 +1728,6 @@ export class ReconciliationScannerService {
             );
 
             for (const absPath of jsonSchemas) {
-                if (found >= MAX_GAPS_PER_CATEGORY) break;
                 const relPath = toPosixPath(relative(root, absPath));
                 if (changedFiles && !changedFiles.has(relPath)) continue;
 
@@ -1555,6 +1744,11 @@ export class ReconciliationScannerService {
                 const dedupKey = `${relPath}:${symbol}`;
                 if (seen.has(dedupKey)) continue;
                 seen.add(dedupKey);
+
+                if (found >= MAX_GAPS_PER_CATEGORY) {
+                    emissions.count('GAP_B_UNFED_SCHEMA', 1);
+                    continue;
+                }
 
                 const content = safeReadText(absPath) ?? '';
                 const lines = content.split(/\r?\n/);

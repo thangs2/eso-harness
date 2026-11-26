@@ -1051,7 +1051,8 @@ export interface PostgresKnowledgeStatsDto {
     indexedDocsCount: number;
     unindexedCount: number;
     staleDbCount: number;
-    lastSyncedAt: string | null;
+    /** Server field: `ReconciliationPostgresStatsDto` (reconciliation-scanner.service.ts) sends ghost rows. */
+    ghostDbCount: number;
 }
 
 export interface ReconciliationGapDto {
@@ -1077,6 +1078,8 @@ export interface ReconciliationScanResultDto {
     pipelineStages?: SdlcPipelineStageCoverageDto[];
     postgresStats?: PostgresKnowledgeStatsDto;
     gaps: ReconciliationGapDto[];
+    /** Items dropped by the scanner's per-type emission caps; absent/missing key = 0. */
+    truncated?: Partial<Record<DiscrepancyType, number>>;
 }
 
 export interface ReconciliationGapsResponseDto {
@@ -1087,5 +1090,7 @@ export interface ReconciliationGapsResponseDto {
     pipelineStages?: SdlcPipelineStageCoverageDto[];
     postgresStats?: PostgresKnowledgeStatsDto;
     gaps: ReconciliationGapDto[];
+    /** Items dropped by the scanner's per-type emission caps; absent/missing key = 0. */
+    truncated?: Partial<Record<DiscrepancyType, number>>;
 }
 

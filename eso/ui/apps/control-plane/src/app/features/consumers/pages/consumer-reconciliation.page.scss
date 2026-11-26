@@ -112,6 +112,49 @@
     }
 }
 
+.ledger-count {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+/* Scope of the list itself: the git-diff subset, not the full ledger */
+.scope-tag {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    padding: 0.0625rem 0.4375rem;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, #f59e0b 32%, var(--line));
+    background: color-mix(in srgb, #f59e0b 9%, transparent);
+    color: #fbbf24;
+    white-space: nowrap;
+    cursor: help;
+}
+
+/* Capped emission: the count is text, never colour alone */
+.cap-warn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: #fbbf24;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: help;
+
+    strong {
+        color: #fbbf24;
+        font-variant-numeric: tabular-nums;
+    }
+}
+
+.cap-icon {
+    width: 0.75rem;
+    height: 0.75rem;
+    flex-shrink: 0;
+}
+
 .ledger-hint {
     font-size: 0.6875rem;
     opacity: 0.8;

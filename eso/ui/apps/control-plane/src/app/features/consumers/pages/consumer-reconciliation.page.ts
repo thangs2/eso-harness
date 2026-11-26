@@ -96,7 +96,7 @@ export class ConsumerReconciliationPage implements OnInit {
                     return false;
                 }
             } else if (pillar === 'sdlc') {
-                if (!['GAP_E_MISSING_SDLC_DOC', 'GAP_C_STALE_HASH'].includes(gap.type)) {
+                if (!['GAP_E_MISSING_SDLC_DOC'].includes(gap.type)) {
                     return false;
                 }
             } else if (pillar === 'postgres') {
@@ -118,6 +118,32 @@ export class ConsumerReconciliationPage implements OnInit {
             }
             return true;
         });
+    });
+
+    /**
+     * Number of capped-out discrepancies relevant to the CURRENT pillar/type filter.
+     * Only types the filter keeps are summed, so a pillar/type selection never
+     * surfaces a misleading global number. Severity/search are row-level filters
+     * the backend cap does not apply to, so they are not folded in here.
+     */
+    readonly hiddenByCapCount = computed(() => {
+        const truncated = this.summary().truncated ?? {};
+        const pillar = this.activePillar();
+        const type = this.filterType();
+        return (Object.entries(truncated) as [DiscrepancyType, number | undefined][]).reduce((total, [gapType, dropped]) => {
+            if (typeof dropped !== 'number' || dropped <= 0) return total;
+            const keptByPillar =
+                pillar === 'code'
+                    ? ['GAP_A_ORPHAN_ROUTE', 'GAP_B_UNFED_SCHEMA', 'GAP_D_UNLINKED_SPIKE'].includes(gapType)
+                    : pillar === 'sdlc'
+                      ? ['GAP_E_MISSING_SDLC_DOC'].includes(gapType)
+                      : pillar === 'postgres'
+                        ? gapType === 'GAP_F_INDEX_DRIFT'
+                        : true;
+            if (!keptByPillar) return total;
+            if (type !== 'all' && gapType !== type) return total;
+            return total + dropped;
+        }, 0);
     });
 
     readonly selectedGap = computed<ReconciliationGapDto | null>(() => {

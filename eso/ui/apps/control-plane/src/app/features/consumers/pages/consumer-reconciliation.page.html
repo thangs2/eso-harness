@@ -29,6 +29,7 @@
     <eso-reconciliation-pipeline
         [stages]="pipelineStages()"
         [postgresStats]="postgresStats()"
+        [scanScope]="scanScope()"
         [activePillar]="activePillar()"
         [codeDriftCount]="codeDriftCount()"
         [missingSdlcCount]="missingSdlcCount()"
@@ -65,7 +66,30 @@
                 <!-- Left Pane: Dense Interactive Discrepancy Ledger -->
                 <div class="ledger-pane" role="listbox" aria-label="Discrepancy list">
                     <div class="ledger-list-head">
-                        <span>Showing <strong>{{ filteredGaps().length }}</strong> of {{ reconciliationService.gaps().length }} discrepancies</span>
+                        <span class="ledger-count">
+                            <span>
+                                Showing <strong>{{ filteredGaps().length }}</strong> of {{ reconciliationService.gaps().length }} discrepancies
+                            </span>
+                            @if (scanScope() === 'git-diff') {
+                                <span
+                                    class="scope-tag"
+                                    title="This list is the git-diff subset: only discrepancies in files changed since the last commit. Pillar, S1-S17 stage and knowledge_doc counts below headline the whole repository."
+                                >git-diff subset &middot; counts are full repo</span>
+                            }
+                            @if (hiddenByCapCount() > 0) {
+                                <span
+                                    class="cap-warn"
+                                    [attr.aria-label]="'The scan capped its output: ' + hiddenByCapCount() + ' more discrepancies were dropped and are not in this list'"
+                                    [title]="hiddenByCapCount() + ' more discrepancies were dropped by the scan output cap and are not in this list'"
+                                >
+                                    <svg class="cap-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                                        <path d="M8 2.5l6 10.5H2L8 2.5z" stroke-linejoin="round" />
+                                        <path d="M8 6.5v2.5M8 11h.01" stroke-linecap="round" />
+                                    </svg>
+                                    <span>&middot; <strong>{{ hiddenByCapCount() }}</strong> more not shown (capped)</span>
+                                </span>
+                            }
+                        </span>
                         <span class="ledger-hint">Select a row to inspect &amp; reconcile</span>
                     </div>
 

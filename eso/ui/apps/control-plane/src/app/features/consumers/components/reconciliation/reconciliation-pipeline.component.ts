@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 import { CommonModule } from '@angular/common';
 import type {
     PostgresKnowledgeStatsDto,
+    ReconciliationScanScope,
     SdlcPipelineStageCoverageDto,
 } from '../../models/reconciliation.models.js';
 
@@ -11,6 +12,18 @@ import type {
     imports: [CommonModule],
     template: `
         <section class="cockpit-overview" aria-label="3-Pillar Sync Architecture and SDLC Coverage">
+            <!-- Scope of the counts below: in git-diff mode only the gap list is narrowed, these counters stay whole-repo -->
+            @if (scanScope() === 'git-diff') {
+                <div class="scope-row">
+                    <span class="scope-note" role="note" [attr.aria-label]="scopeNoteTitle" [title]="scopeNoteTitle">
+                        <svg class="icon-xs" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                            <path d="M2.5 4.5h2.5l2 7 2-7h2.5M11.5 4.5h2" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                        <span>Counts: full repo</span>
+                    </span>
+                </div>
+            }
+
             <!-- Top: 3-Pillar Health Ribbon (Clean 3-column horizontal bar, zero nested clutter) -->
             <div class="pillars-bar" role="tablist" aria-label="Filter by reconciliation pillar">
                 <!-- Pillar 1: Source Code -->
@@ -88,7 +101,7 @@ import type {
                         </span>
                     </div>
                     <div class="pillar-meta">
-                        <code>GAP-F</code> &mdash; <strong class="num">{{ postgresStats()?.indexedDocsCount ?? 0 }}</strong> rows in <code>knowledge_doc</code>
+                        <code>GAP-F</code> &mdash; <strong class="num">{{ postgresStats()?.indexedDocsCount ?? 0 }}</strong> rows in <code>knowledge_doc</code>@if ((postgresStats()?.ghostDbCount ?? 0) > 0) { &middot; <span class="ghost-note">{{ postgresStats()?.ghostDbCount }} ghost</span> }
                     </div>
                 </button>
             </div>
@@ -114,7 +127,7 @@ import type {
                             <path d="M6 3.5L10.5 8 6 12.5" stroke-linecap="round" stroke-linejoin="round" />
                         </svg>
                         <span class="pipeline-title">SDLC Pipeline Coverage (S1&ndash;S17)</span>
-                        <span class="pipeline-ratio">{{ coveredCount() }}/17 covered</span>
+                        <span class="pipeline-ratio">{{ coveredCount() }}/17 covered@if (scanScope() === 'git-diff') { <span class="ratio-scope"> &middot; full repo</span> }</span>
                     </button>
 
                     <div class="pipeline-right">
@@ -229,6 +242,34 @@ import type {
             overflow: hidden;
         }
 
+        /* Git-diff scope note: counts below are whole-repo while the ledger is narrowed */
+        .scope-row {
+            display: flex;
+            justify-content: flex-end;
+            padding: var(--space-2) var(--space-4) 0;
+        }
+
+        .scope-note {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--space-1);
+            padding: 0.0625rem 0.4375rem;
+            border-radius: 999px;
+            border: 1px solid color-mix(in srgb, #f59e0b 32%, var(--line));
+            background: color-mix(in srgb, #f59e0b 9%, transparent);
+            color: #fbbf24;
+            font-size: 0.6875rem;
+            font-weight: 600;
+            letter-spacing: 0.01em;
+            white-space: nowrap;
+            cursor: help;
+
+            &:focus-visible {
+                outline: 2px solid var(--brand);
+                outline-offset: 2px;
+            }
+        }
+
         /* 3-Pillar Ribbon */
         .pillars-bar {
             display: grid;
@@ -323,6 +364,11 @@ import type {
                 color: var(--ink);
                 font-weight: 600;
                 font-variant-numeric: tabular-nums;
+            }
+
+            .ghost-note {
+                color: #fbbf24;
+                font-weight: 500;
             }
         }
 
@@ -447,6 +493,11 @@ import type {
             border-radius: 999px;
             border: 1px solid var(--line);
             background: var(--surface);
+        }
+
+        .ratio-scope {
+            font-weight: 500;
+            color: #fbbf24;
         }
 
         .pipeline-right {
@@ -600,6 +651,7 @@ import type {
 export class ReconciliationPipelineComponent {
     readonly stages = input<SdlcPipelineStageCoverageDto[]>([]);
     readonly postgresStats = input<PostgresKnowledgeStatsDto | null>(null);
+    readonly scanScope = input<ReconciliationScanScope>('full');
     readonly activePillar = input<'all' | 'code' | 'sdlc' | 'postgres'>('all');
     readonly codeDriftCount = input<number>(0);
     readonly missingSdlcCount = input<number>(0);
@@ -609,6 +661,11 @@ export class ReconciliationPipelineComponent {
     readonly stageSelect = output<SdlcPipelineStageCoverageDto>();
 
     readonly pipelineExpanded = signal<boolean>(true);
+
+    /** Explains, for sighted and screen-reader users alike, why these counters exceed the git-diff ledger. */
+    readonly scopeNoteTitle =
+        'Pillar, S1–S17 stage and knowledge_doc counts come from a full scan of the whole repository. ' +
+        'Only the discrepancy list is filtered to files changed since the last commit (git-diff).';
 
     readonly groupAStages = computed(() => this.stages().filter((s) => s.group === 'A'));
     readonly groupBStages = computed(() => this.stages().filter((s) => s.group === 'B'));

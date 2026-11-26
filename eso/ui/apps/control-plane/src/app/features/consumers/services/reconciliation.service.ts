@@ -1,15 +1,37 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { ConsumerProfileService } from '../../../core/consumers/consumer-profile.service.js';
-import type { ConsumerArtifactDto } from '../pages/consumer-settings.models.js';
+// The api-client DTOs and the local mirror in reconciliation.models.ts are near-duplicates that have
+// drifted (api still carries `lastSyncedAt`, the mirror now carries `ghostDbCount`), so both are imported
+// under explicit aliases and every API stats payload is converted by `toModelStats` below.
 import type {
     DiscrepancySeverity,
     DiscrepancyType,
-    PostgresKnowledgeStatsDto,
     ReconciliationGapDto,
+} from '../../../../../../../libs/api-client/types.js';
+import type { PostgresKnowledgeStatsDto as ApiPostgresStatsDto } from '../../../../../../../libs/api-client/types.js';
+import type { ConsumerArtifactDto } from '../pages/consumer-settings.models.js';
+import type {
+    PostgresKnowledgeStatsDto as ModelPostgresStatsDto,
     ReconciliationScanScope,
     ReconciliationScanSummaryDto,
+    ReconciliationTruncatedByType,
     SdlcPipelineStageCoverageDto,
 } from '../models/reconciliation.models.js';
+
+/**
+ * Converts an api-client `PostgresKnowledgeStatsDto` into the UI mirror's shape.
+ * Both DTOs now carry the server's real fields (`ghostDbCount` replaced a non-existent
+ * `lastSyncedAt` in api-client/types.ts), so this is a straight pass-through.
+ */
+function toModelStats(stats: ApiPostgresStatsDto): ModelPostgresStatsDto {
+    return {
+        diskMarkdownCount: stats.diskMarkdownCount,
+        indexedDocsCount: stats.indexedDocsCount,
+        unindexedCount: stats.unindexedCount,
+        staleDbCount: stats.staleDbCount,
+        ghostDbCount: stats.ghostDbCount ?? 0,
+    };
+}
 
 @Injectable({
     providedIn: 'root',
@@ -20,7 +42,8 @@ export class ReconciliationService {
     // Consumer-scoped state
     private readonly gapsByConsumer = signal<Record<string, ReconciliationGapDto[]>>({});
     private readonly pipelineStagesByConsumer = signal<Record<string, SdlcPipelineStageCoverageDto[]>>({});
-    private readonly postgresStatsByConsumer = signal<Record<string, PostgresKnowledgeStatsDto>>({});
+    private readonly postgresStatsByConsumer = signal<Record<string, ModelPostgresStatsDto>>({});
+    private readonly truncatedByConsumer = signal<Record<string, ReconciliationTruncatedByType>>({});
 
     readonly activeConsumerId = signal<string>('');
     readonly scanScope = signal<ReconciliationScanScope>('full');
@@ -43,10 +66,15 @@ export class ReconciliationService {
     });
 
     // Active consumer PostgreSQL sync stats
-    readonly postgresStats = computed<PostgresKnowledgeStatsDto | null>(() => {
+    readonly postgresStats = computed<ModelPostgresStatsDto | null>(() => {
         const id = this.activeConsumerId();
         return id ? (this.postgresStatsByConsumer()[id] ?? null) : null;
     });
+
+    // Active consumer truncation counts reported by the backend emission cap
+    readonly truncated = computed<ReconciliationTruncatedByType>(
+        () => this.truncatedByConsumer()[this.activeConsumerId()] ?? {}
+    );
 
     // Computed Summary Metrics
     readonly summary = computed<ReconciliationScanSummaryDto>(() => {
@@ -64,6 +92,7 @@ export class ReconciliationService {
             lastScannedAt: this.lastScannedAt() || 'Never scanned',
             scope: this.scanScope(),
             ignoredCount: this.ignoredCount(),
+            truncated: this.truncated(),
             pipelineStages: this.pipelineStages(),
             postgresStats: this.postgresStats() || undefined,
         };
@@ -78,6 +107,17 @@ export class ReconciliationService {
             directory: s.directory || s.expectedFolder || 'sdlc/',
             docCount: typeof s.docCount === 'number' ? s.docCount : 0,
             status: s.status || 'missing',
+        }));
+    }
+
+    /**
+     * Stores the backend-reported per-type truncation counts for a consumer.
+     * A missing/absent payload is treated as `{}` (nothing was dropped).
+     */
+    private setTruncated(consumerId: string, truncated: ReconciliationTruncatedByType | undefined): void {
+        this.truncatedByConsumer.update((prev) => ({
+            ...prev,
+            [consumerId]: truncated ?? {},
         }));
     }
 
@@ -111,7 +151,7 @@ export class ReconciliationService {
             if (res.postgresStats) {
                 this.postgresStatsByConsumer.update((prev) => ({
                     ...prev,
-                    [consumerId]: res.postgresStats!,
+                    [consumerId]: toModelStats(res.postgresStats!),
                 }));
             }
             if (res.scannedAt) {
@@ -123,6 +163,7 @@ export class ReconciliationService {
             if (typeof res.ignoredCount === 'number') {
                 this.ignoredCount.set(res.ignoredCount);
             }
+            this.setTruncated(consumerId, res.truncated);
             this.error.set(null);
             return loadedGaps;
         } catch (err: any) {
@@ -160,7 +201,7 @@ export class ReconciliationService {
             if (result.postgresStats) {
                 this.postgresStatsByConsumer.update((prev) => ({
                     ...prev,
-                    [consumerId]: result.postgresStats!,
+                    [consumerId]: toModelStats(result.postgresStats!),
                 }));
             }
             this.lastScannedAt.set(
@@ -169,6 +210,7 @@ export class ReconciliationService {
             if (typeof result.ignoredCount === 'number') {
                 this.ignoredCount.set(result.ignoredCount);
             }
+            this.setTruncated(consumerId, result.truncated);
             this.scanning.set(false);
             return detectedGaps;
         } catch (err: any) {
@@ -205,12 +247,13 @@ export class ReconciliationService {
             if (result.postgresStats) {
                 this.postgresStatsByConsumer.update((prev) => ({
                     ...prev,
-                    [consumerId]: result.postgresStats!,
+                    [consumerId]: toModelStats(result.postgresStats!),
                 }));
             }
             this.lastScannedAt.set(
                 result.scannedAt ? new Date(result.scannedAt).toLocaleTimeString() : new Date().toLocaleTimeString()
             );
+            this.setTruncated(consumerId, result.truncated);
             this.syncingIndex.set(false);
             return updatedGaps;
         } catch (err: any) {

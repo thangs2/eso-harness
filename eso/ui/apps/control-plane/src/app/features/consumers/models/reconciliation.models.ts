@@ -22,12 +22,17 @@ export interface SdlcPipelineStageCoverageDto {
     status: 'covered' | 'missing' | 'drift';
 }
 
+/**
+ * UI mirror of the PostgreSQL knowledge stats used by the cockpit template (`ghostDbCount`).
+ * Kept free of the older wire field on purpose: reconciliation-cockpit.test.mjs pins this shape.
+ * reconciliation.service.ts converts the api-client payload with `toModelStats`.
+ */
 export interface PostgresKnowledgeStatsDto {
     diskMarkdownCount: number;
     indexedDocsCount: number;
     unindexedCount: number;
     staleDbCount: number;
-    lastSyncedAt: string | null;
+    ghostDbCount: number;
 }
 
 export interface ReconciliationGapDto {
@@ -45,6 +50,37 @@ export interface ReconciliationGapDto {
     status: ReconciliationGapStatus;
 }
 
+/**
+ * Count of gaps DROPPED by the backend emission cap, keyed by GAP type
+ * (GAP-F caps at MAX_INDEX_DRIFT_GAPS, A/B/D/E at MAX_GAPS_PER_CATEGORY).
+ * A missing key means 0.
+ */
+export type ReconciliationTruncatedByType = Partial<Record<DiscrepancyType, number>>;
+
+/** Backend scan / sync-index response (`ReconciliationScanResultDto`). */
+export interface ReconciliationScanResultDto {
+    consumerId: string;
+    scannedAt: string;
+    scope?: ReconciliationScanScope;
+    ignoredCount?: number;
+    truncated?: ReconciliationTruncatedByType;
+    pipelineStages?: SdlcPipelineStageCoverageDto[];
+    postgresStats?: PostgresKnowledgeStatsDto;
+    gaps: ReconciliationGapDto[];
+}
+
+/** Backend stored-scan response (`ReconciliationGapsResponseDto`). */
+export interface ReconciliationGapsResponseDto {
+    consumerId: string;
+    scannedAt: string | null;
+    scope?: ReconciliationScanScope;
+    ignoredCount?: number;
+    truncated?: ReconciliationTruncatedByType;
+    pipelineStages?: SdlcPipelineStageCoverageDto[];
+    postgresStats?: PostgresKnowledgeStatsDto;
+    gaps: ReconciliationGapDto[];
+}
+
 export interface ReconciliationScanSummaryDto {
     totalGaps: number;
     openGaps: number;
@@ -58,6 +94,7 @@ export interface ReconciliationScanSummaryDto {
     lastScannedAt: string;
     scope?: ReconciliationScanScope;
     ignoredCount?: number;
+    truncated?: ReconciliationTruncatedByType;
     pipelineStages?: SdlcPipelineStageCoverageDto[];
     postgresStats?: PostgresKnowledgeStatsDto;
 }
