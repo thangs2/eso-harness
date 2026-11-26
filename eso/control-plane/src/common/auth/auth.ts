@@ -101,4 +101,17 @@ export class AuthService {
         const actor = this.authenticate(header);
         return { kind: actor.kind, configured: true };
     }
+
+    /**
+     * The operator Basic credential, for the local dev UI to prefill its sign-in form.
+     *
+     * Only ever called from the `/api/v1/auth/dev-credential` route, which itself refuses anything
+     * that is not a loopback request in a development build. It exists because the UI previously
+     * hard-coded a placeholder password that the server never accepted, so a correctly configured
+     * local stack still showed a 401 on first load. The value returned here is the same one
+     * `loadAuthConfig` read from `eso/.env`; nothing new is stored or exposed.
+     */
+    devCredential(): { user: string; password: string } {
+        return { user: this.config.user, password: this.config.password };
+    }
 }

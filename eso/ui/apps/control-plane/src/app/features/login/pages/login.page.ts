@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
@@ -26,7 +26,10 @@ import { AppConfigService } from '../../../core/config/app-config.service.js';
                         <p class="form-error" role="alert">{{ error() }}</p>
                     }
                     @if (isDev) {
-                        <p class="login-hint">Dev credential: <code>operator</code> / <code>eso-dev-only-token</code> — prefilled by this build.</p>
+                        <p class="login-hint">
+                            Dev credentials — prefilled from this control plane's <code>eso/.env</code>
+                            (the same values it authenticates with).
+                        </p>
                     }
                     <form (ngSubmit)="submit()" class="login-form">
                         <mat-form-field appearance="outline">
@@ -53,8 +56,14 @@ export class LoginPage {
     private readonly route = inject(ActivatedRoute);
 
     private readonly isDev = this.config.environment() === 'development';
+    private readonly cdr = inject(ChangeDetectorRef);
 
     constructor() {
+        // Dev builds prefill the credential the control plane actually accepts, fetched from its
+        // own loopback-only /auth/dev-credential route (the route 404s in production). The old
+        // hard-coded placeholder password was never accepted by the server, so a correctly
+        // configured local stack still landed on a 401.
+        if (this.isDev) void this.prefillDevCredential();
         // A new tab may receive the credential from an already signed-in tab; continue to the
         // requested page instead of asking the operator to type it again.
         void this.auth.ready.then(() => {
@@ -64,9 +73,27 @@ export class LoginPage {
 
     // Local dev convenience only: never ship these defaults in a production config.
     user = this.isDev ? 'operator' : '';
-    password = this.isDev ? 'eso-dev-only-token' : '';
+    password = '';
     readonly loading = signal(false);
     readonly error = signal<string | null>(null);
+
+    /** Fetches the real dev credential; any failure simply leaves the form for manual entry. */
+    private async prefillDevCredential(): Promise<void> {
+        try {
+            const res = await fetch(`${this.config.apiBaseUrl()}/api/v1/auth/dev-credential`, {
+                headers: { Accept: 'application/json' },
+            });
+            if (!res.ok) return;
+            const body = (await res.json()) as { user?: unknown; password?: unknown };
+            if (typeof body.user === 'string' && body.user) this.user = body.user;
+            if (typeof body.password === 'string' && body.password) this.password = body.password;
+            // The fetch resolves after the first render, and plain fields are not signals, so the
+            // form has to be told explicitly or it would keep showing the blank inputs.
+            this.cdr.markForCheck();
+        } catch {
+            // Control plane unreachable: leave the form blank for manual entry.
+        }
+    }
 
     async submit(): Promise<void> {
         this.error.set(null);

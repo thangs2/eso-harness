@@ -284,6 +284,26 @@ export async function createPlatformServer(options: PlatformServerOptions): Prom
         return auth.me(request.headers.authorization);
     });
 
+    /**
+     * Local dev convenience: the operator Basic credential, so the sign-in form can prefill the
+     * password the server will actually accept instead of a hard-coded placeholder.
+     *
+     * Refuses unless BOTH hold:
+     *   - the request arrived on loopback (a dev machine talking to its own control plane), and
+     *   - the build is development (`ESO_ENV !== 'production'`).
+     * Anything else gets 404, i.e. the route does not advertise its own existence.
+     */
+    app.get('/api/v1/auth/dev-credential', async (request, reply) => {
+        const remote = request.socket?.remoteAddress ?? '';
+        const isLoopback = remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1';
+        const environment = process.env.ESO_ENV || process.env.NODE_ENV || 'development';
+        if (!isLoopback || environment === 'production') {
+            reply.code(404);
+            return { code: 'NOT_FOUND', message: 'Not found' };
+        }
+        return auth.devCredential();
+    });
+
     app.get('/api/v1/fs/resolve-directory', { preHandler: requireAuth }, async (request, reply) => {
         try {
             return await fsBrowse.resolveDirectory(String((request.query as any)?.name || ''));
