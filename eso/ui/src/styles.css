@@ -1571,3 +1571,46 @@ button.mat-mdc-button-base { white-space: nowrap; }
 .eso-select-panel .mat-mdc-option:hover, .eso-select-panel .mat-mdc-option.mat-mdc-option-active { background: var(--surface-2); }
 .eso-select-panel .mat-mdc-option.mdc-list-item--selected { background: color-mix(in srgb, var(--brand) 14%, var(--surface)); color: #fff; }
 .eso-select-panel .mat-mdc-option .mdc-list-item__primary-text { color: inherit; }
+
+/* ---------------------------------------------------------------------------
+   eso-sheet — one modal surface for the control plane.
+   Apply `eso-sheet` to a native <dialog> and `eso-sheet-panel` to its single
+   child wrapper (grid rows: head / body). Desktop = centred dialog; below
+   47.9375rem the same markup becomes a bottom sheet pinned to the lower edge,
+   so the close control and the content start within thumb reach. The panel
+   must not set its own height unit: `--eso-sheet-max` is the single knob
+   (100dvh keeps mobile browser chrome from clipping the sheet).
+   Width stays per-usage via `--eso-sheet-width` (e.g. 38rem for a file list,
+   56rem for a long-form guide).
+--------------------------------------------------------------------------- */
+.eso-sheet {
+  width: min(var(--eso-sheet-width, 46rem), 94vw);
+  max-height: 86vh;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: .875rem;
+  background: #0b111b;
+  color: #e2e8f0;
+}
+.eso-sheet::backdrop { background: rgba(2,6,14,.74); backdrop-filter: blur(.125rem); }
+.eso-sheet-panel { display: grid; grid-template-rows: auto minmax(0,1fr); max-height: 86vh; }
+
+@media (max-width: 47.9375rem) {
+  .eso-sheet {
+    width: 100vw;
+    max-width: 100vw;
+    max-height: var(--eso-sheet-max, 85dvh);
+    margin: 0;
+    margin-top: auto;
+    border-radius: .875rem .875rem 0 0;
+    border-bottom: 0;
+  }
+  .eso-sheet-panel { max-height: var(--eso-sheet-max, 85dvh); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .eso-sheet[open] { animation: eso-sheet-up .2s ease-out; }
+}
+@keyframes eso-sheet-up {
+  from { transform: translateY(1.5rem); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}

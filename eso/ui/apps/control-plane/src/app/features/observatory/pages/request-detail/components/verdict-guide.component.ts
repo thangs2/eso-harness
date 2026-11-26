@@ -11,8 +11,8 @@ import type { TurnVerdictView } from '../request-detail.models.js';
     standalone: true,
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
-        <dialog #dialog class="guide" aria-labelledby="guide-title" (click)="onBackdrop($event)">
-            <article class="guide-panel">
+        <dialog #dialog class="guide eso-sheet" style="--eso-sheet-width: 56rem" aria-labelledby="guide-title" (click)="onBackdrop($event)">
+            <article class="guide-panel eso-sheet-panel">
                 <header class="guide-head">
                     <div>
                         <p class="guide-eyebrow">ESO proof surface · Q1</p>
@@ -147,9 +147,8 @@ import type { TurnVerdictView } from '../request-detail.models.js';
         </dialog>
     `,
     styles: [`
-        .guide { width: min(56rem, 94vw); max-height: 88vh; padding: 0; border: 1px solid var(--line); border-radius: .875rem; background: #0b111b; color: #e2e8f0; }
-        .guide::backdrop { background: rgba(2,6,14,.74); backdrop-filter: blur(.125rem); }
-        .guide-panel { display: grid; grid-template-rows: auto minmax(0,1fr); max-height: 88vh; }
+        /* Size, backdrop and the mobile bottom-sheet behaviour come from eso-sheet (src/styles.css). */
+        .guide-panel { grid-template-rows: auto minmax(0,1fr); }
         .guide-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); padding: var(--space-4); border-bottom: 1px solid var(--line); background: #0b111b; }
         .guide-eyebrow { margin: 0 0 .125rem; color: var(--dim); font-size: .6875rem; letter-spacing: .09em; text-transform: uppercase; }
         h2 { margin: 0; font-size: 1.125rem; }
@@ -174,8 +173,6 @@ import type { TurnVerdictView } from '../request-detail.models.js';
         .guide-no { padding: var(--space-2); border: 1px dashed var(--line); border-radius: var(--radius-sm); color: var(--muted); }
         .guide-this { padding: var(--space-3); border: 1px solid rgba(56,189,248,.35); border-radius: var(--radius-md); background: rgba(56,189,248,.06); }
         @media (max-width: 47.9375rem) {
-            .guide { width: 100vw; max-height: 100vh; border-radius: 0; }
-            .guide-panel { max-height: 100vh; }
             .guide-grid > div { grid-template-columns: minmax(0,1fr); gap: .125rem; }
         }
     `],

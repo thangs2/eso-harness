@@ -204,8 +204,8 @@ import type { EvidenceEffectivenessView } from '../evidence-effectiveness.select
             platform (same pattern as ess-step-guide). On small viewports it is pinned to the bottom
             edge as a sheet, which keeps the close control and the list within thumb reach.
         -->
-        <dialog #filesDialog class="files-sheet" aria-labelledby="files-sheet-title" (click)="onSheetBackdrop($event)">
-            <div class="files-sheet-panel">
+        <dialog #filesDialog class="files-sheet eso-sheet" style="--eso-sheet-width: 38rem" aria-labelledby="files-sheet-title" (click)="onSheetBackdrop($event)">
+            <div class="files-sheet-panel eso-sheet-panel">
                 <header class="files-sheet-head">
                     <div>
                         <p class="files-sheet-eyebrow">Axis 1 · MET-08</p>
@@ -298,9 +298,9 @@ import type { EvidenceEffectivenessView } from '../evidence-effectiveness.select
         .axis-disclosure span { margin-left: auto; flex: 0 0 auto; color: var(--muted); font-variant-numeric: tabular-nums; }
         .axis-disclosure:hover span { color: inherit; }
 
-        .files-sheet { width: min(38rem, 94vw); max-height: 86vh; padding: 0; border: 1px solid var(--line); border-radius: 0.875rem; background: #0b111b; color: #e2e8f0; }
-        .files-sheet::backdrop { background: rgba(2,6,14,.74); backdrop-filter: blur(0.125rem); }
-        .files-sheet-panel { display: grid; grid-template-rows: auto auto minmax(0, 1fr); max-height: 86vh; }
+        /* Width, backdrop and the mobile bottom-sheet behaviour come from eso-sheet (src/styles.css);
+           this sheet only adds its own row structure (head / meta / list). */
+        .files-sheet-panel { grid-template-rows: auto auto minmax(0, 1fr); }
         .files-sheet-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); padding: var(--space-4); border-bottom: 1px solid var(--line); }
         .files-sheet-eyebrow { margin: 0 0 0.125rem; color: var(--dim); font-size: 0.6875rem; letter-spacing: 0.09em; text-transform: uppercase; }
         .files-sheet-head h2 { margin: 0; font-size: 1rem; }
@@ -316,19 +316,7 @@ import type { EvidenceEffectivenessView } from '../evidence-effectiveness.select
         .files-sheet-list li[data-used='false'] code { color: var(--muted); }
 
         @media (max-width: 47.9375rem) {
-            /* Bottom sheet: pinned to the lower edge, full width, sized by content up to 85% of the
-               dynamic viewport so the URL bar on mobile browsers cannot clip it. */
-            .files-sheet { width: 100vw; max-width: 100vw; max-height: 85dvh; margin: 0; margin-top: auto;
-                           border-radius: 0.875rem 0.875rem 0 0; border-bottom: 0; }
-            .files-sheet-panel { max-height: 85dvh; }
             .files-sheet-list li { grid-template-columns: 3.25rem minmax(0, 1fr); }
-        }
-        @media (prefers-reduced-motion: no-preference) {
-            .files-sheet[open] { animation: sheet-up 0.2s ease-out; }
-        }
-        @keyframes sheet-up {
-            from { transform: translateY(1.5rem); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
         }
 
         .diag-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-1); flex-wrap: wrap; margin-top: 0.125rem; }

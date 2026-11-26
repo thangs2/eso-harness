@@ -29,6 +29,7 @@ const GLANCE_CARDS_SRC = fs.readFileSync(
     path.join(OBS_DIR, 'pages/request-detail/components/glance-cards.component.ts'),
     'utf8',
 );
+const GLOBAL_STYLES_SRC = fs.readFileSync(path.resolve(HERE, '../src/styles.css'), 'utf8');
 const ROUTES_SRC = fs.readFileSync(
     path.resolve(HERE, '../apps/control-plane/src/app/routes.ts'),
     'utf8',
@@ -454,7 +455,10 @@ test('Layout overflow guards: VerdictPanel Q5/Q6, EvidenceEffectivenessPanel gri
     assert.match(EE_PANEL_SRC, /<dialog[^>]*#filesDialog/, 'the file list opens in a native dialog');
     assert.match(EE_PANEL_SRC, /showModal\(\)/, 'dialog opens via showModal for focus trap + Esc');
     assert.match(EE_PANEL_SRC, /@for \(file of view\(\)\.axis1\.fileList; track file\.path\)/, 'dialog lists every file');
-    assert.match(EE_PANEL_SRC, /\.files-sheet[^}]*margin-top:\s*auto/, 'bottom sheet pins to the lower edge on mobile');
+    // The sheet behaviour moved to the shared `.eso-sheet` primitive; assert it there, once.
+    assert.match(GLOBAL_STYLES_SRC, /\.eso-sheet\s*\{[^}]*width:\s*min\(var\(--eso-sheet-width/, 'shared sheet is width-parameterised');
+    assert.match(GLOBAL_STYLES_SRC, /\.eso-sheet\s*\{[^}]*margin-top:\s*auto/, 'shared sheet pins to the lower edge on mobile');
+    assert.match(GLOBAL_STYLES_SRC, /\.eso-sheet\[open\]\s*\{\s*animation/, 'open transition is gated on reduced-motion');
     assert.doesNotMatch(EE_PANEL_SRC, /MatBottomSheet|@angular\/material\/bottom-sheet/, 'no new bottom-sheet dependency');
 
     assert.match(GLANCE_CARDS_SRC, /CORE_PROOF_CODES/);
@@ -509,4 +513,24 @@ test('Axis 1 fileList: every touched file with its used/loaded split, and short 
     assert.equal(matrix.label, '05.packages-matrix.md');
     assert.ok(matrix.label.endsWith('.md'), 'extension must survive truncation');
     assert.ok(!matrix.label.includes('…/'), 'label is a basename, not the last two path segments');
+});
+
+test('Modals share one sheet primitive: no component re-declares its own mobile sheet or backdrop', () => {
+    // `step-guide` and `verdict-guide` used to go full-screen on mobile while `request-detail`'s
+    // sheet pinned to the bottom edge — three dialogs, three behaviours. They now all carry
+    // `.eso-sheet`, which owns sizing, the backdrop and the mobile bottom-sheet rule.
+    const modals = {
+        'step-guide.component.ts': fs.readFileSync(path.join(OBS_DIR, 'pages/request-detail/components/step-guide.component.ts'), 'utf8'),
+        'verdict-guide.component.ts': fs.readFileSync(path.join(OBS_DIR, 'pages/request-detail/components/verdict-guide.component.ts'), 'utf8'),
+        'evidence-effectiveness-panel.component.ts': EE_PANEL_SRC,
+    };
+    for (const [name, src] of Object.entries(modals)) {
+        assert.match(src, /class="[^"]*\beso-sheet\b/, `${name} uses the shared sheet`);
+        assert.match(src, /eso-sheet-panel/, `${name} marks its panel wrapper`);
+        assert.doesNotMatch(src, /::backdrop/, `${name} must not re-declare the backdrop`);
+        assert.doesNotMatch(src, /@keyframes\s+sheet-up/, `${name} must not re-declare the sheet animation`);
+        assert.doesNotMatch(src, /max-height:\s*100vh/, `${name} must not hard-code a mobile height unit`);
+    }
+    // The old duplicated full-screen rule is gone; the primitive owns it now.
+    assert.doesNotMatch(GLOBAL_STYLES_SRC, /\.eso-sheet\s*\{[^}]*border-radius:\s*0\b/, 'no full-screen square sheet');
 });
