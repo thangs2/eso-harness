@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import type { EvidenceEffectivenessView } from '../evidence-effectiveness.selectors.js';
 
@@ -59,12 +59,17 @@ import type { EvidenceEffectivenessView } from '../evidence-effectiveness.select
                         <div class="mini-fill" [attr.data-state]="view().axis1.state" [style.width.%]="view().axis1.ratioPct ?? 0"></div>
                     </div>
                     <p class="axis-note">{{ view().axis1.note }}</p>
-                    @if (view().axis1.chips.length > 0) {
-                        <div class="chip-row">
-                            @for (chip of view().axis1.chips; track chip) {
-                                <code class="chip" [title]="chip">{{ chip }}</code>
-                            }
-                        </div>
+                    <!--
+                        The score card shows progress, not the corpus: printing paths here made Axis 1
+                        the only card in the strip that grew past one metric row. The list is disclosed
+                        on demand (native <dialog>; a bottom sheet on small viewports).
+                    -->
+                    @if (view().axis1.fileList.length > 0) {
+                        <button type="button" class="axis-disclosure" (click)="openFiles()"
+                                [attr.aria-label]="'Show all ' + view().axis1.loadedCount + ' files behind Retrieval Precision'">
+                            <code>{{ view().axis1.chips[0] }}</code>
+                            <span>{{ view().axis1.loadedCount > 1 ? '+' + (view().axis1.loadedCount - 1) + ' more' : 'view file' }}</span>
+                        </button>
                     }
                 </article>
 
@@ -193,6 +198,38 @@ import type { EvidenceEffectivenessView } from '../evidence-effectiveness.select
                 </article>
             </div>
         </section>
+
+        <!--
+            Retrieval Precision detail. Native <dialog> so focus trap / Esc / backdrop come from the
+            platform (same pattern as ess-step-guide). On small viewports it is pinned to the bottom
+            edge as a sheet, which keeps the close control and the list within thumb reach.
+        -->
+        <dialog #filesDialog class="files-sheet" aria-labelledby="files-sheet-title" (click)="onSheetBackdrop($event)">
+            <div class="files-sheet-panel">
+                <header class="files-sheet-head">
+                    <div>
+                        <p class="files-sheet-eyebrow">Axis 1 · MET-08</p>
+                        <h2 id="files-sheet-title">Files behind Retrieval Precision</h2>
+                    </div>
+                    <button type="button" class="files-sheet-close" aria-label="Close file list" (click)="closeFiles()">×</button>
+                </header>
+                <div class="files-sheet-meta">
+                    <span><strong>{{ view().axis1.usedCount }}</strong> used</span>
+                    <span><strong>{{ view().axis1.loadedCount }}</strong> loaded</span>
+                    @if (view().axis1.ratioPct !== null) {
+                        <span><strong>{{ view().axis1.ratioPct }}%</strong> precision</span>
+                    }
+                </div>
+                <ul class="files-sheet-list">
+                    @for (file of view().axis1.fileList; track file.path) {
+                        <li [attr.data-used]="file.used">
+                            <span class="file-state" [attr.data-used]="file.used">{{ file.used ? 'used' : 'loaded' }}</span>
+                            <code [title]="file.path">{{ file.path }}</code>
+                        </li>
+                    }
+                </ul>
+            </div>
+        </dialog>
     `,
     styles: [`
         :host { display: block; min-width: 0; max-width: 100%; }
@@ -253,8 +290,46 @@ import type { EvidenceEffectivenessView } from '../evidence-effectiveness.select
         .mini-fill[data-state='weak'] { background: var(--danger-ink); }
 
         .axis-note { margin: 0; color: var(--muted); font-size: 0.6875rem; line-height: 1.4; overflow-wrap: anywhere; }
-        .chip-row { display: flex; flex-wrap: wrap; gap: 0.25rem; min-width: 0; max-width: 100%; overflow: hidden; }
-        .chip { display: inline-block; max-width: 100%; box-sizing: border-box; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0.0625rem 0.375rem; border: 1px solid var(--line-soft); border-radius: 0.25rem; background: var(--surface); color: #93c5fd; font-size: 0.6875rem; }
+        /* Axis 1 disclosure — one line, so all five cards keep the same height. */
+        .axis-disclosure { display: flex; align-items: center; gap: 0.375rem; min-width: 0; max-width: 100%; padding: 0.1875rem 0.375rem; border: 1px solid var(--line-soft); border-radius: 0.25rem; background: var(--surface); color: #93c5fd; font: inherit; font-size: 0.6875rem; cursor: pointer; overflow: hidden; }
+        .axis-disclosure:hover { border-color: var(--brand); color: #ffffff; }
+        .axis-disclosure:focus-visible { outline: 0.125rem solid var(--brand); outline-offset: 0.0625rem; }
+        .axis-disclosure code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.6875rem; }
+        .axis-disclosure span { margin-left: auto; flex: 0 0 auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+        .axis-disclosure:hover span { color: inherit; }
+
+        .files-sheet { width: min(38rem, 94vw); max-height: 86vh; padding: 0; border: 1px solid var(--line); border-radius: 0.875rem; background: #0b111b; color: #e2e8f0; }
+        .files-sheet::backdrop { background: rgba(2,6,14,.74); backdrop-filter: blur(0.125rem); }
+        .files-sheet-panel { display: grid; grid-template-rows: auto auto minmax(0, 1fr); max-height: 86vh; }
+        .files-sheet-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); padding: var(--space-4); border-bottom: 1px solid var(--line); }
+        .files-sheet-eyebrow { margin: 0 0 0.125rem; color: var(--dim); font-size: 0.6875rem; letter-spacing: 0.09em; text-transform: uppercase; }
+        .files-sheet-head h2 { margin: 0; font-size: 1rem; }
+        .files-sheet-close { width: 1.75rem; height: 1.75rem; border: 1px solid var(--line); border-radius: 50%; background: var(--surface-2); color: var(--muted); font-size: 1.125rem; line-height: 1; cursor: pointer; }
+        .files-sheet-meta { display: flex; gap: var(--space-3); flex-wrap: wrap; padding: var(--space-2) var(--space-4); border-bottom: 1px solid var(--line-soft); color: var(--muted); font-size: 0.75rem; }
+        .files-sheet-meta strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+        .files-sheet-list { margin: 0; padding: var(--space-2) var(--space-4) var(--space-4); list-style: none; overflow: auto; display: grid; gap: 0.125rem; }
+        .files-sheet-list li { display: grid; grid-template-columns: 3.5rem minmax(0, 1fr); align-items: baseline; gap: var(--space-2); padding: 0.1875rem 0; border-bottom: 1px solid var(--line-soft); }
+        .files-sheet-list li:last-child { border-bottom: 0; }
+        .file-state { font-size: 0.625rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--dim); }
+        .file-state[data-used='true'] { color: var(--ok-ink); }
+        .files-sheet-list code { font-size: 0.75rem; color: #cbd5e1; overflow-wrap: anywhere; }
+        .files-sheet-list li[data-used='false'] code { color: var(--muted); }
+
+        @media (max-width: 47.9375rem) {
+            /* Bottom sheet: pinned to the lower edge, full width, sized by content up to 85% of the
+               dynamic viewport so the URL bar on mobile browsers cannot clip it. */
+            .files-sheet { width: 100vw; max-width: 100vw; max-height: 85dvh; margin: 0; margin-top: auto;
+                           border-radius: 0.875rem 0.875rem 0 0; border-bottom: 0; }
+            .files-sheet-panel { max-height: 85dvh; }
+            .files-sheet-list li { grid-template-columns: 3.25rem minmax(0, 1fr); }
+        }
+        @media (prefers-reduced-motion: no-preference) {
+            .files-sheet[open] { animation: sheet-up 0.2s ease-out; }
+        }
+        @keyframes sheet-up {
+            from { transform: translateY(1.5rem); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
 
         .diag-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-1); flex-wrap: wrap; margin-top: 0.125rem; }
         .diag-pill { padding: 0.125rem 0.4375rem; border: 1px solid var(--line); border-radius: 0.25rem; background: var(--surface); color: #cbd5e1; font-size: 0.6875rem; font-weight: 600; }
@@ -310,6 +385,22 @@ import type { EvidenceEffectivenessView } from '../evidence-effectiveness.select
 export class EvidenceEffectivenessPanelComponent {
     readonly view = input.required<EvidenceEffectivenessView>();
     readonly consumerId = input<string>('');
+
+    @ViewChild('filesDialog') private filesDialog?: ElementRef<HTMLDialogElement>;
+
+    /** Open the full retrieval list; `showModal()` gives focus trap, Esc and backdrop for free. */
+    openFiles(): void {
+        this.filesDialog?.nativeElement.showModal();
+    }
+
+    closeFiles(): void {
+        this.filesDialog?.nativeElement.close();
+    }
+
+    /** A click on the backdrop lands on the dialog itself, never on the panel. */
+    onSheetBackdrop(event: MouseEvent): void {
+        if (event.target === this.filesDialog?.nativeElement) this.closeFiles();
+    }
 
     stateLabel(state: string): string {
         if (state === 'strong') return 'Strong';

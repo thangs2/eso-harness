@@ -35,6 +35,13 @@ export interface LearningHandoffItem {
     actionLabel: string;
 }
 
+/** One file the turn touched, with the distinction the audit needs: used, or only loaded. */
+export interface RetrievalFileItem {
+    path: string;
+    label: string;
+    used: boolean;
+}
+
 export interface RetrievalPrecisionAxis {
     loadedCount: number;
     usedCount: number;
@@ -43,7 +50,13 @@ export interface RetrievalPrecisionAxis {
     searchToolCount: number;
     editToolCount: number;
     reconCallsTotal: number;
+    /** Short labels for the card. The card never prints paths; the full list lives in `fileList`. */
     chips: string[];
+    /**
+     * Every touched file, sorted used-first then by path. The score card shows the progress only; the
+     * list is disclosed on demand in a dialog, so the card keeps the same shape as the other four axes.
+     */
+    fileList: RetrievalFileItem[];
     state: AxisState;
     note: string;
 }
@@ -139,11 +152,17 @@ function asString(value: unknown): string {
     return typeof value === 'string' ? value.trim() : '';
 }
 
+/**
+ * Short label for a path. The previous version kept the last two path segments, which for a nested
+ * doc (`…/01.landscape/05.packages-matrix.md`) was almost as long as the path itself and could drop
+ * the extension. The label only has to let a reader recognise the file, so it keeps the basename
+ * (with extension) and, when two files share a basename, the shortest parent prefix that differs.
+ */
 function baseName(filePath: string): string {
     const clean = filePath.trim();
     if (!clean) return '';
     const parts = clean.split('/').filter(Boolean);
-    return parts.length > 2 ? `…/${parts.slice(-2).join('/')}` : clean;
+    return parts.length ? parts[parts.length - 1] : clean;
 }
 
 /** Extract server-verified v2 sources from a sealed receipt without inventing entries. */
@@ -537,16 +556,15 @@ function buildAxis1RetrievalPrecision(detail: RequestDetailWithVerdict): Retriev
             if (r.calls > 0) chips.push(`${r.label || r.id} (${r.calls})`);
         }
     }
-    for (const f of Array.from(usedSet).slice(0, 4)) {
-        chips.push(baseName(f));
-    }
-    if (chips.length < 4) {
-        for (const f of Array.from(loadedSet)) {
-            const label = baseName(f);
-            if (!chips.includes(label)) chips.push(label);
-            if (chips.length >= 6) break;
-        }
-    }
+    // The card shows progress only; `fileList` carries the full set for the on-demand dialog.
+    // Used files come first because they explain the ratio; each entry keeps the used/loaded split
+    // the audit needs, which the card can no longer show.
+    const fileList: RetrievalFileItem[] = Array.from(loadedSet)
+        .map((path) => ({ path, label: baseName(path), used: usedSet.has(path) }))
+        .sort((left, right) => (left.used === right.used ? left.path.localeCompare(right.path) : left.used ? -1 : 1));
+    const usedLabels = fileList.filter((item) => item.used).map((item) => item.label);
+    if (usedLabels.length) chips.push(usedLabels[0]);
+    if (loadedSet.size > 1) chips.push(`+${loadedSet.size - 1} more`);
 
     const loadedCount = loadedSet.size;
     const usedCount = usedSet.size;
@@ -579,6 +597,7 @@ function buildAxis1RetrievalPrecision(detail: RequestDetailWithVerdict): Retriev
         editToolCount,
         reconCallsTotal,
         chips: chips.slice(0, 6),
+        fileList,
         state,
         note,
     };

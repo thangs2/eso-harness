@@ -443,7 +443,19 @@ test('Layout overflow guards: VerdictPanel Q5/Q6, EvidenceEffectivenessPanel gri
 
     assert.match(EE_PANEL_SRC, /\.ee-grid\s*\{[^}]*minmax\(0,\s*1fr\)/);
     assert.match(EE_PANEL_SRC, /\.axis-card\s*\{[^}]*min-width:\s*0/);
-    assert.match(EE_PANEL_SRC, /\.chip\s*\{[^}]*text-overflow:\s*ellipsis/);
+    // The button stays one line; the label inside it is what truncates.
+    assert.match(EE_PANEL_SRC, /\.axis-disclosure\s*\{[^}]*overflow:\s*hidden/);
+    assert.match(EE_PANEL_SRC, /\.axis-disclosure code\s*\{[^}]*text-overflow:\s*ellipsis/);
+
+    // Axis 1 shows progress, not the corpus: the card must not print a path list, and the list
+    // must be reachable on demand without adding a dependency.
+    assert.doesNotMatch(EE_PANEL_SRC, /class="chip-row"/, 'Axis 1 must not render a chip list inline');
+    assert.doesNotMatch(EE_PANEL_SRC, /class="chip"/, 'no inline path chips on the score card');
+    assert.match(EE_PANEL_SRC, /<dialog[^>]*#filesDialog/, 'the file list opens in a native dialog');
+    assert.match(EE_PANEL_SRC, /showModal\(\)/, 'dialog opens via showModal for focus trap + Esc');
+    assert.match(EE_PANEL_SRC, /@for \(file of view\(\)\.axis1\.fileList; track file\.path\)/, 'dialog lists every file');
+    assert.match(EE_PANEL_SRC, /\.files-sheet[^}]*margin-top:\s*auto/, 'bottom sheet pins to the lower edge on mobile');
+    assert.doesNotMatch(EE_PANEL_SRC, /MatBottomSheet|@angular\/material\/bottom-sheet/, 'no new bottom-sheet dependency');
 
     assert.match(GLANCE_CARDS_SRC, /CORE_PROOF_CODES/);
     assert.match(GLANCE_CARDS_SRC, /v\.gaps\.slice\(0,\s*5\)/);
@@ -452,4 +464,49 @@ test('Layout overflow guards: VerdictPanel Q5/Q6, EvidenceEffectivenessPanel gri
     assert.match(DETAIL_PAGE_SRC, /combineLatest/);
     assert.match(DETAIL_PAGE_SRC, /role="tabpanel"/);
     assert.match(DETAIL_PAGE_SRC, /overflow-x:\s*clip/);
+});
+
+test('Axis 1 fileList: every touched file with its used/loaded split, and short labels with extension', () => {
+    const detail = makeBaseDetail({
+        telegram: undefined,
+        events: [
+            {
+                observationId: 'o-1', traceId: 'trace-1', hostId: 'mac-1', runtimeKey: 'k', workerId: 'build-runtime',
+                event: 'action.recorded', outcome: 'PASS',
+                evidence: {
+                    tool: 'apply_patch',
+                    files: ['AGENTS.md', 'packages/fineso-core/src/index.ts'],
+                },
+                at: '2026-11-26T10:00:01Z',
+            },
+        ],
+        telemetry: {
+            llmCalls: [],
+            tools: [],
+            files: ['AGENTS.md', 'packages/fineso-core/src/index.ts', 'SDLC/04.architecture/01.landscape/05.packages-matrix.md'],
+        },
+    });
+    const view = buildEvidenceEffectivenessView({
+        detail,
+        preTurnGate: null,
+        actionEvents: [],
+        tokenSummary: { input: null, output: null, cacheRead: null, estimated: false },
+        fullReceipt: null,
+        receiptVerification: 'unavailable',
+        kbSufficiency: null,
+    });
+
+    const list = view.axis1.fileList;
+    assert.equal(list.length, 3, 'every loaded file appears exactly once');
+    assert.equal(list.filter((f) => f.used).length, 2, 'action.recorded files count as used');
+    assert.equal(list[0].used, true, 'used files are listed first so they explain the ratio');
+    assert.equal(view.axis1.loadedCount, 3);
+    assert.equal(view.axis1.usedCount, 2);
+
+    // Labels keep the extension and never drop it by cutting path segments.
+    const matrix = list.find((f) => f.path.endsWith('05.packages-matrix.md'));
+    assert.ok(matrix, 'the nested doc is present');
+    assert.equal(matrix.label, '05.packages-matrix.md');
+    assert.ok(matrix.label.endsWith('.md'), 'extension must survive truncation');
+    assert.ok(!matrix.label.includes('…/'), 'label is a basename, not the last two path segments');
 });
