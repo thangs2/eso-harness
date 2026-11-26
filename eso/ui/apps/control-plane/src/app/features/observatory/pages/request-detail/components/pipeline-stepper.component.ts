@@ -20,8 +20,8 @@ import type { StepperStageView } from '../request-detail.models.js';
             </div>
             <div class="stepper-actions">
                 <p class="stepper-count">
-                    <span class="count-value">{{ evidenced() }}/{{ stages().length }}</span>
-                    <span class="count-label">steps with evidence</span>
+                    <span class="count-value">{{ evidencedDeclared() ? evidenced() + '/' + stages().length : 'n/a' }}</span>
+                    <span class="count-label">{{ evidencedDeclared() ? 'steps with evidence' : 'evidence not declared' }}</span>
                 </p>
                 <eso-section-hint [summary]="hint.summary" [items]="hint.items" />
             </div>
@@ -31,10 +31,11 @@ import type { StepperStageView } from '../request-detail.models.js';
                 <button
                     type="button"
                     class="pipeline-step"
-                    [class.ok]="stage.status === 'ok'"
+                    [class.ok]="stage.evidenced === true && stage.status !== 'warn'"
                     [class.bad]="stage.status === 'warn'"
-                    [class.info]="stage.status === 'info'"
-                    [class.muted]="stage.status === 'muted'"
+                    [class.info]="stage.evidenced === true && stage.status === 'info'"
+                    [class.muted]="stage.evidenced !== true || stage.status === 'muted'"
+                    [attr.data-evidenced]="stage.evidenced === true"
                     [class.active]="selectedStepId() === stage.id"
                     [attr.aria-current]="selectedStepId() === stage.id ? 'step' : null"
                     [attr.aria-label]="'Step ' + stage.stepNumber + ': ' + stage.title + ' — ' + stage.sub + '. Open its evidence'"
@@ -55,10 +56,11 @@ import type { StepperStageView } from '../request-detail.models.js';
                 </button>
             }
         </nav>
-        <footer class="stepper-legend" aria-label="Step status legend">
-            <span class="legend-item"><i class="legend-dot ok"></i>Evidence recorded</span>
-            <span class="legend-item"><i class="legend-dot warn"></i>Attention</span>
-            <span class="legend-item"><i class="legend-dot missing"></i>Not captured</span>
+        <footer class="stepper-legend" aria-label="Step evidence legend">
+            <span class="legend-item"><i class="legend-dot ok"></i>Evidence found</span>
+            <span class="legend-item"><i class="legend-dot warn"></i>Finding needs attention</span>
+            <span class="legend-item"><i class="legend-dot missing"></i>No proof for this step</span>
+            <span class="legend-hint">Ring = this step's finding · count = steps with evidence</span>
             <span class="legend-hint">Click a step, or use ← → · Enter opens its evidence</span>
         </footer>
     `,
@@ -158,17 +160,27 @@ export class PipelineStepperComponent {
             { label: 'amber', text: 'The stage ran but a gap/attention signal is recorded (for example score below 100).' },
             { label: 'sky', text: 'Informational: something was observed, but no pass/fail proof is attached.' },
             { label: 'slate', text: 'No observation for this stage in this trace — not recorded, not zero.' },
-            { label: 'count', text: 'Stages with OK or WARN evidence. 4/8 means the other four stages have no proof.' },
+            { label: 'count', text: 'Stages that found proof for their own question. 6/8 means two stages have no proof on this trace. The count is the same figure the coverage axis shows.' },
+            { label: 'ring', text: 'The ring colour is the stage\'s own finding — not the count. A stage can hold a value and still carry no proof (step 1: the prompt is known but the law was never read), so it stays un-evidenced.' },
             { label: 'number', text: 'The stage order (1→8), fixed by the pipeline; it is not a turn sequence.' },
             { label: 'sub-line', text: 'The stage\'s own metric. "not recorded" means the host sent no value; ESO never fills it in.' },
         ],
     };
 
+    /**
+     * Stages that found proof for their own question. The backend count is authoritative; the local
+     * count uses the per-stage `evidenced` flag so both always agree. It must never fall back to
+     * `status`, which is presentation only — that fallback is what made this header disagree with
+     * the 5-Axis "steps" figure on the same screen.
+     */
     readonly evidenced = computed(() => {
         const reported = this.evidencedSteps();
         if (reported !== null) return reported;
-        return this.stages().filter((stage) => stage.status === 'ok' || stage.status === 'warn').length;
+        return this.stages().filter((stage) => stage.evidenced === true).length;
     });
+
+    /** No declared flag anywhere ⇒ the payload predates it; say so instead of inventing a count. */
+    readonly evidencedDeclared = computed(() => this.stages().some((stage) => typeof stage.evidenced === 'boolean'));
 
     /** One consistent stroke icon per stage — no emoji/text glyphs. */
     iconPath(id: string): string {

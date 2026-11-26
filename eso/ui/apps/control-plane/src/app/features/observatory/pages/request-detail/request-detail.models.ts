@@ -25,6 +25,8 @@ export interface StepperStageView {
     title: string;
     sub: string;
     status: string;
+    /** The stage found proof for its own question; `status` is presentation only. `null` = not declared. */
+    evidenced?: boolean | null;
 }
 
 /** The E2E flow card: one system stage plus its evidence subcards and related tab. */
@@ -35,7 +37,10 @@ export interface PipelineStepView {
     status: string;
     sub: string;
     subcards: StageDetailView[];
+    /** Single evidence definition: true when the stage declared no proof for this trace. */
     empty: boolean;
+    /** Raw stage flag (`null` when the payload predates it) — `empty` is derived from it. */
+    evidenced?: boolean | null;
     tab: TabKey;
     tabLabel: string;
 }

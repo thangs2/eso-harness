@@ -1,4 +1,4 @@
-import type { ActionEventView, ObservationDto, PipelineStepView, PreTurnGateView, RequestDetailDto, UnifiedGapItem, VerdictGap } from './request-detail.models.js';
+import type { ActionEventView, ObservationDto, PipelineStepView, PreTurnGateView, RequestDetailDto, StageDetailView, UnifiedGapItem, VerdictGap } from './request-detail.models.js';
 import { TAB_LABELS, missingValue } from './request-detail.models.js';
 
 /** Pure payload → view mappings. Components never re-derive these from rendered text. */
@@ -22,6 +22,16 @@ export function toTraceEvents(events: RequestDetailDto['events']): ObservationDt
  * The same 8 system stages as flow cards. A step whose remaining subcards are all absent is
  * flagged `empty` and renders one line until the reader expands it.
  */
+/**
+ * Payloads that predate `evidenced` still reach the page, so absence falls back to the old
+ * inspection of the sub-card values. That is a compatibility path only: when the stage declares
+ * the flag, the flag wins and the string scan never runs (one definition, not two).
+ */
+function stageIsEmpty(stage: RequestDetailDto['systemStages'][number], subcards: StageDetailView[]): boolean {
+    if (typeof stage.evidenced === 'boolean') return !stage.evidenced;
+    return subcards.length === 0 || subcards.every((detail) => missingValue(detail.value));
+}
+
 export function toFlowSteps(stages: RequestDetailDto['systemStages']): PipelineStepView[] {
     return stages.map((stage) => {
         const lawValue = stage.details.find((detail) => detail.label === 'Law')?.value ?? 'not captured';
@@ -36,7 +46,8 @@ export function toFlowSteps(stages: RequestDetailDto['systemStages']): PipelineS
             status: stage.status,
             sub: stage.id === 'intake-law' ? (missingValue(lawValue) ? 'law not captured' : lawValue) : stage.sub,
             subcards,
-            empty: subcards.length === 0 || subcards.every((detail) => missingValue(detail.value)),
+            empty: stageIsEmpty(stage, subcards),
+            evidenced: typeof stage.evidenced === 'boolean' ? stage.evidenced : null,
             tab,
             tabLabel: TAB_LABELS[tab] ?? 'Evidence',
         };

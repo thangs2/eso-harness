@@ -630,7 +630,12 @@ export interface RequestDetailDto {
     routing: Record<string, unknown>;
     checks: Array<{ checkId: string; status: string; detail: string }>;
     recon: Array<{ id: string; label: string; source: string; required: boolean; status: string; calls: number }>;
-    systemStages: Array<{ id: string; stepNumber: number; title: string; sub: string; status: string; tab: string; details: Array<{ label: string; value: string; detail: string }> }>;
+    /**
+     * `evidenced` answers "did this stage find proof for its own question?", independently of
+     * `status`, which is presentation (a stage can warn with no data, or carry a value under `info`).
+     * `null`/absent means the payload predates the field — never "no evidence".
+     */
+    systemStages: Array<{ id: string; stepNumber: number; title: string; sub: string; status: string; evidenced?: boolean | null; tab: string; details: Array<{ label: string; value: string; detail: string }> }>;
     requestMetrics: {
         callCount: number;
         toolCount: number;

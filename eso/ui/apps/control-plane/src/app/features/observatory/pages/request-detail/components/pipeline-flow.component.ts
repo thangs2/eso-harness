@@ -45,7 +45,7 @@ type FlowTone = 'ok' | 'decision' | 'recon' | 'warn' | 'muted';
                                         <span class="step-badge" [attr.data-tone]="tone(step)">STEP {{ index + 1 }}</span>
                                         <span class="endflow-card-title">{{ step.label }}</span>
                                         <span class="endflow-card-sub">{{ step.empty ? 'No host evidence for this step' : step.sub }}</span>
-                                        <span class="status-pill" [attr.data-tone]="tone(step)">{{ step.status }}</span>
+                                        <span class="status-pill" [attr.data-tone]="tone(step)" [title]="'status: ' + step.status + (step.empty ? ' · no evidence' : ' · evidence found')">{{ step.empty ? 'no evidence' : step.status }}</span>
                                         <span class="chevron" aria-hidden="true">{{ isStepOpen(step) ? '▾' : '▸' }}</span>
                                     </button>
                                     <div class="endflow-step-actions">
@@ -161,13 +161,18 @@ export class PipelineFlowComponent {
 
     readonly flowExpanded = signal(true);
 
-    /** Legacy colour law: warn wins, then decision, executed, recon, unknown. */
+    /**
+     * Colour law: the stage's own evidence decides, `status` only raises attention. A stage that
+     * carries no proof is muted no matter what its presentation status says, so this card can never
+     * read greener than the stepper and the coverage axis for the same stage.
+     */
     tone(step: PipelineStepView): FlowTone {
-        if (step.status === 'warn' || step.status === 'bad' || step.status === 'missing' || step.status === 'fail') return 'warn';
+        const warns = step.status === 'warn' || step.status === 'bad' || step.status === 'missing' || step.status === 'fail';
+        if (step.empty) return warns ? 'warn' : 'muted';
+        if (warns) return 'warn';
         if (step.id === 'decision-jev') return 'decision';
-        if (step.status === 'ok') return 'ok';
-        if (step.status === 'info') return 'recon';
-        return 'muted';
+        if (step.evidenced === true) return 'ok';
+        return 'recon';
     }
 
     /** Sub-panel dots cycle emerald → sky → amber, like the legacy three-up rows. */
