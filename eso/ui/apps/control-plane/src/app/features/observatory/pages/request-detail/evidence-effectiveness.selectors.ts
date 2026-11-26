@@ -109,6 +109,16 @@ export interface EvidenceEffectivenessView {
     explicitUnknowns: ExplicitUnknownItem[];
 }
 
+/**
+ * Which side calls actually failed. Both are fetched with `.catch(() => null)` upstream, so a `null`
+ * value alone cannot distinguish "the server has nothing" from "the request failed". BR-18 requires
+ * the second case to be disclosed, so the page reports it explicitly instead of staying silent.
+ */
+export interface EvidenceFetchFailures {
+    receiptFailed?: boolean;
+    kbFailed?: boolean;
+}
+
 export interface BuildEvidenceEffectivenessParams {
     detail: RequestDetailWithVerdict;
     preTurnGate: PreTurnGateView | null;
@@ -117,6 +127,8 @@ export interface BuildEvidenceEffectivenessParams {
     fullReceipt: EvidenceReceiptDto | null;
     receiptVerification: ReceiptVerificationState;
     kbSufficiency: KnowledgeSufficiencyDto | null;
+    /** Absent ⇒ no fetch was attempted; never inferred from a `null` value. */
+    fetchFailures?: EvidenceFetchFailures;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -147,12 +159,44 @@ export function extractReceiptSources(receipt: EvidenceReceiptDto | null | undef
     }));
 }
 
+/**
+ * Sources ESO itself verified on the trace (`evidence.verified`). This proof is produced at ingest,
+ * before any receipt is sealed, so it survives a failed `GET .../receipt` call. Entries are accepted
+ * only when `verified === true`: an unproven source must never be promoted to "verified".
+ */
+export function extractTraceVerifiedSources(detail: RequestDetailWithVerdict | null | undefined): ReceiptEvidenceSourceDto[] {
+    const events = Array.isArray(detail?.events) ? detail!.events : [];
+    const seen = new Set<string>();
+    const out: ReceiptEvidenceSourceDto[] = [];
+    for (const event of events) {
+        if (event.event !== 'evidence.verified' || !isRecord(event.evidence)) continue;
+        const sources = Array.isArray(event.evidence['sources']) ? event.evidence['sources'] : [];
+        for (const entry of sources) {
+            if (!isRecord(entry) || entry['verified'] !== true) continue;
+            const where = asString(entry['where'] ?? entry['id']);
+            const hash = asString(entry['hash']) || null;
+            const key = `${where}::${hash ?? ''}`;
+            if (!where || seen.has(key)) continue;
+            seen.add(key);
+            out.push({
+                requirementId: asString(entry['requirementId']) || null,
+                where,
+                hash,
+                verifiedAt: asString(entry['verifiedAt']) || '',
+                verified: true,
+            });
+        }
+    }
+    return out;
+}
+
 /** BR-18: Deterministically enumerate every missing or unverified evidence dimension. */
 export function collectExplicitUnknowns(
     detail: RequestDetailWithVerdict,
     preTurnGate: PreTurnGateView | null,
     receipt: EvidenceReceiptDto | null,
     kbSufficiency: KnowledgeSufficiencyDto | null,
+    fetchFailures: EvidenceFetchFailures = {},
 ): ExplicitUnknownItem[] {
     const unknowns: ExplicitUnknownItem[] = [];
     const events = Array.isArray(detail.events) ? detail.events : [];
@@ -167,7 +211,15 @@ export function collectExplicitUnknowns(
     }
 
     const sources = extractReceiptSources(receipt);
-    if (!receipt) {
+    if (fetchFailures.receiptFailed) {
+        // The call failed — distinguish it from a sealed receipt that is merely empty.
+        unknowns.push({
+            id: 'receipt-fetch-failed',
+            area: 'receipt',
+            label: 'Receipt request failed',
+            detail: 'GET /requests/:requestId/receipt failed; receipt-level source verification is unavailable for this page load.',
+        });
+    } else if (!receipt) {
         unknowns.push({
             id: 'no-receipt-payload',
             area: 'receipt',
@@ -180,6 +232,15 @@ export function collectExplicitUnknowns(
             area: 'receipt',
             label: 'No server-verified receipt sources (sources[])',
             detail: `Receipt spec v${receipt.specVersion} contains 0 server-verified evidence sources; source hashes cannot be audited from the receipt alone.`,
+        });
+    }
+
+    if (fetchFailures.kbFailed && !kbSufficiency) {
+        unknowns.push({
+            id: 'kb-sufficiency-unavailable',
+            area: 'knowledge',
+            label: 'Knowledge sufficiency unavailable',
+            detail: 'GET .../knowledge/sufficiency failed for this consumer; the knowledge-axis diagnosis cannot be established for this turn.',
         });
     }
 
@@ -226,7 +287,9 @@ export function collectExplicitUnknowns(
         });
     }
 
-    if (!kbSufficiency) {
+    if (!kbSufficiency && !fetchFailures.kbFailed) {
+        // Quiet absence: the snapshot was not loaded, but the request did not fail either. When the call
+        // actually failed, the `kb-sufficiency-unavailable` item above is the precise report — never both.
         unknowns.push({
             id: 'kb-sufficiency-unavailable',
             area: 'knowledge',
@@ -621,9 +684,16 @@ function buildAxis3EvidenceBasis(
     const receiptSpecVersion = fullReceipt?.specVersion ?? detail.receipt?.specVersion ?? null;
 
     let state: AxisState = 'not-captured';
+    // Every source is server-verified on the trace or in the receipt, with nothing contradicting it.
+    // This is provable without the recompute endpoint, so it must not decay to "partial" when the
+    // verification call did not run — the proof is the sources, not the call.
+    const allSourcesVerified = verifiedCount > 0 && unverifiedCount === 0;
     if (receiptVerification === 'failed' || hasUnverifiedGap || (totalBasisCount > 0 && unverifiedCount > verifiedCount)) {
         state = 'weak';
     } else if (receiptVerification === 'verified' && verifiedCount > 0 && unverifiedCount === 0) {
+        state = 'strong';
+    } else if (allSourcesVerified) {
+        // Reached only when `receiptVerification !== 'failed'` (the first branch already returned 'weak').
         state = 'strong';
     } else if (receiptVerification === 'verified' || totalBasisCount > 0 || readBeforeEditTotal > 0) {
         state = 'partial';
@@ -704,13 +774,17 @@ function axisScoreOf(state: AxisState): number | null {
 /** Build the complete 5-Axis Evidence Effectiveness view strictly from real backend DTOs (BR-12). */
 export function buildEvidenceEffectivenessView(params: BuildEvidenceEffectivenessParams): EvidenceEffectivenessView {
     const { detail, preTurnGate, actionEvents, tokenSummary, fullReceipt, receiptVerification, kbSufficiency } = params;
+    const fetchFailures = params.fetchFailures ?? {};
     const postGaps = toPostTurnGaps(detail.verdict?.gaps ?? []);
     const receiptSources = extractReceiptSources(fullReceipt);
-    const explicitUnknowns = collectExplicitUnknowns(detail, preTurnGate, fullReceipt, kbSufficiency);
+    // The sealed receipt is the stronger proof; the trace's own `evidence.verified` is the fallback that
+    // keeps Axis 3 honest when the receipt call failed. Both are server proofs — never an inference.
+    const receiptSourcesForAxis = receiptSources.length > 0 ? receiptSources : extractTraceVerifiedSources(detail);
+    const explicitUnknowns = collectExplicitUnknowns(detail, preTurnGate, fullReceipt, kbSufficiency, fetchFailures);
 
     const axis1 = buildAxis1RetrievalPrecision(detail);
     const axis2 = buildAxis2SufficiencyCoverage(detail, preTurnGate, postGaps);
-    const axis3 = buildAxis3EvidenceBasis(detail, preTurnGate, postGaps, actionEvents, receiptSources, fullReceipt, receiptVerification);
+    const axis3 = buildAxis3EvidenceBasis(detail, preTurnGate, postGaps, actionEvents, receiptSourcesForAxis, fullReceipt, receiptVerification);
     const axis4 = buildAxis4ExecutionImpact(detail, tokenSummary);
 
     const learningBranches = classifyLearningBranches(

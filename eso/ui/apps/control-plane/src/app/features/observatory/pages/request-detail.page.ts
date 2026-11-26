@@ -14,7 +14,7 @@ import { RulesPanelComponent } from './request-detail/components/rules-panel.com
 import { TelemetryPanelComponent } from './request-detail/components/telemetry-panel.component.js';
 import { VerdictPanelComponent } from './request-detail/components/verdict-panel.component.js';
 import { WaterfallPanelComponent } from './request-detail/components/waterfall-panel.component.js';
-import { buildEvidenceEffectivenessView, type EvidenceEffectivenessView } from './request-detail/evidence-effectiveness.selectors.js';
+import { buildEvidenceEffectivenessView, type EvidenceEffectivenessView, type EvidenceFetchFailures } from './request-detail/evidence-effectiveness.selectors.js';
 import {
     TAB_GLYPH,
     shortIdOf,
@@ -163,6 +163,12 @@ export class RequestDetailPage implements OnInit {
     readonly detail = signal<RequestDetailWithVerdict | null>(null);
     readonly fullReceipt = signal<EvidenceReceiptDto | null>(null);
     readonly kbSufficiency = signal<KnowledgeSufficiencyDto | null>(null);
+    /**
+     * Which side calls failed. A `null` value alone cannot tell "the server has nothing" from "the call
+     * failed", so the failures are recorded here and fed to BR-18 Explicit Unknowns instead of being
+     * swallowed — a page that stays silent about a failed fetch is claiming more than it proved.
+     */
+    readonly fetchFailures = signal<EvidenceFetchFailures>({});
     readonly activeTab = signal<TabKey>('decisions');
     readonly selectedStepId = signal<string | null>(null);
     /** Per-step disclosure override; unset follows the step's own empty state. */
@@ -225,6 +231,7 @@ export class RequestDetailPage implements OnInit {
             fullReceipt: this.fullReceipt(),
             receiptVerification: this.receiptVerification(),
             kbSufficiency: this.kbSufficiency(),
+            fetchFailures: this.fetchFailures(),
         });
     });
     readonly receiptSources = computed(() => this.evidenceEffectiveness()?.receiptSources ?? []);
@@ -306,20 +313,25 @@ export class RequestDetailPage implements OnInit {
         this.receiptVerification.set('unavailable');
         this.fullReceipt.set(null);
         this.kbSufficiency.set(null);
+        this.fetchFailures.set({});
         this.selectedStepId.set(null);
         this.stepOpen.set({});
         let loaded: RequestDetailWithVerdict | null = null;
         try {
+            // A failed side call must not block the page, but it must not vanish either: it is recorded
+            // so BR-18 can disclose it (no-retry, no fabrication).
+            const failures: EvidenceFetchFailures = {};
             const [detailRes, receiptRes, kbRes] = await Promise.all([
                 this.api.getRequestDetail(this.consumerId(), this.requestId()),
-                this.api.getRequestReceipt(this.consumerId(), this.requestId()).catch(() => null),
-                this.api.getConsumerKnowledgeSufficiency(this.consumerId()).catch(() => null),
+                this.api.getRequestReceipt(this.consumerId(), this.requestId()).catch(() => { failures.receiptFailed = true; return null; }),
+                this.api.getConsumerKnowledgeSufficiency(this.consumerId()).catch(() => { failures.kbFailed = true; return null; }),
             ]);
             loaded = detailRes;
             if (seq !== this.loadSeq) return;
             this.detail.set(loaded);
             this.fullReceipt.set(receiptRes);
             this.kbSufficiency.set(kbRes);
+            this.fetchFailures.set(failures);
         } catch (error) {
             if (seq !== this.loadSeq) return;
             this.error.set((error as { detail?: string; message?: string })?.detail || (error as Error)?.message || 'Unable to load request');
