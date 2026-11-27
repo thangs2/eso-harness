@@ -548,7 +548,7 @@ describe('HTTP contract — CR-010/011 routes', () => {
         ]);
         for (const stage of stages) {
             assert.ok(['waterfall', 'rules', 'decisions', 'telemetry'].includes(stage.tab), `${stage.id} tab`);
-            assert.ok(stage.details.length <= 3, `${stage.id} has at most 3 details`);
+            assert.ok(stage.details.length >= 1 && stage.details.length <= 4, `${stage.id} has 1 to 4 details`);
             for (const detail of stage.details) {
                 assert.equal(typeof detail.value, 'string');
                 assert.ok(detail.value.length > 0, `${stage.id} detail value is never empty`);

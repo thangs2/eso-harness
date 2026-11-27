@@ -35,16 +35,16 @@ function stageIsEmpty(stage: RequestDetailDto['systemStages'][number], subcards:
 export function toFlowSteps(stages: RequestDetailDto['systemStages']): PipelineStepView[] {
     return stages.map((stage) => {
         const lawValue = stage.details.find((detail) => detail.label === 'Law')?.value ?? 'not captured';
-        const subcards = stage.id === 'intake-law'
-            ? stage.details.filter((detail) => detail.label === 'Law')
-            : stage.details;
+        const subcards = stage.id === 'intake-law' && stage.details.length >= 3
+            ? stage.details
+            : (stage.id === 'intake-law' ? stage.details.filter((detail) => detail.label === 'Law') : stage.details);
         const tab = stage.tab as keyof typeof TAB_LABELS;
         return {
             id: stage.id,
             stepNumber: stage.stepNumber,
             label: stage.title,
             status: stage.status,
-            sub: stage.id === 'intake-law' ? (missingValue(lawValue) ? 'law not captured' : lawValue) : stage.sub,
+            sub: stage.sub ? stage.sub : (stage.id === 'intake-law' ? (missingValue(lawValue) ? 'law not captured' : lawValue) : 'not captured'),
             subcards,
             empty: stageIsEmpty(stage, subcards),
             evidenced: typeof stage.evidenced === 'boolean' ? stage.evidenced : null,

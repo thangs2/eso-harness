@@ -205,7 +205,7 @@ test('E2E flow ports the legacy card anatomy and collapses empty steps to one sl
     assert.match(PAGE, /class="sub-label">\{\{ sub\.label \}\}/);
     assert.match(PAGE, /class="sub-value">\{\{ sub\.value \}\}/);
     assert.match(PAGE, /class="sub-detail">\{\{ sub\.detail \}\}/);
-    assert.match(PAGE, /class="status-pill" \[attr\.data-tone\]="tone\(step\)">\{\{ step\.status \}\}/);
+    assert.match(PAGE, /class="status-pill" \[attr\.data-tone\]="tone\(step\)"[^>]*>\{\{ (?:step\.empty \? 'no evidence' : )?step\.status \}\}/);
     assert.match(PAGE, /No host evidence for this step/);
     assert.match(PAGE, /\(click\)="toggleStep\(step\)"/);
     assert.match(PAGE, /\[attr\.aria-expanded\]="isStepOpen\(step\)"/);

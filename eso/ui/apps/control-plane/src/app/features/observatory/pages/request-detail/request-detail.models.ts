@@ -233,6 +233,7 @@ export type RequestDetailWithVerdict = RequestDetailDto & {
 export const OBSERVED_WORKER_EVENTS: ReadonlySet<string> = new Set(['worker.remote.completed', 'worker.completed', 'prompt.submitted']);
 
 export const WORKER_LABEL: Record<string, string> = {
+    'worker-lead': 'Lead',
     'worker-scout': 'Scout',
     'worker-plan': 'Plan',
     'worker-build': 'Build',

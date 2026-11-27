@@ -6,7 +6,7 @@ const GUIDE = readFileSync(new URL('../eso/ui/apps/control-plane/src/app/feature
 const GLANCE = readFileSync(new URL('../eso/ui/apps/control-plane/src/app/features/observatory/pages/request-detail/components/glance-cards.component.ts', import.meta.url), 'utf8');
 
 test('verdict guide is a modal dialog with all ten explainer sections', () => {
-  assert.match(GUIDE, /<dialog #dialog class="guide"/);
+  assert.match(GUIDE, /<dialog #dialog class="[^"]*\bguide\b/);
   assert.match(GUIDE, /showModal\(\)/);
   assert.match(GUIDE, /onBackdrop/);
   for (const heading of ['What the Turn verdict is', 'Why it exists', 'How it is computed', 'Inputs ESO reads', 'The four levels', 'The score', 'The gap catalogue', 'This trace', 'How it relates to the rest of the page', 'Reading checklist and limits']) {

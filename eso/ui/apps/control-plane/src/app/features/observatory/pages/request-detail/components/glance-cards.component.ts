@@ -208,24 +208,43 @@ import {
                 <!-- Per-worker burn: the totals above are one trace-wide sum, but each worker spends its own
                      tokens. A worker with no reported usage keeps its row and reads "not captured". -->
                 <div class="worker-usage">
-                    <p class="worker-usage-title">Per worker <span class="worker-usage-count">{{ workers().length }} worker{{ workers().length === 1 ? '' : 's' }}</span></p>
+                    <p class="worker-usage-title">Per worker <span class="worker-usage-count">{{ workers().length }} active worker{{ workers().length === 1 ? '' : 's' }}@if (uniqueModels().length) { · {{ uniqueModels().length }} model{{ uniqueModels().length === 1 ? '' : 's' }} }</span></p>
                     @if (workers().length) {
                         <table class="worker-table">
                             <colgroup>
-                                <col class="col-worker" /><col class="col-num" /><col class="col-num" /><col class="col-num" />
+                                <col class="col-worker" />
+                                <col class="col-model" />
+                                <col class="col-num" />
+                                <col class="col-num" />
+                                <col class="col-num" />
                             </colgroup>
                             <thead>
-                                <tr><th scope="col">Worker</th><th scope="col" class="num">Net input</th><th scope="col" class="num">Cache read</th><th scope="col" class="num">Output</th></tr>
+                                <tr>
+                                    <th scope="col">Worker</th>
+                                    <th scope="col">Model</th>
+                                    <th scope="col" class="num">Net input</th>
+                                    <th scope="col" class="num">Cache read</th>
+                                    <th scope="col" class="num">Output</th>
+                                </tr>
                             </thead>
                             <tbody>
                                 @for (worker of workers(); track worker.workerId) {
                                     <tr>
                                         <th scope="row" class="worker-name" [title]="worker.workerId + (worker.model ? ' · ' + worker.model : '')">
-                                            {{ worker.label }}
-                                            <small class="worker-model">{{ worker.model || 'model not captured' }}</small>
+                                            <div class="worker-title-wrap">
+                                                <span class="worker-label-bold">{{ worker.label }}</span>
+                                                @if (worker.label.toLowerCase() !== worker.workerId.toLowerCase()) {
+                                                    <small class="worker-id-tag">{{ worker.workerId }}</small>
+                                                }
+                                            </div>
                                         </th>
+                                        <td class="worker-model-cell">
+                                            <span class="worker-model-badge" [class.unreported]="missingValue(worker.model)" [title]="worker.model || 'model not captured'">
+                                                {{ worker.model || 'model not captured' }}
+                                            </span>
+                                        </td>
                                         <td class="num" [class.missing]="worker.input === null">{{ worker.input === null ? 'not captured' : tokenText(worker.input) }}</td>
-                                        <td class="num" [class.missing]="worker.cacheRead === null">{{ worker.cacheRead === null ? 'not captured' : tokenText(worker.cacheRead) }}</td>
+                                        <td class="num" [class.missing]="worker.cacheRead === null" [class.cached-highlight]="worker.cacheRead !== null">{{ worker.cacheRead === null ? 'not captured' : tokenText(worker.cacheRead) }}</td>
                                         <td class="num" [class.missing]="worker.output === null">{{ worker.output === null ? 'not captured' : tokenText(worker.output) }}</td>
                                     </tr>
                                 }
@@ -353,13 +372,21 @@ import {
         /* Fixed layout with explicit widths: the model name is the long field, so it gets the room
            instead of being truncated to an ellipsis by an even split. */
         .worker-table { width: 100%; border-collapse: collapse; font-size: var(--fs-label); table-layout: fixed; }
-        .worker-table col.col-worker { width: 34%; }
-        .worker-table col.col-num { width: 22%; }
-        .worker-table th, .worker-table td { padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line-soft); text-align: left; vertical-align: baseline; }
+        .worker-table col.col-worker { width: 22%; }
+        .worker-table col.col-model { width: 36%; }
+        .worker-table col.col-num { width: 14%; }
+        .worker-table th, .worker-table td { padding: var(--space-2) var(--space-2); border-bottom: 1px solid var(--line-soft); text-align: left; vertical-align: baseline; }
         .worker-table thead th { padding-block: var(--space-1); color: var(--muted); font-size: var(--text-xs); font-weight: 500; border-bottom: 1px solid var(--line); }
         .worker-table tbody tr:last-child th, .worker-table tbody tr:last-child td { border-bottom: 0; }
         .worker-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
         .worker-table .worker-name { color: #e2e8f0; font-weight: 600; overflow-wrap: anywhere; }
+        .worker-title-wrap { display: flex; flex-direction: column; gap: .0625rem; min-width: 0; }
+        .worker-label-bold { color: #f1f5f9; font-weight: 650; }
+        .worker-id-tag { color: var(--dim); font-size: .6875rem; font-family: ui-monospace, monospace; }
+        .worker-model-cell { vertical-align: baseline; min-width: 0; }
+        .worker-model-badge { display: inline-block; max-width: 100%; padding: .0625rem .375rem; border: 1px solid rgba(56,189,248,.3); border-radius: .25rem; background: rgba(56,189,248,.08); color: #7dd3fc; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .6875rem; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
+        .worker-model-badge.unreported { border-color: rgba(148,163,184,.25); background: rgba(148,163,184,.06); color: var(--dim); font-style: italic; }
+        .cached-highlight { color: #38bdf8; font-weight: 650; }
         .worker-table .num { color: #cbd5e1; }
         .worker-table .num.missing { color: var(--dim); font-style: italic; }
         .worker-table .est { color: var(--warn-ink); margin-left: .125rem; }
@@ -367,8 +394,9 @@ import {
             /* Keep fixed layout on mobile: auto sizing uses the content's intrinsic width (438px for
                three workers), which pushed the page sideways. Fixed + wrapping keeps it in the card. */
             .worker-table { table-layout: fixed; width: 100%; }
-            .worker-table col.col-worker { width: 34%; }
-            .worker-table col.col-num { width: 22%; }
+            .worker-table col.col-worker { width: 22%; }
+            .worker-table col.col-model { width: 36%; }
+            .worker-table col.col-num { width: 14%; }
             .worker-table th, .worker-table td { padding: var(--space-2) var(--space-1); }
             /* Every cell may wrap on phones; a nowrap cell spills over its neighbours. */
             .worker-table th, .worker-table td, .worker-table .num { white-space: normal; }
@@ -387,7 +415,7 @@ import {
         .score-caption strong { color: #f1f5f9; font-size: 1.125rem; font-variant-numeric: tabular-nums; }
         .score-caption small { margin-left: auto; padding-left: var(--space-2); border-left: 1px solid var(--line); color: var(--dim); }
         .score-ledger { display: grid; gap: .125rem; padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); }
-        .ledger-row { display: grid; grid-template-columns: 3rem 8.5rem minmax(0, 1fr); gap: var(--space-2); align-items: baseline; font-size: var(--fs-label); }
+        .ledger-row { display: grid; grid-template-columns: 3rem minmax(9.5rem, max-content) minmax(0, 1fr); gap: var(--space-2); align-items: baseline; font-size: var(--fs-label); }
         .ledger-row.negative { color: var(--warn-ink); }
         .ledger-op { color: var(--dim); font-variant-numeric: tabular-nums; text-transform: uppercase; letter-spacing: .05em; }
         .ledger-val { color: #e2e8f0; font-weight: 650; font-family: ui-monospace, monospace; }
@@ -534,6 +562,17 @@ export class GlanceCardsComponent {
 
     workerCount(): number {
         return this.workers().length;
+    }
+
+    uniqueModels(): string[] {
+        const list = this.workers().map((w) => (w.model || '').trim()).filter((m) => m && m !== '—');
+        return [...new Set(list)];
+    }
+
+    missingValue(val: string | null | undefined): boolean {
+        if (!val) return true;
+        const t = val.trim().toLowerCase();
+        return !t || t === '—' || t === 'not captured' || t === 'not reported' || t === 'model not captured';
     }
 
     /**

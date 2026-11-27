@@ -32,7 +32,7 @@ import {
                     @for (step of configuredGraph(); track step.workerId; let index = $index) {
                         <div class="runtime-row">
                             <span class="runtime-no">{{ index + 1 }}</span>
-                            <span class="runtime-name"><strong>{{ step.label }}</strong><small>{{ step.workerId }}</small></span>
+                            <span class="runtime-name"><strong>{{ step.label }}</strong><small><span class="role-chip">{{ workerRole(step.workerId) }}</span> · <code>{{ step.workerId }}</code></small></span>
                             <span class="badge" [class.ok]="step.status === 'PASS'" [class.warn]="step.status === 'FAIL' || step.status === 'BLOCKED'" [class.muted]="!step.status">{{ step.status || '—' }}</span>
                         </div>
                     } @empty {
@@ -44,7 +44,7 @@ import {
                     @for (worker of observedGraph(); track worker.workerId; let index = $index) {
                         <div class="runtime-row">
                             <span class="runtime-no">{{ index + 1 }}</span>
-                            <span class="runtime-name"><strong>{{ worker.label }}</strong><small>{{ worker.event }} · {{ formatAt(worker.at) }}</small></span>
+                            <span class="runtime-name"><strong>{{ worker.label }}</strong><small><span class="role-chip">{{ workerRole(worker.workerId) }}</span> · {{ worker.event }} · {{ formatAt(worker.at) }}</small></span>
                             <span class="badge" [class.ok]="worker.outcome === 'PASS'" [class.warn]="worker.outcome === 'FAIL' || worker.outcome === 'BLOCKED'" [class.muted]="!worker.outcome || worker.outcome === '—'">{{ worker.outcome }}</span>
                         </div>
                     } @empty {
@@ -64,6 +64,12 @@ import {
                         @default { <span class="badge muted">no data</span> }
                     }
                     <small class="hint">{{ divergence().configuredCount }} configured · {{ divergence().observedCount }} observed</small>
+                </div>
+                <div class="divergence-tone-cards">
+                    <div class="tone-card" [class.active-tone]="divergence().kind === 'matches'"><span class="tone-dot ok"></span><span class="tone-label">Matches</span><strong class="font-mono">{{ divergence().kind === 'matches' ? 'YES' : '—' }}</strong></div>
+                    <div class="tone-card" [class.active-tone]="divergence().missing.length > 0"><span class="tone-dot warn"></span><span class="tone-label">Missing</span><strong class="font-mono">{{ divergence().missing.length }}</strong></div>
+                    <div class="tone-card" [class.active-tone]="divergence().extra.length > 0"><span class="tone-dot bad"></span><span class="tone-label">Extra</span><strong class="font-mono">{{ divergence().extra.length }}</strong></div>
+                    <div class="tone-card" [class.active-tone]="divergence().kind === 'reordered'"><span class="tone-dot info"></span><span class="tone-label">Reordered</span><strong class="font-mono">{{ divergence().kind === 'reordered' ? 'YES' : '—' }}</strong></div>
                 </div>
                 @if (divergence().kind === 'matches') {
                     <p class="divergence-line">matches — configured order equals observed order.</p>
@@ -101,31 +107,42 @@ import {
         .flow-node.prompt { border-color: var(--brand); }
         .flow-arrow { color: var(--muted); font-size: var(--fs-secondary); }
         .runtime-compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
-        .runtime-column { display: grid; align-content: start; gap: var(--space-2); min-width: 0; padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); }
-        .runtime-column-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+        .runtime-column { display: grid; align-content: start; gap: var(--space-2); min-width: 0; padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface-2); box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+        .runtime-column-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); padding-bottom: var(--space-2); border-bottom: 1px solid var(--line-soft); }
         .runtime-column-head h3 { margin: 0; font-size: var(--fs-secondary); }
         .runtime-column-head small { color: var(--muted); font-size: var(--fs-badge); }
-        .runtime-row { display: grid; grid-template-columns: 1.25rem minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); padding: var(--space-1) 0; border-bottom: 1px solid var(--line-soft); }
+        .runtime-row { display: grid; grid-template-columns: 1.5rem minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); padding: var(--space-1) 0; border-bottom: 1px solid var(--line-soft); }
         .runtime-row:last-child { border-bottom: 0; }
-        .runtime-no { color: var(--muted); font-size: var(--fs-badge); text-align: right; font-variant-numeric: tabular-nums; }
+        .runtime-no { width: 1.5rem; height: 1.5rem; display: inline-grid; place-items: center; border-radius: var(--radius-sm); background: var(--surface-3); border: 1px solid var(--line-soft); color: var(--muted); font-size: var(--fs-badge); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; }
         .runtime-name { display: grid; gap: 0; min-width: 0; }
         .runtime-name strong { color: var(--ink); font-size: var(--fs-secondary); overflow-wrap: anywhere; }
-        .runtime-name small { color: var(--muted); font-size: var(--fs-badge); overflow-wrap: anywhere; }
-        .badge { display: inline-flex; align-items: center; min-height: 1.25rem; padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); color: #cbd5e1; font-size: var(--fs-badge); white-space: nowrap; }
+        .runtime-name small { display: flex; align-items: center; gap: var(--space-1); flex-wrap: wrap; color: var(--muted); font-size: var(--fs-badge); overflow-wrap: anywhere; }
+        .role-chip { display: inline-block; padding: 0 var(--space-1); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-3); color: var(--brand); font-size: var(--fs-badge); }
+        .badge { display: inline-flex; align-items: center; min-height: 1.25rem; padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); color: #cbd5e1; font-size: var(--fs-badge); white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; }
         .badge.ok { color: #a7f3d0; border-color: rgba(78,201,122,.3); }
         .badge.warn { color: #fde68a; border-color: rgba(224,179,65,.45); }
         .badge.bad { color: #fecaca; border-color: rgba(255,107,107,.4); }
         .badge.muted { color: var(--muted); }
         .badge.info { color: #bae6fd; border-color: rgba(90,169,255,.4); }
-        .runtime-divergence { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--line); border-left: 3px solid var(--brand); border-radius: var(--radius-sm); background: var(--surface-2); }
+        .runtime-divergence { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--line); border-left: 3px solid var(--brand); border-radius: var(--radius-md); background: var(--surface-2); box-shadow: 0 1px 2px rgba(0,0,0,.2); }
         .runtime-divergence[data-kind='missing'] { border-left-color: var(--warn-ink); }
         .runtime-divergence[data-kind='extra'] { border-left-color: var(--danger-ink); }
         .runtime-divergence[data-kind='matches'] { border-left-color: var(--ok-ink); }
         .divergence-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+        .divergence-tone-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); margin: var(--space-1) 0; }
+        .tone-card { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-2); border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--surface-3); font-size: var(--fs-badge); }
+        .tone-card.active-tone { border-color: var(--line); background: rgba(255,255,255,.04); }
+        .tone-dot { width: .5rem; height: .5rem; border-radius: 62.44rem; }
+        .tone-dot.ok { background: var(--ok-ink); }
+        .tone-dot.warn { background: var(--warn-ink); }
+        .tone-dot.bad { background: var(--danger-ink); }
+        .tone-dot.info { background: var(--brand); }
+        .tone-label { color: var(--muted); }
+        .tone-card strong { margin-left: auto; color: var(--ink); font-variant-numeric: tabular-nums; }
         .divergence-line { color: #cbd5e1; font-size: var(--fs-secondary); overflow-wrap: anywhere; }
         .divergence-key { color: var(--warn-ink); font-weight: 700; }
         .divergence-line.extra .divergence-key { color: var(--danger-ink); }
-        @media (max-width: 62.5rem) { .runtime-compare { grid-template-columns: 1fr; } }
+        @media (max-width: 62.5rem) { .runtime-compare { grid-template-columns: 1fr; } .divergence-tone-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
     `],
 })
 export class GraphPanelComponent {
@@ -175,5 +192,11 @@ export class GraphPanelComponent {
 
     workerLabel(id: string | null | undefined): string {
         return labelForWorker(id);
+    }
+
+    workerRole(workerId: string | null | undefined): string {
+        if (!workerId) return 'Worker';
+        const stage = this.detail().pipeline.find((s) => s.workerId === workerId);
+        return stage?.role || stage?.label || this.workerLabel(workerId);
     }
 }

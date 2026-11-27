@@ -40,16 +40,21 @@ interface LlmRow {
     template: `
         <section class="panel waterfall">
             <div class="waterfall-toolbar">
-                <div class="chips"><button type="button" class="chip" [class.on]="!eventQuery()" (click)="eventQuery.set('')">All</button><button type="button" class="chip" [class.on]="eventQuery() === 'FAIL'" (click)="eventQuery.set('FAIL')">Failures</button><button type="button" class="chip" [class.on]="eventQuery() === 'prompt.submitted'" (click)="eventQuery.set('prompt.submitted')">Requests</button></div>
+                <div class="chips">
+                    <button type="button" class="chip" [class.on]="selectedStage() === 'ALL'" (click)="selectedStage.set('ALL')">All <span class="chip-count">{{ allCount() }}</span></button>
+                    <button type="button" class="chip chip-tool" [class.on]="selectedStage() === 'TOOL'" (click)="selectedStage.set('TOOL')">Tool <span class="chip-count">{{ toolCount() }}</span></button>
+                    <button type="button" class="chip chip-prompt" [class.on]="selectedStage() === 'PROMPT'" (click)="selectedStage.set('PROMPT')">Prompt <span class="chip-count">{{ promptCount() }}</span></button>
+                    <button type="button" class="chip chip-fail" [class.on]="selectedStage() === 'FAIL'" (click)="selectedStage.set('FAIL')">Fail <span class="chip-count">{{ failCount() }}</span></button>
+                </div>
                 <div class="wf-summary"><span class="summary-chip">Files <strong>{{ fileRows().length }}</strong></span><span class="summary-chip">Tool calls <strong>{{ toolRows().length }}</strong></span><span class="summary-chip">LLM calls <strong>{{ llmRows().length }}</strong></span></div>
                 <eso-section-hint [summary]="hint.summary" [items]="hint.items" />
-                <input class="search" [value]="eventQuery()" (input)="onQueryInput($event)" placeholder="Filter event / worker…">
+                <input class="search font-mono" [value]="eventQuery()" (input)="onQueryInput($event)" placeholder="Filter event / worker…">
             </div>
             <div class="wf-layout" [class.no-rail]="!hasRail()">
                 <div class="wf-main">
                     <div class="event-table-head" aria-hidden="true"><span>Time</span><span>Event</span><span>Worker</span><span>Outcome</span><span>Duration</span></div>
                     @for (event of waterfallEvents(); track event.observationId) {
-                        <article class="event-row" [class.bad]="event.outcome === 'FAIL' || event.outcome === 'BLOCKED'">
+                        <article class="event-row border-l-4" [attr.data-kind]="eventKind(event)" [class.border-l-sky-500]="eventKind(event) === 'PROMPT'" [class.border-l-emerald-500]="eventKind(event) === 'TOOL'" [class.border-l-amber-500]="eventKind(event) === 'FAIL'" [class.border-l-indigo-500]="eventKind(event) !== 'PROMPT' && eventKind(event) !== 'TOOL' && eventKind(event) !== 'FAIL'" [class.bad]="event.outcome === 'FAIL' || event.outcome === 'BLOCKED'">
                             <div class="event-grid">
                                 <time [title]="formatAt(event.at)">{{ formatClock(event.at) }}</time>
                                 <span class="event-main"><span class="event-pill" [attr.data-kind]="eventKind(event)">{{ eventKind(event) }}</span><code [title]="event.event">{{ event.event }}</code></span>
@@ -57,10 +62,10 @@ interface LlmRow {
                                 <span class="badge" [class.ok]="event.outcome === 'PASS' || event.outcome === 'COMPLETED'" [class.bad]="event.outcome === 'FAIL' || event.outcome === 'BLOCKED'">{{ event.outcome || '—' }}</span>
                                 <span class="event-duration">{{ eventDuration(event) }}</span>
                             </div>
-                            <details class="event-evidence" (toggle)="onEvidenceToggle($event)"><summary>Evidence</summary><pre>{{ evidenceText(event.evidence) }}</pre></details>
+                            <details class="event-evidence" (toggle)="onEvidenceToggle($event)"><summary><span class="inspect-tag">Inspect</span> Evidence JSON</summary><pre>{{ evidenceText(event.evidence) }}</pre></details>
                         </article>
                     } @empty {
-                        <p class="hint waterfall-empty">{{ eventQuery() ? 'No events match this filter.' : 'No events recorded for this request.' }}</p>
+                        <p class="hint waterfall-empty">{{ (eventQuery() || selectedStage() !== 'ALL') ? 'No events match this filter.' : 'No events recorded for this request.' }}</p>
                     }
                 </div>
                 @if (hasRail()) {
@@ -92,7 +97,8 @@ interface LlmRow {
                                     @for (call of llmRows(); track call.index) {
                                         <div class="llm-row">
                                             <div class="llm-head"><span [title]="call.title">#{{ call.index }} · {{ call.label }}</span><span class="rail-meta">{{ call.tokens == null ? 'tokens not reported' : (call.estimated ? '~' : '') + call.tokens + ' tok' }}</span></div>
-                                            <div class="llm-track"><span class="llm-bar" [style.width.%]="call.bar"></span></div>
+                                            <div class="llm-track" role="progressbar" [attr.aria-valuenow]="call.bar" aria-valuemin="0" aria-valuemax="100"><span class="llm-bar" [style.width.%]="call.bar"></span></div>
+                                            <div class="llm-bar-footer"><small class="llm-pct">{{ call.bar }}%</small></div>
                                         </div>
                                     }
                                 </div>
@@ -110,8 +116,12 @@ interface LlmRow {
         .waterfall { gap: var(--space-2); }
         .waterfall-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); padding-bottom: var(--space-2); border-bottom: 1px solid var(--line-soft); }
         .chips { display: flex; gap: var(--space-1); }
-        .chip { padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: .375rem; background: var(--surface-3); color: var(--muted); font: inherit; font-size: var(--fs-label); line-height: 1.7; cursor: pointer; }
+        .chip { display: inline-flex; align-items: center; gap: var(--space-1); padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: .375rem; background: var(--surface-3); color: var(--muted); font: inherit; font-size: var(--fs-label); line-height: 1.7; cursor: pointer; }
         .chip.on { border-color: rgba(52,211,153,.45); background: rgba(52,211,153,.12); color: var(--ok-ink); }
+        .chip-count { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; font-size: var(--fs-label); opacity: .85; }
+        .chip-tool.on { border-color: rgba(52,211,153,.45); background: rgba(52,211,153,.12); color: #34d399; }
+        .chip-prompt.on { border-color: rgba(56,189,248,.45); background: rgba(56,189,248,.12); color: #38bdf8; }
+        .chip-fail.on { border-color: rgba(251,191,36,.45); background: rgba(251,191,36,.12); color: #fbbf24; }
         .chip:focus-visible { outline: .125rem solid var(--brand); outline-offset: -.125rem; }
         .wf-summary { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-left: auto; }
         .summary-chip { display: inline-flex; align-items: center; gap: var(--space-1); min-height: 1.375rem; padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: .375rem; background: var(--surface-2); color: var(--muted); font-size: var(--fs-label); white-space: nowrap; }
@@ -122,10 +132,14 @@ interface LlmRow {
         .wf-main { min-width: 0; }
         .event-table-head, .event-grid { display: grid; grid-template-columns: 5rem minmax(0, 2.2fr) 7rem 5.5rem 4.5rem; gap: var(--space-2); align-items: center; }
         .event-table-head { padding: var(--space-1) 0; border-bottom: 1px solid var(--line); color: var(--dim); font-size: var(--fs-label); letter-spacing: .06em; text-transform: uppercase; }
-        .event-row { padding: 0; border-bottom: 1px solid var(--line-soft); }
+        .event-row { padding: 0; border-bottom: 1px solid var(--line-soft); border-left: 4px solid var(--line); transition: background .15s ease; }
         .event-row:last-child { border-bottom: 0; }
+        .event-row[data-kind='PROMPT'], .event-row.border-l-sky-500 { border-left-color: #38bdf8; }
+        .event-row[data-kind='TOOL'], .event-row.border-l-emerald-500 { border-left-color: #34d399; }
+        .event-row[data-kind='FAIL'], .event-row.border-l-amber-500 { border-left-color: #fbbf24; }
+        .event-row.border-l-indigo-500 { border-left-color: #818cf8; }
         .event-grid { min-height: 2rem; padding: var(--space-1) 0; }
-        .event-grid time { color: var(--dim); font-size: var(--fs-table); font-variant-numeric: tabular-nums; }
+        .event-grid time { color: var(--dim); font-size: var(--fs-table); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; }
         .event-main { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
         .event-main code { color: #cbd5e1; font-size: var(--fs-table); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .event-pill { flex: 0 0 auto; padding: 0 .375rem; border: 1px solid currentColor; border-radius: .25rem; font-size: var(--fs-label); font-weight: 700; letter-spacing: .06em; line-height: 1.7; }
@@ -135,11 +149,13 @@ interface LlmRow {
         .event-worker { color: #cbd5e1; font-size: var(--fs-table); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .event-duration { color: var(--muted); font-size: var(--fs-table); text-align: right; font-variant-numeric: tabular-nums; }
         .event-row.bad .event-main code { color: var(--danger-ink); }
-        .badge { display: inline-flex; align-items: center; min-height: 1.375rem; padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: .375rem; background: var(--surface-2); color: #cbd5e1; font-size: var(--fs-label); white-space: nowrap; }
+        .badge { display: inline-flex; align-items: center; min-height: 1.375rem; padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: .375rem; background: var(--surface-2); color: #cbd5e1; font-size: var(--fs-label); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; white-space: nowrap; }
         .badge.ok { color: #a7f3d0; border-color: rgba(52,211,153,.3); }
         .badge.bad { color: #fecaca; border-color: rgba(248,113,113,.4); }
         .event-evidence { padding: 0 0 var(--space-1) 5rem; }
-        .event-evidence summary { color: var(--muted); font-size: var(--fs-label); cursor: pointer; }
+        .event-evidence summary { color: var(--muted); font-size: var(--fs-label); cursor: pointer; user-select: none; }
+        .event-evidence summary:hover { color: var(--ink); }
+        .inspect-tag { display: inline-block; padding: 0 var(--space-1); margin-right: var(--space-1); border: 1px solid var(--line); border-radius: .25rem; background: var(--surface-3); color: var(--brand); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--fs-label); font-weight: 600; text-transform: uppercase; }
         .waterfall-empty { margin: 0; padding: var(--space-2) 0; }
         .wf-rail { display: grid; gap: var(--space-3); min-width: 0; }
         .rail-card { display: grid; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--line); border-radius: .75rem; background: var(--surface-2); min-width: 0; }
@@ -158,7 +174,9 @@ interface LlmRow {
         .llm-head > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .llm-track { width: 100%; height: .375rem; overflow: hidden; border-radius: 62.44rem; background: #0a0e17; }
         .llm-bar { display: block; height: 100%; border-radius: 62.44rem; background: linear-gradient(90deg, #a78bfa, #38bdf8); }
-        pre { max-height: 18rem; overflow: auto; margin: 0; padding: var(--space-2); border: 1px solid var(--line); border-radius: .375rem; background: var(--surface-2); color: #cbd5e1; font-size: var(--fs-label); line-height: var(--lh); white-space: pre-wrap; }
+        .llm-bar-footer { display: flex; justify-content: flex-end; }
+        .llm-pct { color: var(--dim); font-size: var(--fs-label); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; }
+        pre { max-height: 18rem; overflow: auto; margin: 0; padding: var(--space-2); border: 1px solid var(--line); border-radius: .375rem; background: var(--surface-2); color: #cbd5e1; font-size: var(--fs-label); line-height: var(--lh); white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
         @media (max-width: 62.5rem) { .wf-layout { grid-template-columns: minmax(0, 1fr); } .event-table-head, .event-grid { grid-template-columns: 4.5rem minmax(0, 1fr) 6rem 5rem 4rem; } }
         @media (max-width: 47.9375rem) { .event-table-head, .event-grid { grid-template-columns: 4.5rem minmax(0, 1fr) 5rem 4.5rem; } .event-table-head span:nth-child(3), .event-grid .event-worker { display: none; } }
     `],
@@ -181,7 +199,13 @@ export class WaterfallPanelComponent {
     readonly llmCalls = input<RequestLlmCallDto[]>([]);
     readonly rawEvidenceOpened = output<void>();
 
+    readonly selectedStage = signal<'ALL' | 'TOOL' | 'PROMPT' | 'FAIL'>('ALL');
     readonly eventQuery = signal('');
+
+    readonly allCount = computed(() => this.events().length);
+    readonly toolCount = computed(() => this.events().filter((e) => this.eventKind(e) === 'TOOL').length);
+    readonly promptCount = computed(() => this.events().filter((e) => this.eventKind(e) === 'PROMPT').length);
+    readonly failCount = computed(() => this.events().filter((e) => this.eventKind(e) === 'FAIL').length);
 
     readonly fileRows = computed<FileRow[]>(() =>
         this.files().map((item, index) => {
@@ -225,9 +249,14 @@ export class WaterfallPanelComponent {
     readonly hasRail = computed(() => this.fileRows().length > 0 || this.toolRows().length > 0 || this.llmRows().length > 0);
 
     readonly waterfallEvents = computed(() => {
+        const stage = this.selectedStage();
+        let list = this.events();
+        if (stage !== 'ALL') {
+            list = list.filter((event) => this.eventKind(event) === stage);
+        }
         const query = this.eventQuery().trim().toLowerCase();
-        if (!query) return this.events();
-        return this.events().filter((event) => [event.event, event.workerId, event.outcome, String((event.evidence as Record<string, unknown> | null)?.['errorCode'] || '')].some((value) => String(value || '').toLowerCase().includes(query)));
+        if (!query) return list;
+        return list.filter((event) => [event.event, event.workerId, event.outcome, String((event.evidence as Record<string, unknown> | null)?.['errorCode'] || '')].some((value) => String(value || '').toLowerCase().includes(query)));
     });
 
     /** The legacy row pill: a prompt event, a fail outcome, or a tool/worker call. */

@@ -44,20 +44,24 @@ const GUIDES: Record<string, StepGuide> = {
     },
     'evidence-recon': {
         question: 'Did the host retrieve evidence, and how many adapter calls did it make?',
-        reads: ['Host-reported recon signals', 'evidence.packet observations'],
+        reads: [
+            'Host-reported recon signals (adapter calls)',
+            'evidence.packet observations',
+            'Telemetry files and observed retrieval/recon tools',
+        ],
         states: [
-            { label: 'calls reported', text: 'Adapter call counts are shown as reported; they are not inferred from files.' },
-            { label: 'not captured', text: 'No recon signal; ESO cannot tell whether retrieval happened.' },
+            { label: 'calls / tools observed (ok)', text: 'Adapter call counts, loaded telemetry files, or observed recon/read tools demonstrate active evidence retrieval.' },
+            { label: 'not captured (muted)', text: 'No recon signal, loaded files, or retrieval tools observed; retrieval is unproven.' },
         ],
         limits: ['Counts describe host retrieval, not the quality of the evidence.', 'A missing signal is not proof that no retrieval happened.'],
-        change: 'Have the host report recon calls and evidence packets for the turn.',
+        change: 'Have the host report recon calls and evidence packets for the turn, or execute observed retrieval tools.',
     },
     sufficiency: {
         question: 'Does the evidence sustain the host claim?',
         reads: ['decision.recorded', 'evidence.packet', 'actor', 'action.recorded'],
         states: [
-            { label: 'allow', text: 'Claim sustained and all three proofs are present.' },
-            { label: 'partial', text: 'A proof is missing; the claim is not fully proven.' },
+            { label: 'allow / all proofs present (ok)', text: 'Claim sustained and all required proofs are present (score 100).' },
+            { label: 'partial / proof gaps (warn)', text: 'A proof is missing; the claim is not fully proven (score below 100).' },
             { label: 'deny', text: 'A recorded decision or rule rejected the turn.' },
             { label: 'unknown', text: 'No decision or host unknown; not allow and not deny.' },
         ],
@@ -91,9 +95,10 @@ const GUIDES: Record<string, StepGuide> = {
     },
     seal: {
         question: 'Was the verdict/receipt sealed, and which spec does it point to?',
-        reads: ['receipt hash chain', 'REQUEST_SPEC_REF', 'distill signal'],
+        reads: ['receipt hash chain', 'receipt sources[] with SHA-256 digests', 'REQUEST_SPEC_REF', 'distill signal'],
         states: [
             { label: 'sealed', text: 'A hash chain exists; verification can prove the bytes were not altered.' },
+            { label: 'sources sealed', text: 'Sources are cryptographically fingerprinted in the receipt payload with SHA-256 digests.' },
             { label: 'not issued', text: 'No receipt yet; the turn has no sealed record.' },
         ],
         limits: ['A sealed receipt proves integrity, not correctness of the verdict.', 'Changing the spec version does not rewrite old receipts.'],

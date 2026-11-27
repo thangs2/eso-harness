@@ -5,7 +5,7 @@ import { combineLatest } from 'rxjs';
 import { CONTROL_PLANE_API_CLIENT } from '../../../core/tokens.js';
 import type { EvidenceReceiptDto, KnowledgeSufficiencyDto } from '../../../../../../../libs/api-client/types.js';
 import { EvidenceEffectivenessPanelComponent } from './request-detail/components/evidence-effectiveness-panel.component.js';
-import { GlanceCardsComponent } from './request-detail/components/glance-cards.component.js';
+import { ExecutiveDiagnosticsComponent } from './request-detail/components/executive-diagnostics.component.js';
 import { GraphPanelComponent } from './request-detail/components/graph-panel.component.js';
 import { PipelineFlowComponent } from './request-detail/components/pipeline-flow.component.js';
 import { PipelineStepperComponent } from './request-detail/components/pipeline-stepper.component.js';
@@ -44,7 +44,7 @@ import { toActionEvents, toFlowSteps, toPreTurnGate, toTraceEvents } from './req
 @Component({
     selector: 'eso-request-detail-page',
     standalone: true,
-    imports: [MatButtonModule, RouterLink, RequestHeroComponent, EvidenceEffectivenessPanelComponent, GlanceCardsComponent, PipelineStepperComponent, PipelineFlowComponent, WaterfallPanelComponent, VerdictPanelComponent, RulesPanelComponent, GraphPanelComponent, TelemetryPanelComponent],
+    imports: [MatButtonModule, RouterLink, RequestHeroComponent, EvidenceEffectivenessPanelComponent, ExecutiveDiagnosticsComponent, PipelineStepperComponent, PipelineFlowComponent, WaterfallPanelComponent, VerdictPanelComponent, RulesPanelComponent, GraphPanelComponent, TelemetryPanelComponent],
     changeDetection: ChangeDetectionStrategy.OnPush,
     template: `
         <div class="detail-page">
@@ -77,7 +77,7 @@ import { toActionEvents, toFlowSteps, toPreTurnGate, toTraceEvents } from './req
                     (openTab)="activeTab.set($event)"
                 />
 
-                <eso-glance-cards
+                <eso-executive-diagnostics
                     [verdict]="verdict()"
                     [effectiveness]="effectiveness()"
                     [signals]="signals()"
@@ -109,7 +109,7 @@ import { toActionEvents, toFlowSteps, toPreTurnGate, toTraceEvents } from './req
                     } @else if (activeTab() === 'rules') {
                         <eso-rules-panel [detail]="detail" />
                     } @else if (activeTab() === 'telemetry') {
-                        <eso-telemetry-panel [calls]="detail.telemetry.llmCalls" [tokens]="tokenSummary()" [toolCount]="detail.telemetry.tools.length" [fileCount]="detail.telemetry.files.length" />
+                        <eso-telemetry-panel [calls]="detail.telemetry.llmCalls" [tokens]="tokenSummary()" [toolCount]="detail.telemetry.tools.length" [fileCount]="detail.telemetry.files.length" [events]="detail.events" />
                     }
                 </div>
             }
@@ -133,15 +133,30 @@ import { toActionEvents, toFlowSteps, toPreTurnGate, toTraceEvents } from './req
         .tabs button:hover { color: var(--ink); }
         .tabs button:focus-visible { outline: .125rem solid var(--brand); outline-offset: -.125rem; }
         .tabs button.active { border-color: var(--brand); color: var(--brand); }
-        .drill-tabs button[data-tab='waterfall'].active { border-color: var(--ok-ink); color: var(--ok-ink); }
-        .drill-tabs button[data-tab='topology'].active { border-color: var(--brand); color: var(--brand); }
+        .drill-tabs button[data-tab='waterfall'].active { border-color: #34d399; color: #34d399; }
+        .drill-tabs button[data-tab='waterfall'].active .tab-icon { border-color: #34d399; background: rgba(52,211,153,.15); color: #34d399; }
+        .drill-tabs button[data-tab='waterfall'].active .tab-count { background: rgba(52,211,153,.15); color: #34d399; border-color: rgba(52,211,153,.35); }
+
+        .drill-tabs button[data-tab='topology'].active { border-color: #38bdf8; color: #38bdf8; }
+        .drill-tabs button[data-tab='topology'].active .tab-icon { border-color: #38bdf8; background: rgba(56,189,248,.15); color: #38bdf8; }
+        .drill-tabs button[data-tab='topology'].active .tab-count { background: rgba(56,189,248,.15); color: #38bdf8; border-color: rgba(56,189,248,.35); }
+
         .drill-tabs button[data-tab='decisions'].active { border-color: #c084fc; color: #c084fc; }
-        .drill-tabs button[data-tab='rules'].active { border-color: var(--warn-ink); color: var(--warn-ink); }
+        .drill-tabs button[data-tab='decisions'].active .tab-icon { border-color: #c084fc; background: rgba(192,132,252,.15); color: #c084fc; }
+        .drill-tabs button[data-tab='decisions'].active .tab-count { background: rgba(192,132,252,.15); color: #c084fc; border-color: rgba(192,132,252,.35); }
+
+        .drill-tabs button[data-tab='rules'].active { border-color: #fbbf24; color: #fbbf24; }
+        .drill-tabs button[data-tab='rules'].active .tab-icon { border-color: #fbbf24; background: rgba(251,191,36,.15); color: #fbbf24; }
+        .drill-tabs button[data-tab='rules'].active .tab-count { background: rgba(251,191,36,.15); color: #fbbf24; border-color: rgba(251,191,36,.35); }
+
         .drill-tabs button[data-tab='telemetry'].active { border-color: #818cf8; color: #818cf8; }
+        .drill-tabs button[data-tab='telemetry'].active .tab-icon { border-color: #818cf8; background: rgba(129,140,248,.15); color: #818cf8; }
+        .drill-tabs button[data-tab='telemetry'].active .tab-count { background: rgba(129,140,248,.15); color: #818cf8; border-color: rgba(129,140,248,.35); }
+
         .tab-icon { display: grid; place-items: center; width: 1.125rem; height: 1.125rem; border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--muted); font-size: var(--fs-badge); line-height: 1; }
         .tabs button.active .tab-icon { border-color: currentColor; background: rgba(90,169,255,.12); color: inherit; }
         .tab-label { font-size: var(--fs-secondary); }
-        .tab-count { padding: .0625rem var(--space-1); border-radius: 62.44rem; background: var(--surface-2); color: var(--muted); font-size: var(--fs-badge); font-variant-numeric: tabular-nums; }
+        .tab-count { padding: .0625rem var(--space-2); border: 1px solid var(--line-soft); border-radius: 62.44rem; background: var(--surface-2); color: var(--muted); font-size: var(--fs-badge); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; }
         .tabs button.active .tab-count { color: inherit; }
         .loading-label { color: var(--muted); }
         .error-panel { display: grid; gap: var(--space-2); padding: var(--space-5); border: 1px solid var(--line); border-radius: var(--radius-md); color: var(--muted); }

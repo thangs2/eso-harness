@@ -31,7 +31,7 @@ import { toPostTurnGaps } from '../request-detail.selectors.js';
             <section class="panel">
                 <header class="panel-head"><div><p class="eyebrow">Verdict</p><h2>Verdict &amp; gaps</h2></div><span class="badge muted">ESO adjudication</span></header>
                 @if (verdict(); as v) {
-                    <div class="verdict-block">
+                    <div class="verdict-block q1-block">
                         <h3><span class="q-no">Q1</span> Verdict</h3>
                         <div class="verdict-head">
                             <span class="verdict-level-badge" [class]="'level-' + v.level">{{ v.level }}</span>
@@ -41,7 +41,7 @@ import { toPostTurnGaps } from '../request-detail.selectors.js';
                         </div>
                         <p class="verdict-basis">{{ v.basis }}</p>
                     </div>
-                    <div class="verdict-block">
+                    <div class="verdict-block q2-block">
                         <h3><span class="q-no">Q2</span> Why this verdict</h3>
                         <ul class="rule-refs">
                             @for (ref of v.ruleRefs; track $index) {
@@ -64,6 +64,7 @@ import { toPostTurnGaps } from '../request-detail.selectors.js';
                             }
                         </p>
                         <p class="write-gate" aria-label="Write gate (Q2)">
+                            <span class="lock-icon" aria-hidden="true">🔒</span>
                             <span class="write-gate-label">Write gate</span>
                             @if (writeGate(); as gate) {
                                 <span class="badge" [class.ok]="gate.allowed" [class.bad]="!gate.allowed">{{ gate.allowed ? 'allowed' : 'blocked' }}</span>
@@ -76,7 +77,7 @@ import { toPostTurnGaps } from '../request-detail.selectors.js';
                             }
                         </p>
                     </div>
-                    <div class="verdict-block">
+                    <div class="verdict-block q3-block">
                         <h3><span class="q-no">Q3</span> Turn Proof</h3>
                         <p class="verdict-score-line">Score <strong>{{ v.score }}</strong> / 100 · {{ postGaps().length }} gap(s)</p>
                         <ul class="gap-list">
@@ -175,9 +176,13 @@ import { toPostTurnGaps } from '../request-detail.selectors.js';
             <section class="panel next-panel">
                 <header class="panel-head"><div><p class="eyebrow">Next</p><h2>Integrity &amp; next action</h2></div></header>
                 @if (verdict(); as v) {
-                    <div class="verdict-block">
+                    <div class="verdict-block q5-block">
                         <h3><span class="q-no">Q5</span> Integrity</h3>
                         @if (receipt(); as r) {
+                            <div class="receipt-seal-badge">
+                                <span class="seal-icon">🛡️</span>
+                                <span class="seal-text">Receipt v2 SHA-256 Digest Sealed</span>
+                            </div>
                             <p class="receipt-line">Receipt <code>{{ r.receiptId }}</code></p>
                             <dl class="receipt-facts">
                                 <div><dt>Hash</dt><dd>@if (r.hashPrefix) { <code>{{ r.hashPrefix }}</code>… } @else { not returned }</dd></div>
@@ -206,7 +211,7 @@ import { toPostTurnGaps } from '../request-detail.selectors.js';
                             </div>
                             @if (receiptSources().length > 0) {
                                 <div class="sources-table-wrap">
-                                    <table class="telemetry-table sources-table">
+                                    <table class="telemetry-table sources-table font-mono">
                                         <colgroup>
                                             <col class="col-req" />
                                             <col class="col-where" />
@@ -239,7 +244,7 @@ import { toPostTurnGaps } from '../request-detail.selectors.js';
                             }
                         </div>
                     </div>
-                    <div class="verdict-block">
+                    <div class="verdict-block q6-block">
                         <h3><span class="q-no">Q6</span> What next</h3>
                         <p class="next-step">{{ nextStep(v.level) }}</p>
                         @if (groupedGapCodes().length) {
@@ -257,9 +262,9 @@ import { toPostTurnGaps } from '../request-detail.selectors.js';
                 }
             </section>
 
-            <section class="panel">
+            <section class="panel checks-panel">
                 <header class="panel-head"><div><p class="eyebrow">Heuristic checks — not the verdict</p><h2>Checks &amp; worker outcomes</h2></div><span class="badge muted">{{ checks().length }} checks</span></header>
-                <div class="checks">
+                <div class="checks checks-grid">
                     @for (check of checks(); track check.checkId) {
                         <div class="check-row"><span class="check-status" [attr.data-status]="check.status">{{ check.status }}</span><strong>{{ check.checkId }}</strong><small>{{ check.detail }}</small></div>
                     }
@@ -287,6 +292,16 @@ import { toPostTurnGaps } from '../request-detail.selectors.js';
         .badge.bad { color: #fecaca; border-color: rgba(255,107,107,.4); }
         .badge.muted { color: var(--muted); }
         .verdict-block { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--line); min-width: 0; max-width: 100%; }
+        .q1-block { border-left: 3px solid #4ec97a; padding-left: var(--space-3); }
+        .q2-block { border-left: 3px solid #38bdf8; padding-left: var(--space-3); }
+        .q3-block { border-left: 3px solid #c084fc; padding-left: var(--space-3); }
+        .pre-turn-block { border-left: 3px solid var(--warn-ink); padding-left: var(--space-3); }
+        .jev-block { border-left: 3px solid #818cf8; padding-left: var(--space-3); }
+        .q5-block { border-left: 3px solid #4ec97a; padding-left: var(--space-3); }
+        .q6-block { border-left: 3px solid #c084fc; padding-left: var(--space-3); }
+        .change-panel { border-left: 3px solid #38bdf8; }
+        .checks-panel { border-left: 3px solid var(--brand); }
+        .receipt-seal-badge { display: inline-flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-3); border: 1px solid rgba(78,201,122,.3); border-radius: var(--radius-sm); background: rgba(78,201,122,.1); color: var(--ok-ink); font-size: var(--fs-secondary); font-weight: 600; width: fit-content; }
         .verdict-level-badge { display: inline-flex; align-items: center; min-height: 1.25rem; padding: 0 var(--space-2); border: 1px solid currentColor; border-radius: var(--radius-sm); font-size: var(--fs-badge); font-weight: 700; letter-spacing: .06em; line-height: 1.2; text-transform: uppercase; white-space: nowrap; }
         .level-allow { color: var(--ok-ink); background: rgba(78,201,122,.12); }
         .level-partial { color: var(--warn-ink); background: rgba(224,179,65,.12); }
@@ -346,6 +361,8 @@ import { toPostTurnGaps } from '../request-detail.selectors.js';
         .jev-summary { color: var(--ink); }
         .jev-mismatch { padding: 0 var(--space-2); border: 1px solid rgba(224,179,65,.45); border-radius: var(--radius-sm); background: rgba(224,179,65,.12); color: var(--warn-ink); font-size: var(--fs-secondary); }
         .checks { display: grid; gap: var(--space-1); }
+        .checks-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+        @media (max-width: 48rem) { .checks-grid { grid-template-columns: minmax(0, 1fr); } }
         .check-row { display: flex; align-items: baseline; gap: var(--space-2); padding: var(--space-1) var(--space-2); border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--surface-2); font-size: var(--fs-secondary); }
         .check-status { min-width: 2.5rem; color: var(--muted); font-size: var(--fs-badge); font-weight: 700; text-transform: uppercase; }
         .check-status[data-status='pass'] { color: var(--ok-ink); }

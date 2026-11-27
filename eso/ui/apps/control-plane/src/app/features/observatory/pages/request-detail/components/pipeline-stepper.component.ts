@@ -160,7 +160,7 @@ export class PipelineStepperComponent {
             { label: 'amber', text: 'The stage ran but a gap/attention signal is recorded (for example score below 100).' },
             { label: 'sky', text: 'Informational: something was observed, but no pass/fail proof is attached.' },
             { label: 'slate', text: 'No observation for this stage in this trace — not recorded, not zero.' },
-            { label: 'count', text: 'Stages that found proof for their own question. 6/8 means two stages have no proof on this trace. The count is the same figure the coverage axis shows.' },
+            { label: 'count', text: 'Stages that found proof for their own question. 4/8 means the other four stages have no proof on this trace. The count is the same figure the coverage axis shows.' },
             { label: 'ring', text: 'The ring colour is the stage\'s own finding — not the count. A stage can hold a value and still carry no proof (step 1: the prompt is known but the law was never read), so it stays un-evidenced.' },
             { label: 'number', text: 'The stage order (1→8), fixed by the pipeline; it is not a turn sequence.' },
             { label: 'sub-line', text: 'The stage\'s own metric. "not recorded" means the host sent no value; ESO never fills it in.' },

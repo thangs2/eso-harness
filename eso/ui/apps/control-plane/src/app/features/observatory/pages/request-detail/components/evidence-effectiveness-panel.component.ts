@@ -310,7 +310,7 @@ import type { EvidenceEffectivenessView } from '../evidence-effectiveness.select
         .files-sheet-list { margin: 0; padding: var(--space-2) var(--space-4) var(--space-4); list-style: none; overflow: auto; display: grid; gap: 0.125rem; }
         .files-sheet-list li { display: grid; grid-template-columns: 3.5rem minmax(0, 1fr); align-items: baseline; gap: var(--space-2); padding: 0.1875rem 0; border-bottom: 1px solid var(--line-soft); }
         .files-sheet-list li:last-child { border-bottom: 0; }
-        .file-state { font-size: 0.625rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--dim); }
+        .file-state { font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--dim); }
         .file-state[data-used='true'] { color: var(--ok-ink); }
         .files-sheet-list code { font-size: 0.75rem; color: #cbd5e1; overflow-wrap: anywhere; }
         .files-sheet-list li[data-used='false'] code { color: var(--muted); }
